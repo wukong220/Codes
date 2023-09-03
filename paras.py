@@ -592,7 +592,7 @@ class Timer:
             
     @property
     def running(self):
-            return self._start is not None    
+            return self._start is not None    
     def __enter__(self):
             self.start()
             return self
