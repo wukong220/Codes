@@ -38,11 +38,16 @@ if __name__ == "__main__":
             check_params(params) # check
             #print(Run.Dump)
             #exit(1)
-            for iN in convert2array(params['N_monos']):
-                for iRin in convert2array(params['Rin']):
-                    for iWid in convert2array(params['Wid']):
+            for iRin in convert2array(params['Rin']):
+                for iWid in convert2array(params['Wid']):
+                    for iN in convert2array(params['N_monos']):
                         # paras for init config: Rin, Wid, N_monos, L_box
                         Init = _init(Run, iRin, iWid, iN)
+                        if Init.jump:
+                            continue
+                        queue = Run.set_queue()
+                        #exit(1)
+                        #print(f"{queue}\n", params["Queues"], params["usages"])
                         for iPe in convert2array(params['Pe']):
                             for iXi in convert2array(params['Xi']):
                                 # paras for model: Pe(Fa), Xi(Kb)
@@ -56,3 +61,4 @@ if __name__ == "__main__":
                                 Run.bsubs(Path)
                                 #Run.bsubs(Path, 1)
 ##########################################END!################################################################
+                                

@@ -15,15 +15,16 @@ label = ["Chain", "Bacteria"]
 #参数字典
 params = {
     'Label': label[:],
-    'Queue': ["7k83!", "9654!"],
+    'Queues': ["7k83!", "9654!"],
+    'usages': [1.0, 1.0],
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 2,
     # 障碍物参数：环的半径，宽度和链的长度，数量
     #'Rin': [10.0, 15.0],
-    'Rin': [10.0], 
-    'Wid': 5.0, # annulus width
+    'Rin': [5.0, 10.0, 30.0], 
+    'Wid': [5.0, 10.0, 30.0], # annulus width
     'num_chains': 1,
 }
 class _config:
@@ -35,8 +36,8 @@ class _config:
                 'Pe': [0.0, 1.0, 10.0],
             },
             "Chain": {
-                #'N_monos': [20, 40, 60, 100, 200],
-                'N_monos': [20],
+                'N_monos': [20, 40, 80, 100, 150, 200, 300],
+                #'N_monos': [20],
                 'Xi': 0.0,
                 'Pe': [0.0, 1.0],
             },
@@ -50,15 +51,16 @@ class _config:
         if self.Label in self.config:
             self.Params.update(self.config[self.Label])
             if self.Label == "Bacteria":
-                self.Run.Dump = "xu yu vx vy fx fy"
+                self.Run.Dump = "xu yu vx vy"
                 self.Run.Tdump = self.Run.Tdump//10
-                self.Run.Tequ = self.Run.Tdump_ref * 10
+                self.Run.Tequ = self.Run.Tref
 ##########################################END!###############################################################
 
 class _run: 
     def __init__(self, Gamma, Trun, Dimend, Params = params, Frames = 2000):
         self.Params = Params
-        self.Queue = self.set_queue()
+        self.Queue = "7k83!"
+        self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
         self.Dimend = Dimend
@@ -104,7 +106,7 @@ class _run:
                 exit(1)
             
             queue_info = {"PEND": 0}
-            myques = self.Params["Queue"]
+            myques = self.Params["Queues"]
             myhosts = {
                 '7k83!': ['g009', 'g008', 'a016'],
                 '9654!': ['a017']
@@ -121,15 +123,15 @@ class _run:
                     if columns[0] in myhosts[iqueue]:
                         host_info[iqueue]["cores"] +=  int(columns[3])
                         host_info[iqueue]["run"] += int(columns[5])
-                        host_info[iqueue]["suspend"] += int(columns[6])
                 
             for iqueue in myques:
-                    host_info[iqueue]["usage"] = (host_info[iqueue]["suspend"] + host_info[iqueue]["run"]) / host_info[iqueue]["cores"]
+                    host_info[iqueue]["usage"] = (queue_info[iqueue]["PEND"] + host_info[iqueue]["run"]) / host_info[iqueue]["cores"]
             #host_info = {iqueue: {"usage": (info["suspend"] + info["run"]) / info["cores"]} for iqueue, info in host_info.items()}
-            self.Params["Queue"] = min(myques, key=lambda x: host_info[x]['usage'])
+            self.Queue = min(myques, key=lambda x: host_info[x]['usage'])
+            self.Params["usages"] = [host_info[queue]["usage"] for queue in myques]
             #print(f"queue_info: {queue_info}, host_info: {host_info}")
             #exit(1)
-        return self.Params["Queue"]
+        return self.Queue
     
     def bsubs(self, Path, test=0):
         Run = Path.Run
@@ -178,7 +180,7 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
         self.Rchain = self.Rin + self.sigma
         self.Rout = self.Rin + self.Wid # outer_radius
-        self.set_box()   #set box
+        self.jump = self.set_box()   #set box
         self.dtheta_chain = self.set_dtheta(self.Rchain)
         self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma / 2))
         self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma / 2))
@@ -196,7 +198,8 @@ class _init:
         if self.Rin != 0.0 and self.Wid != 0.0:
             self. L_box = self.Rout + 1
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
-                raise ValueError("N_monos is too Long!")
+                print("N_monos is too Long!")
+                return True
         elif self.Rin == 0.0 and self.Wid == 0.0:
             self.L_box = self.N_monos/2 + 10
         else:
@@ -208,7 +211,8 @@ class _init:
         elif self.Run.Dimend == 3:
             self.zlo = 0.0
             self.zhi = self.L_box
-            
+        return False
+    
     def set_dtheta(self, R, num_R=None):
         """计算角度间隔"""
         if num_R is None:
