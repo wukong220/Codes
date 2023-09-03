@@ -9,8 +9,7 @@ import shutil
 import platform
 
 #-----------------------------------Parameters-------------------------------------------
-label = ["Chain", "Bacteria"]
-
+label = ["Bacteria", "Chain"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
