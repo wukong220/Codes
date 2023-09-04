@@ -3,7 +3,7 @@ import time
 import sys
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
 import shutil
 import platform
@@ -28,6 +28,7 @@ params = {
     'Wid': [5.0, 10.0, 20.0, 30.0], # annulus width
     'num_chains': 1,
 }
+
 class _config:
     def __init__(self, Label, Run, Params = params):
         self.config = {
@@ -100,7 +101,7 @@ class _run:
     
     def set_queue(self):
         queues = {
-            "7k83!": {"usage": 1.0, "hosts": ['g009', 'g008', 'a016']},
+            "7k83!": {"usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
             "9654!": {"usage": 1.0, "hosts": ['a017']}
         }
         if platform.system() != "Darwin":
@@ -110,30 +111,45 @@ class _run:
             except subprocess.CalledProcessError as e:
                 print(f"Error: {e}")
                 exit(1)
-            
-            queue_info = {"PEND": 0}
+                
             myques = list(queues.keys())
+            queue_info = {key: {"PEND": 0, "run": 0, "cores": 0, "occupy": 0} for key in myques}
             myhosts = {key: value["hosts"] for key, value in queues.items()}
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
                 if columns[0] in myques:
-                    queue_info[columns[0]] = {"PEND": int(columns[8])} 
-            
-            host_info = {key: {"cores": 0, "run": 0, "suspend": 0} for key in myques}
+                    queue_info[columns[0]]["PEND"] = int(columns[8])
+
             for line in bhosts.strip().split('\n')[1:]:
                 columns = line.split()
                 for iqueue in myques:
                     if columns[0] in myhosts[iqueue]:
-                        host_info[iqueue]["cores"] +=  int(columns[3])
-                        host_info[iqueue]["run"] += int(columns[5])
-                
+                        queue_info[iqueue]["run"] += int(columns[5])
+                        queue_info[iqueue]["cores"] +=  int(columns[3])
+
             for iqueue in myques:
-                    host_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + host_info[iqueue]["run"]) / host_info[iqueue]["cores"], 3)
+                try:
+                    bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q',  f'{iqueue}']).decode('utf-8')
+                except subprocess.CalledProcessError as e:
+                    print(f"Error: {e}")
+                    exit(1)
+                for line in bjobs.strip().split('\n')[1:]:
+                    columns = line.split()
+                    start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
+                    if datetime.now() - start_time > timedelta(hours=24):
+                        if '*' in columns[-1]:
+                            cores = int(columns[-1].split('*')[0])
+                        else:
+                            cores = 1
+                        queue_info[iqueue]["occupy"] += cores
+            for iqueue in myques:
+                    queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
             #host_info = {iqueue: {"usage": (info["suspend"] + info["run"]) / info["cores"]} for iqueue, info in host_info.items()}
-            self.Queue = min(myques, key=lambda x: host_info[x]['usage'])
+            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])
             for iqueue in myques:
-                self.Params["Queues"][iqueue] = host_info[iqueue]["usage"]
-            #print(f"queue_info: {queue_info}, host_info: {host_info}")
+                self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
+            print(f"queue_info: {queue_info}")
+            exit(1)
         return self.Queue
     
     def bsubs(self, Path, test=0):
