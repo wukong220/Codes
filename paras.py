@@ -137,18 +137,13 @@ class _run:
                     columns = line.split()
                     start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
                     if datetime.now() - start_time > timedelta(hours=24):
-                        if '*' in columns[-1]:
-                            cores = int(columns[-1].split('*')[0])
-                        else:
-                            cores = 1
+                        cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
-            for iqueue in myques:
-                    queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
-            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])
-            for iqueue in myques:
+                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
-                #print(f"queue_info: {queue_info}")
-                #exit(1)
+            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])
+            print(f"queue = {self.Queue}, queue_info: {queue_info}")
+            exit(1)
         return self.Queue
     
     def bsubs(self, Path, test=0):
