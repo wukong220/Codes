@@ -43,7 +43,7 @@ if __name__ == "__main__":
                         if Init.jump:
                             continue
                         queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
-                        exit(1)
+                        #exit(1)
                         #input()#continue
                         for iPe in convert2array(params['Pe']):
                             for iXi in convert2array(params['Xi']):

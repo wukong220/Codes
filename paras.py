@@ -144,12 +144,11 @@ class _run:
                         queue_info[iqueue]["occupy"] += cores
             for iqueue in myques:
                     queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
-            #host_info = {iqueue: {"usage": (info["suspend"] + info["run"]) / info["cores"]} for iqueue, info in host_info.items()}
             self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])
             for iqueue in myques:
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
-            print(f"queue_info: {queue_info}")
-            exit(1)
+                #print(f"queue_info: {queue_info}")
+                #exit(1)
         return self.Queue
     
     def bsubs(self, Path, test=0):
