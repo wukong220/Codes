@@ -16,10 +16,8 @@ label = ["Bacteria", "Chain"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'Label': label[:],
-    'config': label[0],
-    'Queues': ["7k83!", "9654!"],
-    'usages': [1.0, 1.0],
+    'marks': { 'Labels': label[:], 'config': label[0]},
+    'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
@@ -48,7 +46,7 @@ class _config:
         self.Params = Params
         self.Run = Run
         self.Label = Label
-        self.Params["config"] = Label
+        self.Params["marks"]["config"] = Label
         self.update()
     
     def update(self):
@@ -101,6 +99,10 @@ class _run:
         return Tdump, Tdump_ref
     
     def set_queue(self):
+        queues = {
+            "7k83!": {"usage": 1.0, "hosts": ['g009', 'g008', 'a016']},
+            "9654!": {"usage": 1.0, "hosts": ['a017']}
+        }
         if platform.system() != "Darwin":
             try:
                 bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
@@ -110,17 +112,14 @@ class _run:
                 exit(1)
             
             queue_info = {"PEND": 0}
-            myques = self.Params["Queues"]
-            myhosts = {
-                '7k83!': ['g009', 'g008', 'a016'],
-                '9654!': ['a017']
-            }
+            myques = list(queues.keys())
+            myhosts = {key: value["hosts"] for key, value in queues.items()}
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
                 if columns[0] in myques:
                     queue_info[columns[0]] = {"PEND": int(columns[8])} 
             
-            host_info = {"7k83!": {"cores": 0, "run": 0, "suspend": 0}, "9654!": {"cores": 0, "run": 0, "suspend": 0}}
+            host_info = {key: {"cores": 0, "run": 0, "suspend": 0} for key in myques}
             for line in bhosts.strip().split('\n')[1:]:
                 columns = line.split()
                 for iqueue in myques:
@@ -129,12 +128,12 @@ class _run:
                         host_info[iqueue]["run"] += int(columns[5])
                 
             for iqueue in myques:
-                    host_info[iqueue]["usage"] = (queue_info[iqueue]["PEND"] + host_info[iqueue]["run"]) / host_info[iqueue]["cores"]
+                    host_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + host_info[iqueue]["run"]) / host_info[iqueue]["cores"], 3)
             #host_info = {iqueue: {"usage": (info["suspend"] + info["run"]) / info["cores"]} for iqueue, info in host_info.items()}
             self.Queue = min(myques, key=lambda x: host_info[x]['usage'])
-            self.Params["usages"] = [host_info[queue]["usage"] for queue in myques]
+            for iqueue in myques:
+                self.Params["Queues"][iqueue] = host_info[iqueue]["usage"]
             #print(f"queue_info: {queue_info}, host_info: {host_info}")
-            #exit(1)
         return self.Queue
     
     def bsubs(self, Path, test=0):

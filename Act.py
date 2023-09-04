@@ -27,17 +27,14 @@ def check_params(params):
 
 #-----------------------------------Part I-------------------------------------------#    
 if __name__ == "__main__":
-    for iGamma in convert2array(params['Gamma']):
-        # paras for run: Gamma, Queue, Frames, Trun, Dimend, Temp, Dump
-        Run = _run(iGamma, params['Trun'], params['Dimend']) 
-        #print(Run.__dict__)
-        
-        for iLabel in convert2array(params['Label']):
+    for iLabel in convert2array(params['marks']['Labels']):
+        for iGamma in convert2array(params['Gamma']):
+            # paras for run: Gamma, Queue, Frames, Trun, Dimend, Temp, Dump
+            Run = _run(iGamma, params['Trun'], params['Dimend'])  #print(Run.__dict__)
             # configure according to iLabel
             Config = _config(iLabel, Run, params)
-            check_params(params) # check
-            #print(Run.Dump)
-            #exit(1)
+            check_params(params) #print(Run.Dump)
+
             for iRin in convert2array(params['Rin']):
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
@@ -45,9 +42,9 @@ if __name__ == "__main__":
                         Init = _init(Run, iRin, iWid, iN)
                         if Init.jump:
                             continue
-                        queue = Run.set_queue()
-                        print(f"{queue}\n", params["Queues"], params["usages"])
-                        exit(1)
+                        queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
+                        #input()
+                        #continue
                         for iPe in convert2array(params['Pe']):
                             for iXi in convert2array(params['Xi']):
                                 # paras for model: Pe(Fa), Xi(Kb)
