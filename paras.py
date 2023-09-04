@@ -7,6 +7,8 @@ from datetime import datetime
 import subprocess
 import shutil
 import platform
+from numba import vectorize, float64
+from scipy.interpolate import splrep, splev
 
 #-----------------------------------Parameters-------------------------------------------
 label = ["Bacteria", "Chain"]
@@ -15,6 +17,7 @@ label = ["Bacteria", "Chain"]
 #参数字典
 params = {
     'Label': label[:],
+    'config': label[0],
     'Queues': ["7k83!", "9654!"],
     'usages': [1.0, 1.0],
     # 动力学方程的重要参数
@@ -45,6 +48,7 @@ class _config:
         self.Params = Params
         self.Run = Run
         self.Label = Label
+        self.Params["config"] = Label
         self.update()
     
     def update(self):

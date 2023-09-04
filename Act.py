@@ -46,8 +46,8 @@ if __name__ == "__main__":
                         if Init.jump:
                             continue
                         queue = Run.set_queue()
-                        #exit(1)
-                        #print(f"{queue}\n", params["Queues"], params["usages"])
+                        print(f"{queue}\n", params["Queues"], params["usages"])
+                        exit(1)
                         for iPe in convert2array(params['Pe']):
                             for iXi in convert2array(params['Xi']):
                                 # paras for model: Pe(Fa), Xi(Kb)
