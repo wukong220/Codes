@@ -23,43 +23,53 @@ params = {
     'Trun': 5,
     'Dimend': 2,
     # 障碍物参数：环的半径，宽度和链的长度，数量
-    #'Rin': [10.0, 15.0],
-    'Rin': [5.0, 10.0, 20.0, 30.0], 
-    'Wid': [5.0, 10.0, 20.0, 30.0], # annulus width
+    'Rin': [5.0], # 10.0, 15.0, 20.0, 30.0], 
+    'Wid': [5.0], # 10.0, 15.0, 20.0, 30.0], # annulus width
     'num_chains': 1,
 }
 
 class _config:
-    def __init__(self, Label, Run, Params = params):
+    def __init__(self, Label, Params = params):
         self.config = {
             "Bacteria": {
                 'N_monos': 3,
                 'Xi': 1000,
-                'Pe': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
+                'Pe': [0.0], # 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
             },
             "Chain": {
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                'N_monos': [20], #40, 80, 100, 150, 200, 250, 300],
                 #'N_monos': [20],
                 'Xi': 0.0,
-                'Pe': [0.0, 1.0, 10.0],
+                'Pe': [0.0], #1.0, 10.0, 100.0],
             },
         }
         self.Params = Params
-        self.Run = Run
         self.Label = Label
         self.Params["marks"]["config"] = Label
-        self.update()
-    
-    def update(self):
         if self.Label in self.config:
             self.Params.update(self.config[self.Label])
-            if self.Label == "Bacteria":
-                self.Run.Dump = "xu yu vx vy"
-                self.Run.Tdump = self.Run.Tdump//10
-                self.Run.Tequ = self.Run.Tref
+            
+    def set_Tdump(self, Run):
+        """计算 Tdump 的值"""
+        Run.Dump = "xu yu zu"
+        Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
+        Run.Tdump_ref = Run.Tdump // 100
+        #if platform.system() == "Darwin":
+            #Run.Tdump = Run.Tdump_ref
+            #Run.Damp = 1.0
+            
+        Run.TSteps = Run.Frames * Run.Tdump
+        Run.Tequ = Run.TSteps
+        Run.Tref = Run.Frames * Run.Tdump_ref
+        Run.Params["Total Run Steps"] = Run.TSteps
+            
+        if self.Label == "Bacteria":
+            Run.Dump = "xu yu vx vy"
+            Run.Tdump = Run.Tdump // 10
+            Run.Tequ = Run.Tequ // 100
 ##########################################END!###############################################################
 
-class _run: 
+class _run:
     def __init__(self, Gamma, Trun, Dimend, Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
@@ -69,7 +79,6 @@ class _run:
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = 1.0
-        self.Dump = "xu yu zu"
 
         if (self.Dimend == 2):
             self.fix2D = f"fix             2D all enforce2d"
@@ -79,26 +88,11 @@ class _run:
             self.dump_read = "x y z"
         
         self.dt = 0.001
-        self.Seed = np.random.randint(700000000, 800000001)
-
-        self.eSteps = 9 if self.Gamma == 1000 else 8
-        self.Damp = 1.0 / self.Gamma if platform.system() != "Darwin" else 1
-        self.Tdump, self.Tdump_ref = self.set_Tdump() # set Tdump
-        
         self.Tinit = 10 ** 6
-        self.TSteps = self.Frames * self.Tdump
-        self.Tequ = self.TSteps
-        self.Tref = self.Frames * self.Tdump_ref
-        self.Params["Total Run Steps"] = self.TSteps
-        
-    def set_Tdump(self):
-        """计算 Tdump 的值"""
-        Tdump = 2 * 10 ** self.eSteps // self.Frames
-        Tdump_ref = Tdump // 100
-        if platform.system() == "Darwin":
-            Tdump = Tdump_ref
-        return Tdump, Tdump_ref
-    
+        self.Seed = np.random.randint(700000000, 800000001)
+        self.eSteps = 9 if self.Gamma == 1000 else 8
+        self.Damp = 1.0 / self.Gamma
+
     def set_queue(self):
         queues = {
             "7k83!": {"usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
@@ -141,9 +135,8 @@ class _run:
                         queue_info[iqueue]["occupy"] += cores
                 queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
-            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])
-            print(f"queue = {self.Queue}, queue_info: {queue_info}")
-            exit(1)
+            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])#print(f"queue = {self.Queue}, queue_info: {queue_info}")
+            #exit(1)
         return self.Queue
     
     def bsubs(self, Path, test=0):

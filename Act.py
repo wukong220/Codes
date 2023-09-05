@@ -28,13 +28,12 @@ def check_params(params):
 #-----------------------------------Part I-------------------------------------------#    
 if __name__ == "__main__":
     for iLabel in convert2array(params['marks']['Labels']):
+        Config = _config(iLabel, params)
         for iGamma in convert2array(params['Gamma']):
             # paras for run: Gamma, Queue, Frames, Trun, Dimend, Temp, Dump
             Run = _run(iGamma, params['Trun'], params['Dimend'])  #print(Run.__dict__)
-            # configure according to iLabel
-            Config = _config(iLabel, Run, params)
-            check_params(params) #print(Run.Dump)
-
+            Config.set_Tdump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+            check_params(params) #continue
             for iRin in convert2array(params['Rin']):
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
