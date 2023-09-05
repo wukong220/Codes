@@ -34,6 +34,7 @@ if __name__ == "__main__":
             Run = _run(iGamma, params['Trun'], params['Dimend'])  #print(Run.__dict__)
             Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
             check_params(params) #continue
+            
             for iRin in convert2array(params['Rin']):
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):

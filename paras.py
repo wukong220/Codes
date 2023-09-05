@@ -18,13 +18,14 @@ label = ["Bacteria", "Chain"]
 params = {
     'marks': { 'Labels': label[:], 'config': label[0]},
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
+    'restart': True,
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 2,
     # 障碍物参数：环的半径，宽度和链的长度，数量
-    'Rin': [5.0], # 10.0, 15.0, 20.0, 30.0], 
-    'Wid': [5.0], # 10.0, 15.0, 20.0, 30.0], # annulus width
+    'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 
+    'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
     'num_chains': 1,
 }
 
@@ -34,13 +35,12 @@ class _config:
             "Bacteria": {
                 'N_monos': 3,
                 'Xi': 1000,
-                'Pe': [0.0], # 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
+                'Pe': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
             },
             "Chain": {
-                'N_monos': [20], #40, 80, 100, 150, 200, 250, 300],
-                #'N_monos': [20],
+                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                 'Xi': 0.0,
-                'Pe': [0.0], #1.0, 10.0, 100.0],
+                'Pe': [0.0, 1.0, 10.0],
             },
         }
         self.Params = Params
@@ -61,7 +61,7 @@ class _config:
         Run.Tinit = Run.Frames * Run.Tdump_ref
         Run.TSteps = Run.Frames * Run.Tdump
         Run.Tequ = Run.TSteps
-        Run.Tref = Run.Init
+        Run.Tref = Run.Tinit
         Run.Params["Total Run Steps"] = Run.TSteps
             
         if self.Label == "Bacteria":
@@ -342,6 +342,10 @@ class _model:
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(f"==> Writing infile: {infile}......")
             dir_file = os.path.join(f"{Path.dir_data}", infile)
+            read = f'read_data       {Path.data_file}'
+            if Run.Params["restart"]:
+                read = 'read_restart       ${dir_file}.equ.restart'
+                
             # Write each command in the list to the file, followed by a newline character
             setup = [
                 '# Setup',
@@ -352,8 +356,7 @@ class _model:
                 'atom_style      angle',
                 '',
                 f'variable dir_file string {dir_file}',
-                f'read_data       {Path.data_file}',
-                '#read_data		    ${dir_file}.data add append offset 3 0 0 0 0',
+                read,
                 '',
                 '#groups',
                 'group           head type 1',
@@ -421,7 +424,7 @@ class _model:
                 'undump          INIT',
                 '',
             ]
-            equal_potential = [
+            potential = [
                 '# for equalibrium',
                 '###################################################################',
                 '#pair potential',
@@ -479,7 +482,7 @@ class _model:
             data = [
                 '# for data',
                 '#################################################################',
-                f'fix      	      LANG chain langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.Seed}',
+                f'fix      	      LANG all langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.Seed}',
                 'fix		         	NVE chain nve',
                 'fix             FREEZE obs setforce 0.0 0.0 0.0',
                 Run.fix2D,
@@ -517,14 +520,21 @@ class _model:
                 '#############################################################'
             ]
             # Define LAMMPS 参数
-            with open(f"{dir_file}.in", "w") as file:
-                self.write_section(file, setup)
-                self.write_section(file, initial)
-                self.write_section(file, equal_potential)
-                self.write_section(file, equal_fix)
-                self.write_section(file, equal_run)
-                self.write_section(file, data)
-                self.write_section(file, refine)
+            if Run.Params["restart"]:
+                with open(f"{dir_file}.in", "w") as file:
+                    self.write_section(file, setup)
+                    self.write_section(file, potential)
+                    self.write_section(file, data)
+                    self.write_section(file, refine)
+            else:
+                with open(f"{dir_file}.in", "w") as file:
+                    self.write_section(file, setup)
+                    self.write_section(file, initial)
+                    self.write_section(file, potential)
+                    self.write_section(file, equal_fix)
+                    self.write_section(file, equal_run)
+                    self.write_section(file, data)
+                    self.write_section(file, refine)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
 
