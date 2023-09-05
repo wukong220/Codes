@@ -32,7 +32,7 @@ if __name__ == "__main__":
         for iGamma in convert2array(params['Gamma']):
             # paras for run: Gamma, Queue, Frames, Trun, Dimend, Temp, Dump
             Run = _run(iGamma, params['Trun'], params['Dimend'])  #print(Run.__dict__)
-            Config.set_Tdump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+            Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
             check_params(params) #continue
             for iRin in convert2array(params['Rin']):
                 for iWid in convert2array(params['Wid']):

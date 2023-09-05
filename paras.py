@@ -49,18 +49,19 @@ class _config:
         if self.Label in self.config:
             self.Params.update(self.config[self.Label])
             
-    def set_Tdump(self, Run):
+    def set_dump(self, Run):
         """计算 Tdump 的值"""
         Run.Dump = "xu yu zu"
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        #if platform.system() == "Darwin":
-            #Run.Tdump = Run.Tdump_ref
-            #Run.Damp = 1.0
+        if platform.system() == "Darwin":
+            Run.Tdump = Run.Tdump_ref
+            Run.Damp = 1.0
             
+        Run.Tinit = Run.Frames * Run.Tdump_ref
         Run.TSteps = Run.Frames * Run.Tdump
         Run.Tequ = Run.TSteps
-        Run.Tref = Run.Frames * Run.Tdump_ref
+        Run.Tref = Run.Init
         Run.Params["Total Run Steps"] = Run.TSteps
             
         if self.Label == "Bacteria":
@@ -88,7 +89,6 @@ class _run:
             self.dump_read = "x y z"
         
         self.dt = 0.001
-        self.Tinit = 10 ** 6
         self.Seed = np.random.randint(700000000, 800000001)
         self.eSteps = 9 if self.Gamma == 1000 else 8
         self.Damp = 1.0 / self.Gamma
