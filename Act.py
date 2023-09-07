@@ -52,9 +52,5 @@ if __name__ == "__main__":
                                 Path = _path(Config, Model, Init, Run) # for directory
                                 if Path.jump:
                                     continue
-                                # prepare files and submit
-                                Init.data_file(Path)
-                                Model.in_file(Path)
-                                Run.bsubs(Path)
-                                #Run.bsubs(Path, 1)
+                                Run.run(Path, Plot)
 ##########################################END!################################################################

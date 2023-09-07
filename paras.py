@@ -12,13 +12,14 @@ from scipy.interpolate import splrep, splev
 
 #-----------------------------------Parameters-------------------------------------------
 label = ["Bacteria", "Chain"]
-
+tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'marks': { 'Labels': label[:], 'config': label[0]},
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
-    'restart': True,
+    'task': tasks[1],
+    'restart': False,
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
@@ -172,6 +173,24 @@ class _run:
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}")
+                
+    def run(self, Path, Plot):
+        Init, Model = Path.Init, Path.Model
+        task = self.Params["task"]
+        if task == "Simus":
+            try:
+                # prepare files and submit
+                Init.data_file(Path)
+                Model.in_file(Path)
+                self.bsubs(Path)
+                #Run.bsubs(Path, 1)
+            except Exception as e:
+                print(f"An error occurred: {e}")
+        elif task == "Anas":
+            try:
+                print("Plot")
+            except Exception as e:
+                print(f"An error occurred: {e}")
 ##########################################END!###############################################################
 
 class _init:
