@@ -1,14 +1,22 @@
 import os
-import time
-import sys
-import numpy as np
-import pandas as pd
-from datetime import datetime, timedelta
 import subprocess
 import shutil
 import platform
+import time
+from datetime import datetime, timedelta
+
+import pandas as pd
+import numpy as np
 from numba import vectorize, float64
 from scipy.interpolate import splrep, splev
+from scipy.stats import norm
+
+import seaborn as sns
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages as PdfPages
+from matplotlib.gridspec import GridSpec
+import matplotlib.transforms as mtransforms
 
 #-----------------------------------Parameters-------------------------------------------
 label = ["Bacteria", "Chain"]
@@ -16,17 +24,19 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'marks': { 'Labels': label[:], 'config': label[0]},
+    'marks': { 'Labels': label[1], 'config': label[0]},
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     'task': tasks[1],
-    'restart': False,
+    'restart': True,
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 2,
     # 障碍物参数：环的半径，宽度和链的长度，数量
-    'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 
-    'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
+    #'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+    'Rin': [5.0],
+    #'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
+    'Wid': [10.0],
     'num_chains': 1,
 }
 
@@ -39,9 +49,11 @@ class _config:
                 'Pe': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
             },
             "Chain": {
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                'N_monos': [100],
                 'Xi': 0.0,
-                'Pe': [0.0, 1.0, 10.0],
+                #'Pe': [0.0, 1.0, 10.0],
+                'Pe': [1.0],
             },
         }
         self.Params = Params
@@ -51,13 +63,21 @@ class _config:
             self.Params.update(self.config[self.Label])
             
     def set_dump(self, Run):
-        """计算 Tdump 的值"""
-        Run.Dump = "xu yu zu"
+        """计算 Tdump 的值: xu yu"""
+        if Run.Dimend == 2:
+            dump = "xu yu vx vy"
+        elif Run.Dimend == 3:
+            dump = "xu yu zu vx vy vz"
+        else:
+            print(f"Error: Wrong Dimend to run => dimension != {Run.Dimend}")
+            exit(1)
+        Run.Dump = dump
+        #Run.Dump = "xu yu zu"
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        if platform.system() == "Darwin":
-            Run.Tdump = Run.Tdump_ref
-            Run.Damp = 1.0
+        #if platform.system() == "Darwin":
+          #  Run.Tdump = Run.Tdump_ref
+            #Run.Damp = 1.0
             
         Run.Tinit = Run.Frames * Run.Tdump_ref
         Run.TSteps = Run.Frames * Run.Tdump
@@ -81,7 +101,7 @@ class _run:
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = 1.0
-
+        self.SkipRows = 9
         if (self.Dimend == 2):
             self.fix2D = f"fix             2D all enforce2d"
             self.unfix2D = f"unfix             2D"
@@ -90,9 +110,12 @@ class _run:
             self.dump_read = "x y z"
         
         self.dt = 0.001
-        self.Seed = np.random.randint(700000000, 800000001)
+        self.Seed = self.set_seed()
         self.eSteps = 9 if self.Gamma == 1000 else 8
         self.Damp = 1.0 / self.Gamma
+
+    def set_seed(self):
+        return np.random.randint(700000000, 800000001)
 
     def set_queue(self):
         queues = {
@@ -108,12 +131,13 @@ class _run:
                 exit(1)
                 
             myques = list(queues.keys())
-            queue_info = {key: {"PEND": 0, "run": 0, "cores": 0, "occupy": 0} for key in myques}
+            queue_info = {key: {"PEND": 0,"RUN": 0, "run": 0, "cores": 0, "occupy": 0} for key in myques}
             myhosts = {key: value["hosts"] for key, value in queues.items()}
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
                 if columns[0] in myques:
                     queue_info[columns[0]]["PEND"] = int(columns[8])
+                    queue_info[columns[0]]["RUN"] = int(columns[9])
 
             for line in bhosts.strip().split('\n')[1:]:
                 columns = line.split()
@@ -134,9 +158,9 @@ class _run:
                     if datetime.now() - start_time > timedelta(hours=24):
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
-                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["run"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
+                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
-            self.Queue = min(myques, key=lambda x: queue_info[x]['usage'])#print(f"queue = {self.Queue}, queue_info: {queue_info}")
+            self.Queue = min(myques, key=lambda x: queue_info[x]['usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
             #exit(1)
         return self.Queue
     
@@ -418,7 +442,7 @@ class _model:
                 '',
                 '# for initialization',
                 f'# fix		 	        BOX all deform 1 x final 0.0 {Init.L_box} y final 0.0 {Init.L_box} units box remap x',
-                f'fix   	        LANG chain langevin 1.0 1.0 1.0 {Run.Seed}',
+                f'fix   	        LANG chain langevin 1.0 1.0 1.0 {Run.set_seed()}',
                 'fix			        NVE chain nve/limit 0.1',
                 'fix             FREEZE obs setforce 0.0 0.0 0.0',
                 Run.fix2D,
@@ -472,7 +496,7 @@ class _model:
             ]
             equal_fix = [
                 '# for equalibrium',
-                f'fix      	      LANG chain langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.Seed}',
+                f'fix      	      LANG chain langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.set_seed()}',
                 'fix		         	NVE chain nve',
                 'fix             FREEZE obs setforce 0.0 0.0 0.0',
                 Run.fix2D,
@@ -501,7 +525,7 @@ class _model:
             data = [
                 '# for data',
                 '#################################################################',
-                f'fix      	      LANG all langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.Seed}',
+                f'fix      	      LANG all langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.set_seed()}',
                 'fix		         	NVE chain nve',
                 'fix             FREEZE obs setforce 0.0 0.0 0.0',
                 Run.fix2D,
@@ -594,7 +618,11 @@ class _path:
         self.data_file = os.path.join(self.dir_data, f"{self.dir2}.data")
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
         shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
-        print(f"{self.data_file}")
+        print(f"data_file => {self.data_file}")
+        #Figures
+        self.fig1 = os.path.join(self.host, self.mydirs[3], f"{self.dir1}_{self.dir2}", self.dir3)
+        subprocess.run(f"mkdir -p {self.fig1}", shell=True)
+
         if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")):
             return True
         else:
@@ -602,6 +630,157 @@ class _path:
 #############################################################################################################
 
 class _plot:
+    def __init__(self, Path):
+        self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
+        self.chunk = 9
+        self.read_data()
+
+    def set_dump(self):
+        if self.Config.Label == "Bacteria":
+            if self.Run.Dimend == 2:
+                dump = "xu yu vx vy"
+            elif self.Run.Dimend == 3:
+                dump = "xu yu zu vx vy vz"
+            else:
+                print(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
+                exit(1)
+        else:
+            if self.Run.Dimend == 2:
+                dump = "xu yu"
+            elif self.Run.Dimend == 3:
+                dump = "xu yu zu"
+            else:
+                print(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
+                exit(1)
+        dump = dump.split(" ")
+        return ["id"] + dump
+
+    def read_data(self):
+        dump = self.set_dump()
+        self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
+        # read the lammpstrj files with 2001 frames
+        for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun + 1)]):
+            dir_file = os.path.join(f"{self.Path.dir_data}", f"{ifile}.lammpstrj")
+            print(f"==> Reading {ifile}.lammpstrj file: ......")
+
+            # extract natoms, time steps, and check the last time step
+            names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
+            natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+            dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+            lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+            if natoms != self.Init.num_monos:
+                print(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
+            elif lastStep != self.Run.Frames * self.Run.Tdump:
+                print(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
+            skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
+            try:
+                df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
+            except Exception as e:
+                print(f"ERROR: Could not read the file due to {e}")
+                exit(1)
+            # data[ifile][iframe][iatom][id, xu, yu]
+            self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
+            #np.save(self.Path.dir_data, data)
+        return self.data
+
+    def plot1(self):
+        fig_save = os.path.join(f"{self.Path.fig1}", "r(S,T)Dist")
+        pdf = PdfPages(f"{fig_save}.pdf")
+        print(f"{fig_save}.pdf")
+        # ----------------------------> read data <----------------------------#
+        # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
+        ids = self.data[0, 0, :, 0]
+        times = np.arange((self.Run.Frames+1))*self.Run.dt*self.Run.Tdump
+        data = np.linalg.norm(self.data[0, ..., 1:3], axis = -1)
+        at_id = self.Init.num_monos//2
+        at_time = self.Run.Frames//2
+
+        #----------------------------> figure settings <----------------------------#
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='Times New Roman')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+
+        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        # Create the layout
+        fig = plt.figure(figsize=(15, 15))
+        gs = GridSpec(4, 4, figure=fig)
+        ax_a = fig.add_subplot(gs[0:2, 0:2])
+        ax_b = fig.add_subplot(gs[0:2, 2], sharey=ax_a)
+        ax_c = fig.add_subplot(gs[0:2, 3], sharey=ax_a)
+        ax_d = fig.add_subplot(gs[2, 0:2], sharex=ax_a)
+        ax_e = fig.add_subplot(gs[3, 0:2], sharex=ax_a)
+        ax_f = fig.add_subplot(gs[2:, 2:])
+
+        axpos = ax_a.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.02, axpos.y0, axpos.x1 + 0.05, axpos.y1)
+        # ----------------------------> plot figure<----------------------------#
+        figa = ax_a.pcolormesh(times[:self.Run.Frames+1], np.arange(1, self.Init.num_monos+1), data.T, shading='auto', cmap='rainbow')
+        #cax = ax_a.pcolormesh(data.T, edgecolor='w', linewidth=0.01, shading='nearest', cmap='rainbow')
+        cax = ax_a.figure.add_axes(caxpos)
+        cbar = plt.colorbar(figa, cax=cax)
+        #cbar.set_label(r'$r$(module)', fontsize=18, labelpad=0.0)
+
+        # ax_b: Distribution of magnitudes for a specific time frame
+        ax_b.plot(data[at_time], ids)
+        # ax_c: Distribution of magnitudes across all time frames for a specific atom
+        ax_c.hist(data[:, at_id], bins=20, density=True, orientation='horizontal')
+        # ax_d: Magnitude vs time for a specific atom (e.g., atom 50)
+        ax_d.plot(times, data[:, at_id])
+        # ax_e: Distribution of magnitudes across all atoms for a specific time frame (e.g., 50th frame)
+        #sns.histplot(data[50, :], kde=True, ax=ax_e, bins=20, color='purple')
+        ax_e.hist(data[at_time, :], bins=20, density=True)
+        # ax_f: Overall distribution of magnitudes
+        sns.kdeplot(data.flatten(), ax=ax_f, fill=True)
+
+        # ----------------------------> axis settings <----------------------------#
+        ax_a.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
+        ax_a.set_ylabel(r"$S$(atom ID)", fontsize=18, labelpad=0.0)
+        ax_b.set_xlabel(r'$r_t(s)$', fontsize=18, labelpad=0.0)
+        ax_b.set_ylabel(r'$s$', fontsize=18, labelpad=0.0)
+        ax_b.set_title(f'Time = {at_time}', loc='right')
+        ax_c.set_xlabel(r'$p_t(s)$', fontsize=18, labelpad=0.0)
+        ax_c.set_ylabel(r'$s$', fontsize=18, labelpad=0.0)
+        ax_c.set_title(f'probability', loc='right')
+        ax_d.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
+        ax_d.set_ylabel(r'$r_s(t)$', fontsize=18, labelpad=0.0)
+        ax_d.set_title(f'Atom = {at_id}', loc='right')
+        ax_e.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
+        ax_e.set_ylabel(r'$p_s(t)$', fontsize=18, labelpad=0.0)
+        ax_e.set_title('probability', loc='right')
+        ax_f.set_xlabel('r(module)', fontsize=18, labelpad=0.0)
+        ax_f.set_ylabel(r'$p_s(t)$', fontsize=18, labelpad=0.0)
+        ax_f.set_ylabel(r'$p_t(s)$', fontsize=18, labelpad=0.0)
+        ax_f.set_title(r'$p_s(t); p_t(s)$', loc='right')
+
+        # ----------------------------> linewidth <----------------------------#
+        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e, ax_f], ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']):
+            ax.text(-0.1, 1.1, label, transform=ax.transAxes, fontsize=20, va='top', ha='left')
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            # ----------------------------> axes lines <----------------------------#
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+
+        # ----------------------------> save fig <----------------------------#
+        #plt.tight_layout()
+        fig1 = plt.gcf()
+        pdf.savefig(fig1, dpi=1000, transparent=True)
+        pdf.close()
+
+        plt.title('Atom Coordinates vs Time', fontsize=15)
+        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+        fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        plt.show()
+        plt.close()
+        # -------------------------------Done!----------------------------------------#
+
+    ##################################################################
     def MSD():
         print("-----------------------------------Done!--------------------------------------------")
     def Rg():
@@ -650,5 +829,6 @@ __all__ = [
     "_init",
     "_model",
     "_path",
+    "_plot",
     "Timer",
 ]
