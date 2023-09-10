@@ -136,6 +136,7 @@ class _run:
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
                 if columns[0] in myques:
+                    queue_info[columns[0]]["NJOBS"] = int(columns[7])
                     queue_info[columns[0]]["PEND"] = int(columns[8])
                     queue_info[columns[0]]["RUN"] = int(columns[9])
 
@@ -143,7 +144,7 @@ class _run:
                 columns = line.split()
                 for iqueue in myques:
                     if columns[0] in myhosts[iqueue]:
-                        queue_info[iqueue]["run"] += int(columns[5])
+                        queue_info[iqueue]["runs"] += int(columns[5])
                         queue_info[iqueue]["cores"] +=  int(columns[3])
 
             for iqueue in myques:
@@ -158,9 +159,12 @@ class _run:
                     if datetime.now() - start_time > timedelta(hours=24):
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
-                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"]) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
+                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
-            self.Queue = min(myques, key=lambda x: queue_info[x]['usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
+                if queue_info[iqueue]["PEND"] == 0:
+                    self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
+                elif queue_info[iqueue]["PEND"] > 0:
+                    self.Queue = min(myques, key=lambda x: queue_info[x]['usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
             #exit(1)
         return self.Queue
     
@@ -708,6 +712,7 @@ class _plot:
         # Create the layout
         fig = plt.figure(figsize=(15, 15))
         gs = GridSpec(4, 4, figure=fig)
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
         ax_a = fig.add_subplot(gs[0:2, 0:2])
         ax_b = fig.add_subplot(gs[0:2, 2], sharey=ax_a)
         ax_c = fig.add_subplot(gs[0:2, 3], sharey=ax_a)
@@ -715,50 +720,58 @@ class _plot:
         ax_e = fig.add_subplot(gs[3, 0:2], sharex=ax_a)
         ax_f = fig.add_subplot(gs[2:, 2:])
 
-        axpos = ax_a.get_position()
-        caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.02, axpos.y0, axpos.x1 + 0.05, axpos.y1)
         # ----------------------------> plot figure<----------------------------#
-        figa = ax_a.pcolormesh(times[:self.Run.Frames+1], np.arange(1, self.Init.num_monos+1), data.T, shading='auto', cmap='rainbow')
-        #cax = ax_a.pcolormesh(data.T, edgecolor='w', linewidth=0.01, shading='nearest', cmap='rainbow')
-        cax = ax_a.figure.add_axes(caxpos)
-        cbar = plt.colorbar(figa, cax=cax)
-        #cbar.set_label(r'$r$(module)', fontsize=18, labelpad=0.0)
-
+        cmap = ax_a.pcolormesh(times[:self.Run.Frames+1], np.arange(1, self.Init.num_monos+1), data.T, shading='auto', cmap='rainbow')
         # ax_b: Distribution of magnitudes for a specific time frame
-        ax_b.plot(data[at_time], ids)
+        ax_b.plot(data[at_time, :], ids, 'k')
         # ax_c: Distribution of magnitudes across all time frames for a specific atom
-        ax_c.hist(data[:, at_id], bins=20, density=True, orientation='horizontal')
+        #ax_c.hist(data[:, at_id], bins=20, density=True, orientation='horizontal')
+        pdf_atoms = norm.pdf(np.arange(self.Init.num_monos), 25, 5)
+        ax_c.plot(pdf_atoms, np.arange(1, self.Init.num_monos + 1), 'r')
         # ax_d: Magnitude vs time for a specific atom (e.g., atom 50)
-        ax_d.plot(times, data[:, at_id])
+        ax_d.plot(times, data[:, at_id], 'b')
         # ax_e: Distribution of magnitudes across all atoms for a specific time frame (e.g., 50th frame)
-        #sns.histplot(data[50, :], kde=True, ax=ax_e, bins=20, color='purple')
-        ax_e.hist(data[at_time, :], bins=20, density=True)
+        pdf_time = norm.pdf(times, 5, 1)
+        ax_e.plot(times, pdf_time, 'r')
         # ax_f: Overall distribution of magnitudes
-        sns.kdeplot(data.flatten(), ax=ax_f, fill=True)
+        ax_f.plot(np.sort(data.ravel()), np.linspace(0, 1, (self.Run.Frames+1) * self.Init.num_monos), 'k')
+        ax_f2 = ax_f.twinx()
+        pdf_f_times = np.histogram(data.flatten(), bins=50, density=True)[0]
+        ax_f2.bar(range(len(pdf_f_times)), pdf_f_times, color='c', alpha=0.5)
 
+        # ----------------------------> adding <----------------------------#
+        ax_a.axhline(y=at_id, linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
+        ax_a.axvline(x=at_time*self.Run.dt*self.Run.Tdump, linestyle='--', lw = 1.5, color='black')  # Selected Time frame
+
+        axpos = ax_a.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+        cax = fig.add_axes(caxpos)
+        cbar = plt.colorbar(cmap, cax=cax)
+        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.set_xlabel(r'$r$', fontsize=20)
         # ----------------------------> axis settings <----------------------------#
-        ax_a.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
-        ax_a.set_ylabel(r"$S$(atom ID)", fontsize=18, labelpad=0.0)
-        ax_b.set_xlabel(r'$r_t(s)$', fontsize=18, labelpad=0.0)
-        ax_b.set_ylabel(r'$s$', fontsize=18, labelpad=0.0)
-        ax_b.set_title(f'Time = {at_time}', loc='right')
-        ax_c.set_xlabel(r'$p_t(s)$', fontsize=18, labelpad=0.0)
-        ax_c.set_ylabel(r'$s$', fontsize=18, labelpad=0.0)
+        ax_a.set_xlabel(r"$t$", fontsize=20)
+        ax_a.set_ylabel(r"$s$", fontsize=20)
+        ax_b.set_xlabel(r'$r_t(s)$', fontsize=20)
+        ax_b.set_ylabel(r'$s$', fontsize=20)
+        ax_b.set_title(f'Time = {int(at_time*self.Run.dt*self.Run.Tdump)}', loc='right')
+        ax_c.set_xlabel(r'$p_t(s)$', fontsize=20)
+        ax_c.set_ylabel(r'$s$', fontsize=20)
         ax_c.set_title(f'probability', loc='right')
-        ax_d.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
-        ax_d.set_ylabel(r'$r_s(t)$', fontsize=18, labelpad=0.0)
+        ax_d.set_xlabel(r"$t$", fontsize=20)
+        ax_d.set_ylabel(r'$r_s(t)$', fontsize=20)
         ax_d.set_title(f'Atom = {at_id}', loc='right')
-        ax_e.set_xlabel(r"$T$(Time)", fontsize=18, labelpad=0.0)
-        ax_e.set_ylabel(r'$p_s(t)$', fontsize=18, labelpad=0.0)
+        ax_e.set_xlabel(r"$t$", fontsize=20)
+        ax_e.set_ylabel(r'$p_s(t)$', fontsize=20)
         ax_e.set_title('probability', loc='right')
-        ax_f.set_xlabel('r(module)', fontsize=18, labelpad=0.0)
-        ax_f.set_ylabel(r'$p_s(t)$', fontsize=18, labelpad=0.0)
-        ax_f.set_ylabel(r'$p_t(s)$', fontsize=18, labelpad=0.0)
-        ax_f.set_title(r'$p_s(t); p_t(s)$', loc='right')
+        ax_f.set_xlabel(r'$r$', fontsize=20)
+        ax_f.set_ylabel(r'$p_s(r)$', fontsize=20)
+        ax_f2.set_ylabel(r'$p_t(r)$', fontsize=20)
+        ax_f.set_title(r'PDF across modules (Time)', loc='right')
 
         # ----------------------------> linewidth <----------------------------#
         for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e, ax_f], ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']):
-            ax.text(-0.1, 1.1, label, transform=ax.transAxes, fontsize=20, va='top', ha='left')
+            ax.annotate(label, (-0.1, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
             ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
             ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
             # ----------------------------> axes lines <----------------------------#
@@ -767,15 +780,16 @@ class _plot:
             ax.spines['right'].set_linewidth(2)
             ax.spines['top'].set_linewidth(2)
 
+        print("saving pdf......")
         # ----------------------------> save fig <----------------------------#
         #plt.tight_layout()
         fig1 = plt.gcf()
-        pdf.savefig(fig1, dpi=1000, transparent=True)
-        pdf.close()
+        #pdf.savefig(fig1, dpi=1000, transparent=True)
+        #pdf.close()
 
-        plt.title('Atom Coordinates vs Time', fontsize=15)
+        #print("saving png......")
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
         plt.show()
         plt.close()
         # -------------------------------Done!----------------------------------------#
