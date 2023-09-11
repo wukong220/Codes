@@ -30,8 +30,8 @@ if __name__ == "__main__":
     for iLabel in convert2array(params['marks']['Labels']):
         Config = _config(iLabel, params)
         for iGamma in convert2array(params['Gamma']):
-            # paras for run: Gamma, Queue, Frames, Trun, Dimend, Temp, Dump
-            Run = _run(iGamma, params['Trun'], params['Dimend'])  #print(Run.__dict__)
+            # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+            Run = _run(iGamma, ['Trun'], params['Dimend'])  #print(Run.__dict__)
             Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
             if params['task'] == "Simus":
                 check_params(params) #continue

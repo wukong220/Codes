@@ -21,13 +21,15 @@ import matplotlib.transforms as mtransforms
 #-----------------------------------Parameters-------------------------------------------
 label = ["Bacteria", "Chain"]
 tasks = ["Simus", "Anas"]
+activity = ["Fa", "Temp", "Pe"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'marks': { 'Labels': label[1], 'config': label[0]},
+    'marks': {'Labels': label[1], 'config': label[1]},
+    'activity': pe_ctrl[1],
+    'task': tasks[0],
+    'restart': False,
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
-    'task': tasks[1],
-    'restart': True,
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
@@ -49,19 +51,25 @@ class _config:
                 'Pe': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
             },
             "Chain": {
-                #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                'N_monos': [100],
+                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                #'N_monos': [100],
                 'Xi': 0.0,
                 #'Pe': [0.0, 1.0, 10.0],
-                'Pe': [1.0],
+                'Pe': [1.0, 10.0, 100.0],
             },
         }
         self.Params = Params
         self.Label = Label
         self.Params["marks"]["config"] = Label
+
+        self.Fa = 1.0
+        #self.Temp = 1.0
+        self.Temp = 1.0/convert2array(self.config[self.Label]["Pe"])
         if self.Label in self.config:
             self.Params.update(self.config[self.Label])
-            
+        print(f"Temp:{self.Temp}")
+        exit(1)
+
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
         if Run.Dimend == 2:
@@ -86,13 +94,12 @@ class _config:
         Run.Params["Total Run Steps"] = Run.TSteps
             
         if self.Label == "Bacteria":
-            Run.Dump = "xu yu vx vy"
             Run.Tdump = Run.Tdump // 10
             Run.Tequ = Run.Tequ // 100
 ##########################################END!###############################################################
 
 class _run:
-    def __init__(self, Gamma, Trun, Dimend, Params = params, Frames = 2000):
+    def __init__(self, Gamma, Temp, Trun, Dimend, Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
@@ -100,7 +107,7 @@ class _run:
         self.Trun = Trun
         self.Dimend = Dimend
         self.Frames = Frames
-        self.Temp = 1.0
+        self.Temp = Temp
         self.SkipRows = 9
         if (self.Dimend == 2):
             self.fix2D = f"fix             2D all enforce2d"
@@ -374,10 +381,12 @@ class _model:
         self.Init = Init
         self.Pe = Pe
         self.Xi = Xi
-        self.Fa = self.Pe
         self.Kb = self.Xi * Init.N_monos/4
-        #self.Fa = self.Pe / Init.N_monos ** 2
-    
+        if Pe < 1e-10:
+            self.Fa = 0.0
+        else:
+            self.Fa = 1.0
+
     def write_section(self, file, cmds):
         """向文件中写入一个命令区块"""
         for command in cmds:
@@ -637,7 +646,6 @@ class _plot:
     def __init__(self, Path):
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
         self.chunk = 9
-        self.read_data()
 
     def set_dump(self):
         if self.Config.Label == "Bacteria":
@@ -693,6 +701,7 @@ class _plot:
         print(f"{fig_save}.pdf")
         # ----------------------------> read data <----------------------------#
         # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
+        self.data = self.read_data()
         ids = self.data[0, 0, :, 0]
         times = np.arange((self.Run.Frames+1))*self.Run.dt*self.Run.Tdump
         data = np.linalg.norm(self.data[0, ..., 1:3], axis = -1)
@@ -835,6 +844,15 @@ class Timer:
             self.stop()
 timer = Timer()
 #############################################################################################################
+def convert2array(x):
+    # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
+    if isinstance(x, (list, np.ndarray, tuple)):
+        return np.array(x)
+    # 如果x是一个单一的数值，转换为包含该数值的numpy数组
+    elif isinstance(x, (int, float, str)):
+        return np.array([x])
+    else:
+        raise ValueError("Unsupported type!")
 
 __all__ = [
     "params",
@@ -845,4 +863,5 @@ __all__ = [
     "_path",
     "_plot",
     "Timer",
+    "convert2array",
 ]
