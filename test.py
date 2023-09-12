@@ -86,28 +86,6 @@ class RDFPlotter:
         #rdf_plotter = RDFPlotter()
         #rdf_plotter.plot_rdf()
         
-        import numpy as np
-        import matplotlib.pyplot as plt
-        
-        # Generate synthetic data for 2D example
-        np.random.seed(0)
-        x = np.random.normal(0, 1, 100)
-        y = np.random.normal(0, 1, 100)
-        
-        # Create bins
-        num_bins = 10
-        x_bins = np.linspace(min(x), max(x), num_bins)
-        y_bins = np.linspace(min(y), max(y), num_bins)
-        
-        # Count frequency of points in each bin
-        hist_x, _ = np.histogram(x, bins=x_bins)
-        hist_y, _ = np.histogram(y, bins=y_bins)
-        
-        # Normalize the histograms
-        hist_x = hist_x / np.sum(hist_x)
-        hist_y = hist_y / np.sum(hist_y)
-import numpy as np
-import matplotlib.pyplot as plt
 
 # Generate synthetic data for 2D example
 np.random.seed(0)

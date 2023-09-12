@@ -21,12 +21,10 @@ import matplotlib.transforms as mtransforms
 #-----------------------------------Parameters-------------------------------------------
 label = ["Bacteria", "Chain"]
 tasks = ["Simus", "Anas"]
-activity = ["Fa", "Temp", "Pe"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'marks': {'Labels': label[1], 'config': label[1]},
-    'activity': pe_ctrl[1],
     'task': tasks[0],
     'restart': False,
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
@@ -45,30 +43,28 @@ params = {
 class _config:
     def __init__(self, Label, Params = params):
         self.config = {
+            '''Pe = Fa / Temp'''
             "Bacteria": {
                 'N_monos': 3,
                 'Xi': 1000,
-                'Pe': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
+                'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
+                'Temp': 1.0,
             },
             "Chain": {
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                 #'N_monos': [100],
                 'Xi': 0.0,
-                #'Pe': [0.0, 1.0, 10.0],
-                'Pe': [1.0, 10.0, 100.0],
+                #'Fa': [1.0, 10.0, 100.0],
+                'Fa': [1.0],
+                #'Temp': [0.01, 0.1, 1.0],
+                'Temp': [0.01, 0.1, 1.0],
             },
         }
         self.Params = Params
         self.Label = Label
         self.Params["marks"]["config"] = Label
-
-        self.Fa = 1.0
-        #self.Temp = 1.0
-        self.Temp = 1.0/convert2array(self.config[self.Label]["Pe"])
         if self.Label in self.config:
             self.Params.update(self.config[self.Label])
-        print(f"Temp:{self.Temp}")
-        exit(1)
 
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
@@ -377,15 +373,14 @@ class _init:
 #############################################################################################################
         
 class _model:
-    def __init__(self, Init, Pe, Xi):
+    def __init__(self, Init, Run, Fa, Xi):
         self.Init = Init
-        self.Pe = Pe
+        self.Run = Run
+        self.Fa = Fa
         self.Xi = Xi
         self.Kb = self.Xi * Init.N_monos/4
-        if Pe < 1e-10:
-            self.Fa = 0.0
-        else:
-            self.Fa = 1.0
+        #for directory
+        self.Pe = self.Fa / self.Run.Temp
 
     def write_section(self, file, cmds):
         """向文件中写入一个命令区块"""
