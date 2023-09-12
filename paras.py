@@ -19,7 +19,7 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 
 #-----------------------------------Parameters-------------------------------------------
-label = ["Bacteria", "Chain"]
+label = ["Bacteria", "Chain", "Ring"]
 tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
@@ -33,10 +33,10 @@ params = {
     'Trun': 5,
     'Dimend': 2,
     # 障碍物参数：环的半径，宽度和链的长度，数量
-    #'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-    'Rin': [5.0],
-    #'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
-    'Wid': [10.0],
+    'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+    #'Rin': [5.0],
+    'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
+    #'Wid': [10.0],
     'num_chains': 1,
 }
 
@@ -54,11 +54,20 @@ class _config:
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                 #'N_monos': [100],
                 'Xi': 0.0,
-                #'Fa': [1.0, 10.0, 100.0],
+                #'Fa': [0.0, 1.0],
                 'Fa': [1.0],
                 #'Temp': [0.01, 0.1, 1.0],
-                'Temp': [0.01, 0.1, 1.0],
+                'Temp': [0.01, 0.1],
             },
+            "Chain":{
+                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                # 'N_monos': [100],
+                'Xi': 0.0,
+                # 'Fa': [0.0, 1.0],
+                'Fa': [1.0],
+                # 'Temp': [0.01, 0.1, 1.0],
+                'Temp': [0.01, 0.1],
+            }
         }
         self.Params = Params
         self.Label = Label
@@ -122,8 +131,8 @@ class _run:
 
     def set_queue(self):
         queues = {
-            "7k83!": {"usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
-            "9654!": {"usage": 1.0, "hosts": ['a017']}
+            "7k83!": {"Usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
+            "9654!": {"Usage": 1.0, "hosts": ['a017']}
         }
         if platform.system() != "Darwin":
             try:
@@ -134,7 +143,7 @@ class _run:
                 exit(1)
                 
             myques = list(queues.keys())
-            queue_info = {key: {"PEND": 0,"RUN": 0, "run": 0, "cores": 0, "occupy": 0} for key in myques}
+            queue_info = {key: {"NJOBS": 0, "PEND": 0,"RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for key in myques}
             myhosts = {key: value["hosts"] for key, value in queues.items()}
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
@@ -162,12 +171,13 @@ class _run:
                     if datetime.now() - start_time > timedelta(hours=24):
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
-                queue_info[iqueue]["usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / (queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]), 3)
-                self.Params["Queues"][iqueue] = queue_info[iqueue]["usage"]
+                queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]
+                queue_info[iqueue]["Usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
+                self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
                 if queue_info[iqueue]["PEND"] == 0:
                     self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
                 elif queue_info[iqueue]["PEND"] > 0:
-                    self.Queue = min(myques, key=lambda x: queue_info[x]['usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
+                    self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
             #exit(1)
         return self.Queue
     

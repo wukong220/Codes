@@ -60,7 +60,6 @@ if __name__ == "__main__":
                                             # prepare files and submit
                                             Init.data_file(Path)
                                             Model.in_file(Path)
-                                            continue
                                             Run.bsubs(Path)
                                             #Run.bsubs(Path, 1)
                                         except Exception as e:
