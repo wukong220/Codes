@@ -4,6 +4,7 @@ import shutil
 import platform
 import time
 from datetime import datetime, timedelta
+from itertools import combinations, product
 
 import pandas as pd
 import numpy as np
@@ -19,12 +20,16 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 
 #-----------------------------------Parameters-------------------------------------------
-label = ["Bacteria", "Chain", "Ring"]
+Bacteria = "Bact"
+types = [Bacteria, "Chain", "Ring"]
+envs = ["Anlus", "Free"]
 tasks = ["Simus", "Anas"]
+
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'marks': {'Labels': label[1], 'config': label[1]},
+    'labels': {'Types': types[1:3], 'Envs': envs[0:2]},
+    'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': False,
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
@@ -32,19 +37,22 @@ params = {
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 2,
-    # 障碍物参数：环的半径，宽度和链的长度，数量
-    'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-    #'Rin': [5.0],
-    'Wid': [5.0, 10.0, 15.0, 20.0, 30.0], # annulus width
-    #'Wid': [10.0],
     'num_chains': 1,
 }
-
 class _config:
-    def __init__(self, Label, Params = params):
+    def __init__(self, Type, Env, Params = params):
         self.config = {
-            '''Pe = Fa / Temp'''
-            "Bacteria": {
+            "Anlus": {
+                # 障碍物参数：环的半径，宽度
+                'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+                'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
+            },
+            "Free":{
+                'Rin': [0.0],
+                'Wid': [0.0],
+            },
+
+            Bacteria: {
                 'N_monos': 3,
                 'Xi': 1000,
                 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
@@ -52,28 +60,31 @@ class _config:
             },
             "Chain": {
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                #'N_monos': [100],
                 'Xi': 0.0,
                 #'Fa': [0.0, 1.0],
                 'Fa': [1.0],
-                #'Temp': [0.01, 0.1, 1.0],
-                'Temp': [0.01, 0.1],
+                #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                'Temp': [0.1, 0.01],
             },
-            "Chain":{
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                # 'N_monos': [100],
+            "Ring":{
+                #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                'N_monos': [100],
                 'Xi': 0.0,
-                # 'Fa': [0.0, 1.0],
-                'Fa': [1.0],
-                # 'Temp': [0.01, 0.1, 1.0],
-                'Temp': [0.01, 0.1],
+                'Fa': [0.0, 1.0],
+                'Temp': [1.0, 0.1, 0.01],
             }
         }
         self.Params = Params
-        self.Label = Label
-        self.Params["marks"]["config"] = Label
-        if self.Label in self.config:
-            self.Params.update(self.config[self.Label])
+        self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
+        self.Params['marks']['labels'] = self.labels
+        self.Type = Type
+        self.Env = Env
+        self.Label = self.Type+self.Env
+        self.Params["marks"]["config"] = self.Label
+        if self.Type in self.config:
+            self.Params.update(self.config[self.Type])
+        if self.Env in self.config:
+            self.Params.update(self.config[self.Env])
 
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
@@ -98,7 +109,7 @@ class _config:
         Run.Tref = Run.Tinit
         Run.Params["Total Run Steps"] = Run.TSteps
             
-        if self.Label == "Bacteria":
+        if self.Type == Bacteria:
             Run.Tdump = Run.Tdump // 10
             Run.Tequ = Run.Tequ // 100
 ##########################################END!###############################################################
@@ -235,30 +246,40 @@ class _run:
 ##########################################END!###############################################################
 
 class _init:
-    def __init__(self, Run, Rin, Wid, N_monos, num_chains = params["num_chains"]):
-        self.sigma = 1.0
-        self.mass = 1.0
-        self.Run = Run
-        self.Rin = Rin
-        self.Wid = Wid
-        self.N_monos = N_monos
-        self.num_chains = num_chains
+    def __init__(self, Config, Run, Rin, Wid, N_monos, num_chains = params["num_chains"]):
+        self.sigma, self.mass = 1.0, 1.0
+        self.Config, self.Run = Config, Run
+        self.Rin, self.Wid = Rin, Wid
+        self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
-        self.Rchain = self.Rin + self.sigma
         self.Rout = self.Rin + self.Wid # outer_radius
         self.jump = self.set_box()   #set box
-        self.dtheta_chain = self.set_dtheta(self.Rchain)
         self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma / 2))
         self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma / 2))
         self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
         self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
-        self.num_Ring = self.num_Rin + self.num_Rout
+        self.num_Anlus = self.num_Rin + self.num_Rout
+        self.total_particles = self.num_Anlus + self.num_monos
+        if self.Rin < 1e-6:
+            self.Rchain = self.Rin + self.sigma + self.N_monos * self.sigma/(2 * np.pi)
+            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
+            self.theta0 = - 4 * self.dtheta_chain
+        else:
+            self.Rchain = self.Rin + self.sigma
+            self.dtheta_chain = self.set_dtheta(self.Rchain)
+            self.theta0 = - 2 * self.dtheta_chain
 
-        self.total_particles = self.num_Ring + self.num_monos
-        
+        if self.Config.Type == "Ring":
+            self.bonds = self.num_monos - self.num_chains*0
+            self.angles = self.num_monos - self.num_chains*1
+        else:
+            self.bonds = self.num_monos - self.num_chains*1
+            self.angles = self.num_monos - self.num_chains*2
+
         if (self.num_chains != 1):
             print(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             exit(1)
+
     def set_box(self):
         """计算盒子大小"""
         if self.Rin != 0.0 and self.Wid != 0.0:
@@ -266,17 +287,16 @@ class _init:
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
                 print("N_monos is too Long!")
                 return True
-        elif self.Rin == 0.0 and self.Wid == 0.0:
+        elif self.Rin < 1e-6 and self.Wid < 1e-6:
             self.L_box = self.N_monos/2 + 10
         else:
             raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
-        
         if self.Run.Dimend == 2:
             self.zlo = -self.sigma/2
             self.zhi = self.sigma/2
         elif self.Run.Dimend == 3:
-            self.zlo = 0.0
-            self.zhi = self.L_box
+            self.zlo = - self.L_box / 2.0
+            self.zhi = self.L_box / 2.0
         return False
     
     def set_dtheta(self, R, num_R=None):
@@ -294,8 +314,8 @@ class _init:
         
         # 写入原子数目和边界信息
         file.write(f"{int(self.total_particles)} atoms\n\n")
-        file.write(f"{self.num_monos - self.num_chains*1} bonds\n\n")
-        file.write(f"{self.num_monos - self.num_chains*2} angles\n\n")
+        file.write(f"{self.bonds} bonds\n\n")
+        file.write(f"{self.angles} angles\n\n")
         file.write("5 atom types\n\n")
         file.write("1 bond types\n\n")
         file.write("3 angle types\n\n")
@@ -309,7 +329,7 @@ class _init:
         file.write(f"4 {self.mass}\n")
         file.write(f"5 {self.mass}\n\n")
         
-    def write_atoms(self, file):
+    def write_chain(self, file):
         # 写入原子信息
         file.write("Atoms\n\n")
         Rchain = self.Rchain
@@ -317,7 +337,7 @@ class _init:
         
         # 写入链的原子信息
         circle = 1
-        theta = - 2 * self.dtheta_chain
+        theta = self.theta0
         for i in range(int(self.N_monos)):
             if i == 0:
                 x = round(Rchain * np.cos(theta), 2)
@@ -339,8 +359,8 @@ class _init:
             else:
                 file.write(f"{i+1} 1 2 {x} {y} {z}\n")
     
-    def write_ring(self, file):
-        # 写入第一个环的原子信息
+    def write_anlus(self, file):
+        # 写入内环的原子信息
         for i in range(int(self.num_Rin)):
             theta = i * self.dtheta_in
             x = round(self.Rin * np.cos(theta), 4)
@@ -348,36 +368,43 @@ class _init:
             z = 0.0
             file.write(f"{self.N_monos+i+1} 1 4 {x} {y} {z}\n")
             
-        # 写入第二个环的原子信息
+        # 写入外环的原子信息
         for i in range(int(self.num_Rout)):
             theta = i * self.dtheta_out
             x =  round(self.Rout * np.cos(theta), 4)
             y =  round(self.Rout * np.sin(theta), 4)
             z = 0.0
             file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {x} {y} {z}\n")
-    
+
     def write_potential(self, file):
-        #写入bonds and angle
+        #写入bonds and angles
         file.write("\nBonds\n\n")
-        for i in range(int(self.N_monos)-1):
-            file.write(f"{i+1} 1 {i+1} {i+2}\n")
+        for i in range(self.bonds):
+            i1 = (i + 1) if (i + 1)%self.N_monos == 0 else (i+1) % self.N_monos
+            i2 = (i + 2) if (i + 2)%self.N_monos == 0 else (i+2) % self.N_monos
+            file.write(f"{i+1} 1 {i1} {i2}\n")
+
         file.write("\nAngles\n\n")
-        for i in range(int(self.N_monos)-2):
+        for i in range(self.angles):
+            i1 = (i + 1) if (i + 1)%self.N_monos == 0 else (i+1) % self.N_monos
+            i2 = (i + 2) if (i + 2)%self.N_monos == 0 else (i+2) % self.N_monos
+            i3 = (i + 3) if (i + 3)%self.N_monos == 0 else (i+3) % self.N_monos
             if i == 0:
-                file.write(f"{i+1} 1 {i+1} {i+2} {i+3}\n")
-            elif i == int(self.N_monos) - 3:
-                file.write(f"{i+1} 3 {i+1} {i+2} {i+3}\n")
+                file.write(f"{i + 1} 1 {i1} {i2} {i3}\n")
+            elif i == self.angles - 1:
+                file.write(f"{i + 1} 3 {i1} {i2} {i3}\n")
             else:
-                file.write(f"{i+1} 2 {i+1} {i+2} {i+3}\n")
-    
+                file.write(f"{i + 1} 2 {i1} {i2} {i3}\n")
+
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
         print("==> Preparing initial data file......")
         # 打开data文件以进行写入
         with open(f"{Path.data_file}", "w") as file:
             self.write_header(file)
-            self.write_atoms(file)
-            self.write_ring(file)
+            self.write_chain(file)
+            if self.Config.Env == "Anlus":
+                self.write_anlus(file)
             self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
@@ -626,10 +653,10 @@ class _path:
             raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
         #1.0Pe_0.0Xi_8T5
         self.dir3 = f"{self.Model.Pe}Pe_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
-        if self.Config.Label == "Bacteria":
-            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Label[:2].upper()}"
-        elif self.Config.Label == "Chain":
-            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Label[:2].upper()}"
+        if self.Config.Type == Bacteria:
+            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
+        else:
+            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
         #/Users/wukong/Data/Simus/100G1.0T2D_5.0R5.0_100N1_Chain/1.0Pe_0.0Xi_8T5
         self.dir_data = os.path.join(self.simus, f"{self.dir1}_{self.dir2}", self.dir3)
         #/Users/wukong/Data/Simus/100G1.0T2D_5.0R5.0_100N1_Chain/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_Chain.data
@@ -653,7 +680,7 @@ class _plot:
         self.chunk = 9
 
     def set_dump(self):
-        if self.Config.Label == "Bacteria":
+        if self.Config.Type == Bacteria:
             if self.Run.Dimend == 2:
                 dump = "xu yu vx vy"
             elif self.Run.Dimend == 3:

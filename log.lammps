@@ -1,0 +1,85 @@
+LAMMPS (23 Jun 2022 - Update 1)
+# Setup
+echo		        screen
+Reading data file ...
+  orthogonal box = (-60 -60 -0.5) to (60 60 0.5)
+  2 by 2 by 1 MPI processor grid
+  reading atoms ...
+  100 atoms
+  scanning bonds ...
+  1 = max bonds/atom
+  scanning angles ...
+  1 = max angles/atom
+  reading bonds ...
+  99 bonds
+  reading angles ...
+  98 angles
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0        0        0       
+  special bond factors coul:  0        0        0       
+     2 = max # of 1-2 neighbors
+     2 = max # of 1-3 neighbors
+     4 = max # of 1-4 neighbors
+     6 = max # of special neighbors
+  special bonds CPU = 0.001 seconds
+  read_data CPU = 0.011 seconds
+1 atoms in group head
+1 atoms in group end
+100 atoms in group chain
+0 atoms in group obs
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    1        1        1       
+  special bond factors coul:  1        1        1       
+     2 = max # of 1-2 neighbors
+     6 = max # of special neighbors
+  special bonds CPU = 0.000 seconds
+Generated 0 of 10 mixed pair_coeff terms from geometric mixing rule
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 3.048
+  ghost atom cutoff = 3.048
+  binsize = 1.524, bins = 79 79 1
+  3 neighbor lists, perpetual/occasional/extra = 3 0 0
+  (1) pair lj/cut, perpetual, skip from (3)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (2) pair soft, perpetual, skip from (3)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (3) neighbor class addition, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/2d
+      bin: standard
+WARNING: Communication cutoff adjusted to 3.048 (../comm.cpp:736)
+Per MPI rank memory allocation (min/avg/max) = 7.732 | 7.74 | 7.747 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press     
+         0   0              inf            1.9987962      inf           nan           
+     10000  nan             0             nan            nan            nan           
+     20000  nan             0             nan            nan            nan           
+     30000  nan             0             nan            nan            nan           
+     40000  nan             0             nan            nan            nan           
+     50000  nan             0             nan            nan            nan           
+     60000  nan             0             nan            nan            nan           
+     70000  nan             0             nan            nan            nan           
+     80000  nan             0             nan            nan            nan           
+     90000  nan             0             nan            nan            nan           
+    100000  nan             0             nan            nan            nan           
+    110000  nan             0             nan            nan            nan           
+    120000  nan             0             nan            nan            nan           
+    130000  nan             0             nan            nan            nan           
+    140000  nan             0             nan            nan            nan           
+    150000  nan             0             nan            nan            nan           
+    160000  nan             0             nan            nan            nan           
+    170000  nan             0             nan            nan            nan           
+    180000  nan             0             nan            nan            nan           
+    190000  nan             0             nan            nan            nan           
+    200000  nan             0             nan            nan            nan           
+    210000  nan             0             nan            nan            nan           
+    220000  nan             0             nan            nan            nan           
+    230000  nan             0             nan            nan  
