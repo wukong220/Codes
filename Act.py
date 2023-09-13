@@ -1,8 +1,8 @@
 from paras import *
+import platform
 from datetime import datetime
 import numpy as np
 from lammps import lammps, PyLammps
-import matplotlib
 
 def convert2array(x):
     # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
@@ -45,7 +45,7 @@ if __name__ == "__main__":
                     # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
                     Run = _run(iGamma, iTemp, params['Trun'], params['Dimend'])  #print(Run.__dict__)
                     Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                    if params['task'] == "Simus":
+                    if params['task'] == "Simus" and platform.system() != "Darwin":
                         check_params(params) #continue
                     for iRin in convert2array(params['Rin']):
                         for iWid in convert2array(params['Wid']):

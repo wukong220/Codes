@@ -1,8 +1,10 @@
 import os
+import sys
 import subprocess
 import shutil
 import platform
 import time
+import logging
 from datetime import datetime, timedelta
 from itertools import combinations, product
 
@@ -18,17 +20,17 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages as PdfPages
 from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
+logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #-----------------------------------Parameters-------------------------------------------
 Bacteria = "Bact"
 types = [Bacteria, "Chain", "Ring"]
 envs = ["Anlus", "Free"]
 tasks = ["Simus", "Anas"]
-
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[1:3], 'Envs': envs[0:2]},
+    'labels': {'Types': types[2:3], 'Envs': envs[1:2]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': False,
@@ -44,8 +46,10 @@ class _config:
         self.config = {
             "Anlus": {
                 # 障碍物参数：环的半径，宽度
-                'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-                'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
+                #'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+                'Rin': [5.0],
+                #'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
+                'Wid': [5.0],  # annulus width
             },
             "Free":{
                 'Rin': [0.0],
@@ -60,18 +64,21 @@ class _config:
             },
             "Chain": {
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                'N_monos': [100],
                 'Xi': 0.0,
                 #'Fa': [0.0, 1.0],
                 'Fa': [1.0],
                 #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                'Temp': [0.1, 0.01],
+                'Temp': [1.0],
             },
             "Ring":{
                 #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                 'N_monos': [100],
                 'Xi': 0.0,
-                'Fa': [0.0, 1.0],
-                'Temp': [1.0, 0.1, 0.01],
+                #'Fa': [0.0, 1.0],
+                'Fa': [1.0],
+                #'Temp': [1.0, 0.1, 0.01],
+                'Temp': [0.01],
             }
         }
         self.Params = Params
@@ -99,9 +106,9 @@ class _config:
         #Run.Dump = "xu yu zu"
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        #if platform.system() == "Darwin":
-          #  Run.Tdump = Run.Tdump_ref
-            #Run.Damp = 1.0
+        if platform.system() == "Darwin":
+            Run.Tdump = Run.Tdump_ref
+            Run.Damp = 1.0
             
         Run.Tinit = Run.Frames * Run.Tdump_ref
         Run.TSteps = Run.Frames * Run.Tdump
@@ -125,12 +132,26 @@ class _run:
         self.Frames = Frames
         self.Temp = Temp
         self.SkipRows = 9
+        self.run = {
+            "init": "INIT",
+            "equ": "EQU",
+            "data": "DATA",
+            "refine": "REFINE",
+        }
         if (self.Dimend == 2):
             self.fix2D = f"fix             2D all enforce2d"
-            self.unfix2D = f"unfix             2D"
+            self.unfix2D = '\n'.join([
+                '',
+                'unfix           LANG',
+                'unfix           NVE',
+                'unfix           FREEZE',
+                'unfix             2D',
+                ])
             self.dump_read = "x y"
         elif (self.Dimend == 3):
             self.dump_read = "x y z"
+            self.fix2D = ""
+            self.unfix2D = ""
         
         self.dt = 0.001
         self.Seed = self.set_seed()
@@ -192,7 +213,7 @@ class _run:
             #exit(1)
         return self.Queue
     
-    def bsubs(self, Path, test=0):
+    def bsubs(self, Path):
         Run = Path.Run
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(">>> Preparing sub file......")
@@ -215,7 +236,7 @@ class _run:
             with open(f"{dir_file}.lsf", "w") as file:
                 for command in bsub:
                     file.write(command + "\n")
-            if platform.system() == "Darwin" or test:
+            if platform.system() == "Darwin":
                 print(">>> for test......")
                 print(f"mpirun -np 4 lmp_wk -i {dir_file}.in")
                 subprocess.run(f"mpirun -np 4 lmp_wk -i {dir_file}.in", shell=True)
@@ -247,25 +268,25 @@ class _run:
 
 class _init:
     def __init__(self, Config, Run, Rin, Wid, N_monos, num_chains = params["num_chains"]):
-        self.sigma, self.mass = 1.0, 1.0
+        self.sigma_equ, self.mass, self.sigma = 0.945, 1.0, 1.0
         self.Config, self.Run = Config, Run
         self.Rin, self.Wid = Rin, Wid
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
         self.Rout = self.Rin + self.Wid # outer_radius
         self.jump = self.set_box()   #set box
-        self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma / 2))
-        self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma / 2))
+        self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
+        self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
         self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
         self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
         self.num_Anlus = self.num_Rin + self.num_Rout
         self.total_particles = self.num_Anlus + self.num_monos
         if self.Rin < 1e-6:
-            self.Rchain = self.Rin + self.sigma + self.N_monos * self.sigma/(2 * np.pi)
+            self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi)
             self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
             self.theta0 = - 4 * self.dtheta_chain
         else:
-            self.Rchain = self.Rin + self.sigma
+            self.Rchain = self.Rin + self.sigma + 0.5
             self.dtheta_chain = self.set_dtheta(self.Rchain)
             self.theta0 = - 2 * self.dtheta_chain
 
@@ -292,8 +313,8 @@ class _init:
         else:
             raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
         if self.Run.Dimend == 2:
-            self.zlo = -self.sigma/2
-            self.zhi = self.sigma/2
+            self.zlo = -self.sigma_equ/2
+            self.zhi = self.sigma_equ/2
         elif self.Run.Dimend == 3:
             self.zlo = - self.L_box / 2.0
             self.zhi = self.L_box / 2.0
@@ -302,7 +323,7 @@ class _init:
     def set_dtheta(self, R, num_R=None):
         """计算角度间隔"""
         if num_R is None:
-            return 2 * np.pi / np.floor(2 * np.pi * R / self.sigma)
+            return 2 * np.pi / np.floor(2 * np.pi * R / self.sigma_equ)
         elif num_R == 0:
             return 0
         else:
@@ -340,19 +361,19 @@ class _init:
         theta = self.theta0
         for i in range(int(self.N_monos)):
             if i == 0:
-                x = round(Rchain * np.cos(theta), 2)
-                y = round(Rchain * np.sin(theta), 2)
+                x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
+                y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
                 z = 0
                 file.write(f"{i+1} 1 1 {x} {y} {z}\n")
                 continue
             if theta >= 2 * np.pi - 5 * circle * dtheta_chain:
                 circle += 1
-                Rchain += self.sigma
-                dtheta_chain = 2 * np.pi / np.floor(2* np.pi * Rchain/self.sigma)
+                Rchain += self.sigma_equ + 0.2
+                dtheta_chain = 2 * np.pi / np.floor(2* np.pi * Rchain/self.sigma_equ)
                 theta = theta - 2 * np.pi - dtheta_chain
             theta += dtheta_chain
-            x = round(Rchain * np.cos(theta), 2)
-            y = round(Rchain * np.sin(theta), 2)
+            x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
+            y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
             z = 0.0
             if i == self.N_monos-1:
                 file.write(f"{i+1} 1 3 {x} {y} {z}\n")
@@ -419,210 +440,190 @@ class _model:
         #for directory
         self.Pe = self.Fa / self.Run.Temp
 
+        # pairs, bonds, angles
+        self.pair = {
+        "LJ": '\n'.join([
+            '#pair potential',
+            'pair_style      lj/cut 1.12246',
+            'pair_modify	    shift yes',
+            'pair_coeff      *3 *  1 1.0',
+            'pair_coeff      4*5 4*5   1 1.0 0.0',
+        ]),
+        "LJ4422": '\n'.join([
+            '#pair potential',
+            'pair_style       lj4422/cut 1.03201',
+            'pair_modify	    shift yes',
+            'pair_coeff      *3 * 1 1.0',
+            'pair_coeff      4*5 4*5   1 1.0 0.0',
+        ])}
+
+        self.bond = {"harmonic": '\n'.join([
+            '# Bond potential',
+            'bond_style      harmonic',
+            'bond_coeff      1 4000 1.0',
+            'special_bonds   lj/coul 1.0 1.0 1.0',
+        ]),
+        "fene4422": '\n'.join([
+            '# Bond potential',
+            'bond_style      fene4422',
+            'bond_coeff      1 300.0 1.05 1.0 1.0',
+            'special_bonds   lj/coul 0.0 1.0 1.0',
+        ])}
+
+        self.angle = {
+            "harmonic": '\n'.join([
+                '# angle potential',
+                'angle_style     harmonic',
+                f'angle_coeff     * {self.Kb} 180',
+        ]),
+            "hybrid": '\n'.join([
+            '# Angle potential',
+            'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
+            f'angle_coeff     1 actharmonic_h2 {self.Kb} 180 {self.Fa} {self.Fa}',
+            f'angle_coeff     2 actharmonic   {self.Kb} 180 {self.Fa}',
+            f'angle_coeff     3 actharmonic_t {self.Kb} 180 {self.Fa}',
+        ]),
+        "actharmonic": '\n'.join([
+            '# Angle potential',
+            'angle_style      actharmonic',
+            f'angle_coeff     * {self.Kb} 180 {self.Fa}',
+        ])}
+
     def write_section(self, file, cmds):
         """向文件中写入一个命令区块"""
         for command in cmds:
             file.write(command + "\n")
-            
+
+    def setup(self, dimend: int, dir_file: str, read: str) -> list:
+        """Setup the basic environment for LAMMPS simulation."""
+        return [
+            '# Setup',
+            'echo		        screen',
+            'units           lj',
+            f'dimension       {dimend}',
+            'boundary        p p p',
+            'atom_style      angle',
+            '',
+            f'variable dir_file string {dir_file}',
+            read,
+            '',
+            '#groups',
+            'group           head type 1',
+            'group           end type 3',
+            'group			      chain type 1 2 3',
+            'group			      obs type 4 5',
+            '',
+            'velocity		all set 0.0 0.0 0.0',
+            '',
+        ]
+
+    def potential(self, prompt: str, pair: str, bond: str, angle: str) -> list:
+        """Define the potential parameters for LAMMPS simulation."""
+        return [
+            prompt,
+            '##################################################################',
+            pair,
+            '',
+            bond,
+            '',
+            angle,
+            '##################################################################',
+            '# for communication',
+            'comm_style      brick',
+            'comm_modify     mode single cutoff 3.0 vel yes',
+            '',
+            'neighbor	      1.5 bin',
+            'neigh_modify	  every 100 delay 0 check yes #exclude none',
+            '',
+        ]
+
+    def fix(self, prompt: str, temp: float, damp: float, run) -> list:
+        """Define the fix parameters for LAMMPS simulation."""
+        fix_nve = 'fix NVE chain nve/limit 0.1' if 'init' in prompt else 'fix NVE chain nve'
+        return [
+            '',
+            prompt,
+            '##################################################################',
+            f'fix      	      LANG chain langevin {temp} {temp} {damp} {run.set_seed()}',
+            fix_nve,
+            'fix             FREEZE obs setforce 0.0 0.0 0.0',
+            run.fix2D,
+            '',
+        ]
+
+    def run(self, title: str, type: str, timestep: int, tdump: int, run) -> list:
+        """Define the run parameters for LAMMPS simulation."""
+        log_cmd = 'log ${dir_file}.log' if title == run.run["equ"] else ''
+        unfix_cmd = run.unfix2D if title != run.run["data"] and title != run.run["refine"] else ''
+        return [
+            f'dump	        	{title} {type} custom {tdump} ${{dir_file}}.{title.lower()}.lammpstrj id type {run.Dump}',
+            f'dump_modify     {title} sort id',
+            '',
+            'reset_timestep	0',
+            f'timestep        {run.dt}',
+            f'thermo		      {timestep // 200}',
+            log_cmd,
+            f'run	            {timestep}',
+            f'write_restart   ${{dir_file}}.{title.lower()}.restart',
+            unfix_cmd,
+            f'undump          {title}',
+            '',
+        ]
+
     def in_file(self, Path):
-        Model, Init, Run = Path.Model, Path.Init, Path.Run
+        """Main function to write the in-file for LAMMPS simulation."""
+        #from LJ + harmonic ==> LJ4422 + FENE4422
+        Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
-            print(f"==> Writing infile: {infile}......")
-            dir_file = os.path.join(f"{Path.dir_data}", infile)
-            read = f'read_data       {Path.data_file}'
-            if Run.Params["restart"]:
-                read = 'read_restart       ${dir_file}.equ.restart'
-                
-            # Write each command in the list to the file, followed by a newline character
-            setup = [
-                '# Setup',
-                'echo		        screen',
-                'units           lj',
-                f'dimension       {Run.Dimend}',
-                'boundary        p p p',
-                'atom_style      angle',
-                '',
-                f'variable dir_file string {dir_file}',
-                read,
-                '',
-                '#groups',
-                'group           head type 1',
-                'group           end type 3',
-                'group			      chain type 1 2 3',
-                'group			      obs type 4 5',
-                '',
-                'velocity		all set 0.0 0.0 0.0',
-                '',
-            ]
-            initial = [
-                '# for initialization',
-                '##################################################################',
-                '# pair potential and  soft potential',
-                'variable	      Pre_soft equal ramp(0.0,10000.0)',
-                'pair_style      hybrid/overlay lj/cut 1.12246 soft 1.5480',
-                'pair_coeff      *3 *3 lj/cut 1 1.0',
-                'pair_modify     shift yes',
-                'pair_coeff      *3 4*5 soft 1.5000',
-                'pair_coeff      4*5 4*5 lj/cut 1 1.0 0.0',
-                'fix 	          SOFT all adapt 1 pair soft a *3 4*5 v_Pre_soft',
-                '',
-                '# Bond potential',
-                'bond_style      harmonic',
-                'bond_coeff      1 4000 1.0',
-                'special_bonds   lj/coul 1.0 1.0 1.0',
-                '',
-                '# angle potential',
-                'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
-                f'angle_coeff     1 actharmonic_h2 {Model.Kb} 180 0.0 0.0',
-                f'angle_coeff     2 actharmonic   {Model.Kb} 180 0.0',
-                f'angle_coeff     3 actharmonic_t {Model.Kb} 180 0.0',
-                '##################################################################',
-                '# for communication',
-                'comm_style      brick',
-                'comm_modify     mode single cutoff 3.0 vel yes',
-                '',
-                'neighbor	      1.5 bin',
-                'neigh_modify	  every 1 delay 0 check yes #exclude none',
-                '',
-                '# for initialization',
-                f'# fix		 	        BOX all deform 1 x final 0.0 {Init.L_box} y final 0.0 {Init.L_box} units box remap x',
-                f'fix   	        LANG chain langevin 1.0 1.0 1.0 {Run.set_seed()}',
-                'fix			        NVE chain nve/limit 0.1',
-                'fix             FREEZE obs setforce 0.0 0.0 0.0',
-                Run.fix2D,
-                '',
-                f'dump	        	INIT all custom {Run.Tinit//20} '
-                '${dir_file}.chain_init.lammpstrj id type '
-                f'{Run.Dump}',
-                'dump_modify     INIT sort id',
-                '',
-                'reset_timestep	0',
-                f'timestep        {Run.dt}',
-                f'thermo		      {Run.Tinit//200}',
-                f'run	            {Run.Tinit}',
-                'write_restart   ${dir_file}.init.restart',
-                '',
-                '#unfix           BOX',
-                'unfix           SOFT',
-                'unfix           LANG',
-                'unfix           NVE',
-                'unfix           FREEZE',
-                Run.unfix2D,
-                'undump          INIT',
-                '',
-            ]
-            potential = [
-                '# for equalibrium',
-                '###################################################################',
-                '#pair potential',
-                'pair_style      lj/cut 1.12246',
-                'pair_modify	    shift yes',
-                'pair_coeff      *3 *  1 1.0',
-                'pair_coeff      4*5 4*5   1 1.0 0.0',
-                '',
-                '# Bond potential',
-                'bond_style      harmonic',
-                'bond_coeff      1 4000 1.0',
-                'special_bonds   lj/coul 1.0 1.0 1.0',
-                '',
-                '# Angle potential',
-                'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
-                f'angle_coeff     1 actharmonic_h2 {Model.Kb} 180 {Model.Fa} {Model.Fa}',
-                f'angle_coeff     2 actharmonic   {Model.Kb} 180 {Model.Fa}',
-                f'angle_coeff     3 actharmonic_t {Model.Kb} 180 {Model.Fa}',
-                '#################################################################',
-                'comm_style      brick',
-                'comm_modify     mode single cutoff 3.0 vel yes',
-                '',
-                'neighbor	      1.5 bin',
-                'neigh_modify	  every 100 delay 0 check yes #exclude none',
-                '',
-            ]
-            equal_fix = [
-                '# for equalibrium',
-                f'fix      	      LANG chain langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.set_seed()}',
-                'fix		         	NVE chain nve',
-                'fix             FREEZE obs setforce 0.0 0.0 0.0',
-                Run.fix2D,
-                '',
-            ]
-            equal_run = [
-                f'dump		        EQU chain custom {Run.Tdump} '
-                '${dir_file}.chain_equ.lammpstrj id type '
-                f'{Run.Dump}',
-                'dump_modify     EQU sort id',
-                '',
-                'reset_timestep  0',
-                f'timestep        {Run.dt}',
-                f'thermo		      {Run.Tequ//200}',
-                'log       ${dir_file}.log',
-                f'run		          {Run.Tequ}',
-                'write_restart   ${dir_file}.equ.restart',
-                '',
-                'unfix           LANG',
-                'unfix           NVE',
-                'unfix           FREEZE',
-                Run.unfix2D,
-                'undump          EQU',
-                '',
-            ]
-            data = [
-                '# for data',
-                '#################################################################',
-                f'fix      	      LANG all langevin {Run.Temp} {Run.Temp} {Run.Damp} {Run.set_seed()}',
-                'fix		         	NVE chain nve',
-                'fix             FREEZE obs setforce 0.0 0.0 0.0',
-                Run.fix2D,
-                '',
-                '#output',
-                f'dump	    	    DATA chain custom {Run.Tdump} '
-                '${dir_file}.lammpstrj id type '
-                f'{Run.Dump}',
-                'dump_modify     DATA sort id',
-                '',
-                '# run',
-                'reset_timestep  0',
-                f'thermo		      {Run.TSteps//200}',
-                f'run	        	  {Run.TSteps}',
-                'write_restart	  ${dir_file}.end.restart',
-                'undump          DATA',
-                '',
-            ]
-            refine = [
-                '# for refine',
-                '##################################################################',
-                'read_dump       ${dir_file}.chain_equ.lammpstrj '
-                f'{Run.Tequ} {Run.dump_read} wrapped no format native',
-                '',
-                f'dump            REFINE chain custom {Run.Tdump_ref} '
-                '${dir_file}.chain_refine.lammpstrj id type '
-                f'{Run.Dump}',
-                'dump_modify     REFINE sort id',
-                '',
-                'reset_timestep  0',
-                f'timestep        {Run.dt}',
-                f'thermo          {Run.Tref//200} ',
-                f'run             {Run.Tref}',
-                'write_restart   ${dir_file}.refine.restart',
-                '#############################################################'
-            ]
-            # Define LAMMPS 参数
-            if Run.Params["restart"]:
+            logging.info(f"==> Writing infile: {infile}......")
+            try:
+                #setup
+                dir_file = os.path.join(f"{Path.dir_data}", infile)
+                read = f'read_data       {Path.data_file}'
+                if Run.Params["restart"]:
+                    read = f'read_restart       ${{dir_file}}.{Run.run["equ"].lower()}.restart'
+
+                # potential
+                if Config.Type == "Ring":
+                    initial_potential = self.potential('# Ring for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
+                else:
+                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
+
+                #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.L_box} y final 0.0 {Init.L_box} units box remap x',
+                initial_fix = self.fix('# for initialization', 1.0, 1.0, Run)
+                equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
+                data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
+                refine_read = [
+                    '# for refine',
+                    '##################################################################',
+                    f'read_dump       ${{dir_file}}.{Run.run["equ"].lower()}.lammpstrj {Run.Tequ} {Run.dump_read} wrapped no format native',
+                    '',
+                ]
+                # run
+                initial_run = self.run(Run.run["init"], "all", Run.Tinit, Run.Tinit//20, Run)
+                equal_run = self.run(Run.run["equ"], "chain", Run.Tequ, Run.Tdump, Run)
+                data_run = self.run(Run.run["data"], "chain", Run.TSteps, Run.Tdump, Run)
+                refine_run = self.run(Run.run["refine"], "chain", Run.Tref, Run.Tdump_ref, Run)
+
+                # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
-                    self.write_section(file, setup)
-                    self.write_section(file, potential)
-                    self.write_section(file, data)
-                    self.write_section(file, refine)
-            else:
-                with open(f"{dir_file}.in", "w") as file:
-                    self.write_section(file, setup)
-                    self.write_section(file, initial)
-                    self.write_section(file, potential)
+                    self.write_section(file, self.setup(Run.Dimend, dir_file, read))
+                    if not Run.Params["restart"]:
+                        self.write_section(file, initial_potential)
+                        self.write_section(file, initial_fix)
+                        self.write_section(file, initial_run)
+                    self.write_section(file, run_potential)
                     self.write_section(file, equal_fix)
                     self.write_section(file, equal_run)
-                    self.write_section(file, data)
-                    self.write_section(file, refine)
+                    self.write_section(file, data_fix)
+                    self.write_section(file, data_run)
+                    self.write_section(file, refine_read)
+                    self.write_section(file, refine_run)
+            except Exception as e:
+                print(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
 
