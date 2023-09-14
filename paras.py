@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import subprocess
 import shutil
@@ -23,7 +24,7 @@ import matplotlib.transforms as mtransforms
 logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #-----------------------------------Parameters-------------------------------------------
-Bacteria = "Bact"
+Bacteria = "Bacteria"
 types = [Bacteria, "Chain", "Ring"]
 envs = ["Anlus", "Free"]
 tasks = ["Simus", "Anas"]
@@ -33,7 +34,7 @@ params = {
     'labels': {'Types': types[2:3], 'Envs': envs[1:2]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
-    'restart': False,
+    'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Gamma': 100,
@@ -95,15 +96,15 @@ class _config:
 
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
-        if Run.Dimend == 2:
-            dump = "xu yu vx vy"
-        elif Run.Dimend == 3:
-            dump = "xu yu zu vx vy vz"
-        else:
-            print(f"Error: Wrong Dimend to run => dimension != {Run.Dimend}")
+        # 定义 dimension 和 dump 的映射
+        dim_to_dump = {2: "xu yu vx vy", 3: "xu yu zu vx vy vz"}
+        try:
+            Run.Dump = dim_to_dump[Run.Dimend]
+        except KeyError:
+            logging.error(f"Error: Wrong Dimend to run => dimension != {Run.Dimend}")
+            raise ValueError(f"Invalid dimension: {Run.Dimend}")
             exit(1)
-        Run.Dump = dump
-        #Run.Dump = "xu yu zu"
+
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
         if platform.system() == "Darwin":
@@ -115,10 +116,10 @@ class _config:
         Run.Tequ = Run.TSteps
         Run.Tref = Run.Tinit
         Run.Params["Total Run Steps"] = Run.TSteps
-            
+
         if self.Type == Bacteria:
-            Run.Tdump = Run.Tdump // 10
-            Run.Tequ = Run.Tequ // 100
+            Run.Tdump //= 10
+            Run.Tequ //= 100
 ##########################################END!###############################################################
 
 class _run:
@@ -151,7 +152,12 @@ class _run:
         elif (self.Dimend == 3):
             self.dump_read = "x y z"
             self.fix2D = ""
-            self.unfix2D = ""
+            self.unfix2D = '\n'.join([
+                '',
+                'unfix           LANG',
+                'unfix           NVE',
+                'unfix           FREEZE',
+            ])
         
         self.dt = 0.001
         self.Seed = self.set_seed()
@@ -215,6 +221,7 @@ class _run:
     
     def bsubs(self, Path):
         Run = Path.Run
+        logging.info(f">>> Preparing sub file: {Path.dir_data}")
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.dir_data}", infile)
@@ -246,7 +253,7 @@ class _run:
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}")
-                
+
     def run(self, Path, Plot):
         Init, Model = Path.Init, Path.Model
         task = self.Params["task"]
@@ -299,6 +306,7 @@ class _init:
 
         if (self.num_chains != 1):
             print(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
+            logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             exit(1)
 
     def set_box(self):
@@ -307,6 +315,7 @@ class _init:
             self. L_box = self.Rout + 1
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
                 print("N_monos is too Long!")
+                logging.warning("N_monos is too Long!")
                 return True
         elif self.Rin < 1e-6 and self.Wid < 1e-6:
             self.L_box = self.N_monos/2 + 10
@@ -420,6 +429,7 @@ class _init:
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
         print("==> Preparing initial data file......")
+        logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         with open(f"{Path.data_file}", "w") as file:
             self.write_header(file)
@@ -434,6 +444,7 @@ class _model:
     def __init__(self, Init, Run, Fa, Xi):
         self.Init = Init
         self.Run = Run
+        self.type = Init.Config.Type.lower()
         self.Fa = Fa
         self.Xi = Xi
         self.Kb = self.Xi * Init.N_monos/4
@@ -510,12 +521,20 @@ class _model:
             '#groups',
             'group           head type 1',
             'group           end type 3',
-            'group			      chain type 1 2 3',
+            f'group			      {self.type} type 1 2 3',
             'group			      obs type 4 5',
             '',
             'velocity		all set 0.0 0.0 0.0',
             '',
         ]
+
+    def iofile(self, file, title):
+        lmp_rest = '' if title == self.Run.run["data"] else f".{title.lower()}"
+        lmp_trj = '' if title == self.Run.run["data"] else f".{self.type}_{title.lower()}"
+        if file == "restart":
+            return f'${{dir_file}}{lmp_rest}.restart'
+        elif file == "dump":
+            return f'${{dir_file}}{lmp_trj}.lammpstrj'
 
     def potential(self, prompt: str, pair: str, bond: str, angle: str) -> list:
         """Define the potential parameters for LAMMPS simulation."""
@@ -539,24 +558,27 @@ class _model:
 
     def fix(self, prompt: str, temp: float, damp: float, run) -> list:
         """Define the fix parameters for LAMMPS simulation."""
-        fix_nve = 'fix NVE chain nve/limit 0.1' if 'init' in prompt else 'fix NVE chain nve'
+        fix_nve = f'fix             NVE {self.type} nve/limit 0.1' if 'init' in prompt else f'fix             NVE {self.type} nve'
         return [
             '',
             prompt,
             '##################################################################',
-            f'fix      	      LANG chain langevin {temp} {temp} {damp} {run.set_seed()}',
+            f'fix      	      LANG {self.type} langevin {temp} {temp} {damp} {run.set_seed()}',
             fix_nve,
             'fix             FREEZE obs setforce 0.0 0.0 0.0',
             run.fix2D,
             '',
         ]
 
-    def run(self, title: str, type: str, timestep: int, tdump: int, run) -> list:
+    def run(self, title: str, timestep: int, tdump: int, run) -> list:
         """Define the run parameters for LAMMPS simulation."""
-        log_cmd = 'log ${dir_file}.log' if title == run.run["equ"] else ''
-        unfix_cmd = run.unfix2D if title != run.run["data"] and title != run.run["refine"] else ''
+        v_init, v_equ, v_data, v_refine = run.run["init"], run.run["equ"], run.run["data"], run.run["refine"]
+        #log, unfix, dump
+        log_cmd ='log	            ${dir_file}.log' if title == v_equ else ''
+        unfix_cmd = '' if title == v_data else run.unfix2D
+
         return [
-            f'dump	        	{title} {type} custom {tdump} ${{dir_file}}.{title.lower()}.lammpstrj id type {run.Dump}',
+            f'dump	        	{title} {self.type} custom {tdump} {self.iofile("dump", title)} id type {run.Dump}',
             f'dump_modify     {title} sort id',
             '',
             'reset_timestep	0',
@@ -564,7 +586,7 @@ class _model:
             f'thermo		      {timestep // 200}',
             log_cmd,
             f'run	            {timestep}',
-            f'write_restart   ${{dir_file}}.{title.lower()}.restart',
+            f'write_restart   {self.iofile("restart", title)}',
             unfix_cmd,
             f'undump          {title}',
             '',
@@ -580,9 +602,10 @@ class _model:
             try:
                 #setup
                 dir_file = os.path.join(f"{Path.dir_data}", infile)
-                read = f'read_data       {Path.data_file}'
-                if Run.Params["restart"]:
-                    read = f'read_restart       ${{dir_file}}.{Run.run["equ"].lower()}.restart'
+                if Run.Params["restart"][0]:
+                    read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
+                else:
+                    read = f'read_data       {Path.data_file}'
 
                 # potential
                 if Config.Type == "Ring":
@@ -599,19 +622,19 @@ class _model:
                 refine_read = [
                     '# for refine',
                     '##################################################################',
-                    f'read_dump       ${{dir_file}}.{Run.run["equ"].lower()}.lammpstrj {Run.Tequ} {Run.dump_read} wrapped no format native',
+                    f'read_dump        {self.iofile("dump", Run.run["equ"])} {Run.Tequ} {Run.dump_read} wrapped no format native',
                     '',
                 ]
                 # run
-                initial_run = self.run(Run.run["init"], "all", Run.Tinit, Run.Tinit//20, Run)
-                equal_run = self.run(Run.run["equ"], "chain", Run.Tequ, Run.Tdump, Run)
-                data_run = self.run(Run.run["data"], "chain", Run.TSteps, Run.Tdump, Run)
-                refine_run = self.run(Run.run["refine"], "chain", Run.Tref, Run.Tdump_ref, Run)
+                initial_run = self.run(Run.run["init"], Run.Tinit, Run.Tinit//20, Run)
+                equal_run = self.run(Run.run["equ"], Run.Tequ, Run.Tdump, Run)
+                data_run = self.run(Run.run["data"], Run.TSteps, Run.Tdump, Run)
+                refine_run = self.run(Run.run["refine"], Run.Tref, Run.Tdump_ref, Run)
 
                 # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
                     self.write_section(file, self.setup(Run.Dimend, dir_file, read))
-                    if not Run.Params["restart"]:
+                    if not Run.Params["restart"][0]:
                         self.write_section(file, initial_potential)
                         self.write_section(file, initial_fix)
                         self.write_section(file, initial_run)
@@ -643,13 +666,13 @@ class _path:
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
-        #100G1.0T2D
-        self.dir1= f"{self.Run.Gamma}G{self.Run.Temp}T{self.Run.Dimend}D"
-        #5.0R5.0_100N1_Chain
+        #2D_100G_1.0T_Chain
+        self.dir1= f"{self.Run.Dimend}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
+        #5.0R5.0_100N1_Anulus
         if self.Init.Rin != 0 and self.Init.Wid != 0:
-            self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Label}"
+            self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Env}"
         elif self.Init.Rin == 0 and self.Init.Wid == 0:
-            self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Label}"
+            self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Env}"
         else:
             raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
         #1.0Pe_0.0Xi_8T5
@@ -658,15 +681,16 @@ class _path:
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
-        #/Users/wukong/Data/Simus/100G1.0T2D_5.0R5.0_100N1_Chain/1.0Pe_0.0Xi_8T5
-        self.dir_data = os.path.join(self.simus, f"{self.dir1}_{self.dir2}", self.dir3)
-        #/Users/wukong/Data/Simus/100G1.0T2D_5.0R5.0_100N1_Chain/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_Chain.data
-        self.data_file = os.path.join(self.dir_data, f"{self.dir2}.data")
+        #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5
+        self.dir_data = os.path.join(self.simus, self.dir1, self.dir2, self.dir3)
+        #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_CA.data
+        self.data_file = os.path.join(self.dir_data, f"{self.dir2}_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}.data")
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
         shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
         print(f"data_file => {self.data_file}")
+        logging.info(f"data_file => {self.data_file}")
         #Figures
-        self.fig1 = os.path.join(self.host, self.mydirs[3], f"{self.dir1}_{self.dir2}", self.dir3)
+        self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, self.dir2, self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)
 
         if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")) or os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.data.lammpstrj")):
@@ -681,33 +705,25 @@ class _plot:
         self.chunk = 9
 
     def set_dump(self):
-        if self.Config.Type == Bacteria:
-            if self.Run.Dimend == 2:
-                dump = "xu yu vx vy"
-            elif self.Run.Dimend == 3:
-                dump = "xu yu zu vx vy vz"
-            else:
-                print(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
-                exit(1)
-        else:
-            if self.Run.Dimend == 2:
-                dump = "xu yu"
-            elif self.Run.Dimend == 3:
-                dump = "xu yu zu"
-            else:
-                print(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
-                exit(1)
-        dump = dump.split(" ")
-        return ["id"] + dump
+        is_bacteria = (self.Config.Type == Bacteria)
+        dump = {
+            2: "xu yu" + (" vx vy" if is_bacteria else ""),
+            3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
+        }
+        try:
+            return ["id"] + dump[self.Run.Dimend].split(" ")
+        except KeyError:
+            logging.error(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
+            raise ValueError(f"Invalid dimension: {self.Run.Dimend}")
 
     def read_data(self):
         dump = self.set_dump()
         self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
+        logging.info(f"==> Reading {ifile}.lammpstrj file: ......")
         # read the lammpstrj files with 2001 frames
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun + 1)]):
             dir_file = os.path.join(f"{self.Path.dir_data}", f"{ifile}.lammpstrj")
             print(f"==> Reading {ifile}.lammpstrj file: ......")
-
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
             natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
@@ -715,13 +731,16 @@ class _plot:
             lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             if natoms != self.Init.num_monos:
                 print(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
+                logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
                 print(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
+                logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
             skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             except Exception as e:
                 print(f"ERROR: Could not read the file due to {e}")
+                logging.error(f"ERROR: Could not read the file due to {e}")
                 exit(1)
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
@@ -732,6 +751,7 @@ class _plot:
         fig_save = os.path.join(f"{self.Path.fig1}", "r(S,T)Dist")
         pdf = PdfPages(f"{fig_save}.pdf")
         print(f"{fig_save}.pdf")
+        logging.info(f"{fig_save}.pdf")
         # ----------------------------> read data <----------------------------#
         # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
         self.data = self.read_data()
@@ -861,6 +881,7 @@ class Timer:
             end = self._func()
             self.elapsed += end - self._start
             print(str, ":", self.elapsed)
+            logging.info(str, ":", self.elapsed)
             self._start = None
         
     def reset(self):
