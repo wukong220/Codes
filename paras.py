@@ -669,7 +669,7 @@ class _path:
         self.fig1 = os.path.join(self.host, self.mydirs[3], f"{self.dir1}_{self.dir2}", self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)
 
-        if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")):
+        if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")) or os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.data.lammpstrj")):
             return True
         else:
             return False
