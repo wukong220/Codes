@@ -34,6 +34,7 @@ def check_params(params):
 
 #-----------------------------------Part I-------------------------------------------#    
 if __name__ == "__main__":
+    check = True
     for iType in convert2array(params['labels']['Types']):
         for iEnv in convert2array(params['labels']['Envs']):
             Config = _config(iType, iEnv, params)
@@ -46,7 +47,9 @@ if __name__ == "__main__":
                     Run = _run(iGamma, iTemp, params['Trun'], params['Dimend'])  #print(Run.__dict__)
                     Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
                     if params['task'] == "Simus" and platform.system() != "Darwin":
-                        check_params(params) #continue
+                        if check:
+                            check_params(params) #continue
+                            check = False
 
                     for iRin in convert2array(params['Rin']):
                         for iWid in convert2array(params['Wid']):
