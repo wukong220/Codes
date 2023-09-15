@@ -37,9 +37,9 @@ if __name__ == "__main__":
     for iType in convert2array(params['labels']['Types']):
         for iEnv in convert2array(params['labels']['Envs']):
             Config = _config(iType, iEnv, params)
-            if Config.Label == "RingAnlus":
-                input("I'm sorry => 'RingAnlus' is not ready!")
+            if Config.jump:
                 continue
+
             for iGamma in convert2array(params['Gamma']):
                 for iTemp in convert2array(params['Temp']):
                     # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
@@ -47,6 +47,7 @@ if __name__ == "__main__":
                     Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
                     if params['task'] == "Simus" and platform.system() != "Darwin":
                         check_params(params) #continue
+
                     for iRin in convert2array(params['Rin']):
                         for iWid in convert2array(params['Wid']):
                             for iN in convert2array(params['N_monos']):
@@ -57,6 +58,7 @@ if __name__ == "__main__":
                                 queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
                                 #exit(1)
                                 #input()#continue
+
                                 for iFa in convert2array(params['Fa']):
                                     for iXi in convert2array(params['Xi']):
                                         # paras for model: Pe(Fa), Xi(Kb)

@@ -14,6 +14,8 @@ import numpy as np
 from numba import vectorize, float64
 from scipy.interpolate import splrep, splev
 from scipy.stats import norm
+from scipy.spatial import KDTree
+from collections import defaultdict
 
 import seaborn as sns
 import matplotlib as mpl
@@ -22,16 +24,17 @@ from matplotlib.backends.backend_pdf import PdfPages as PdfPages
 from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+#-----------------------------------Const-------------------------------------------
+_BACT = "Bacteria"
+FREE_ENV = 0.0
 #-----------------------------------Parameters-------------------------------------------
-Bacteria = "Bacteria"
-types = [Bacteria, "Chain", "Ring"]
-envs = ["Anlus", "Free"]
+types = [_BACT, "Chain", "Ring"]
+envs = ["Free", "Rand", "Anlus"]
 tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[2:3], 'Envs': envs[1:2]},
+    'labels': {'Types': types[2:3], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -40,6 +43,7 @@ params = {
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 2,
+    #'Dimend': 3,
     'num_chains': 1,
 }
 class _config:
@@ -47,17 +51,21 @@ class _config:
         self.config = {
             "Anlus": {
                 # 障碍物参数：环的半径，宽度
-                #'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+                'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
                 'Rin': [5.0],
-                #'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
+                'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
                 'Wid': [5.0],  # annulus width
             },
             "Free":{
-                'Rin': [0.0],
-                'Wid': [0.0],
+                'Rin': 0.0,
+                'Wid': 0.0,
+            },
+            "Rand": {
+                'Rin': [0.03351], # phi
+                'Wid': [1],
             },
 
-            Bacteria: {
+            _BACT: {
                 'N_monos': 3,
                 'Xi': 1000,
                 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
@@ -73,15 +81,24 @@ class _config:
                 'Temp': [1.0],
             },
             "Ring":{
-                #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                'N_monos': [100],
+                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                #'N_monos': [100],
                 'Xi': 0.0,
-                #'Fa': [0.0, 1.0],
-                'Fa': [1.0],
-                #'Temp': [1.0, 0.1, 0.01],
-                'Temp': [0.01],
+                'Fa': [0.0, 1.0],
+                #'Fa': [1.0],
+                'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                #'Temp': [0.01],
+                'Gamma': [0.1, 1, 10, 100],
+                #'Gamma': 100,
             }
         }
+        if self.config["Free"]['Rin'] != FREE_ENV or self.config["Free"]['Wid'] != FREE_ENV:
+            logging.error("Free chain should have Rin and Wid as 0.0")
+            exit(1)
+        elif (self.config["Anlus"]["Rin"][0] == FREE_ENV or self.config["Anlus"]["Wid"][0] == FREE_ENV) or \
+              (self.config["Rand"]["Rin"][0] == FREE_ENV or self.config["Rand"]["Wid"][0] == FREE_ENV):
+            logging.error("When Rin and Wid are 0.0, it's FREE!")
+            exit(1)
         self.Params = Params
         self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
         self.Params['marks']['labels'] = self.labels
@@ -94,15 +111,22 @@ class _config:
         if self.Env in self.config:
             self.Params.update(self.config[self.Env])
 
+        if self.Label == "RingAnlus" or self.Label == "RingRand" or (self.Label == "ChainAnlus" and Params["Dimen"] == 3):
+            self.jump = True
+            print(f"I'm sorry => '{self.Label}' is not ready!")
+            logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
+        else:
+            self.jump = False
+
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
         # 定义 dimension 和 dump 的映射
         dim_to_dump = {2: "xu yu vx vy", 3: "xu yu zu vx vy vz"}
         try:
-            Run.Dump = dim_to_dump[Run.Dimend]
+            Run.Dump = dim_to_dump[Run.Dimen]
         except KeyError:
-            logging.error(f"Error: Wrong Dimend to run => dimension != {Run.Dimend}")
-            raise ValueError(f"Invalid dimension: {Run.Dimend}")
+            logging.error(f"Error: Wrong Dimen to run => dimension != {Run.Dimen}")
+            raise ValueError(f"Invalid dimension: {Run.Dimen}")
             exit(1)
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
@@ -117,19 +141,19 @@ class _config:
         Run.Tref = Run.Tinit
         Run.Params["Total Run Steps"] = Run.TSteps
 
-        if self.Type == Bacteria:
+        if self.Type == _BACT:
             Run.Tdump //= 10
             Run.Tequ //= 100
 ##########################################END!###############################################################
 
 class _run:
-    def __init__(self, Gamma, Temp, Trun, Dimend, Params = params, Frames = 2000):
+    def __init__(self, Gamma, Temp, Trun, Dimen, Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
-        self.Dimend = Dimend
+        self.Dimen = Dimen
         self.Frames = Frames
         self.Temp = Temp
         self.SkipRows = 9
@@ -139,7 +163,7 @@ class _run:
             "data": "DATA",
             "refine": "REFINE",
         }
-        if (self.Dimend == 2):
+        if (self.Dimen == 2):
             self.fix2D = f"fix             2D all enforce2d"
             self.unfix2D = '\n'.join([
                 '',
@@ -149,7 +173,7 @@ class _run:
                 'unfix             2D',
                 ])
             self.dump_read = "x y"
-        elif (self.Dimend == 3):
+        elif (self.Dimen == 3):
             self.dump_read = "x y z"
             self.fix2D = ""
             self.unfix2D = '\n'.join([
@@ -280,22 +304,29 @@ class _init:
         self.Rin, self.Wid = Rin, Wid
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
-        self.Rout = self.Rin + self.Wid # outer_radius
         self.jump = self.set_box()   #set box
-        self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
-        self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
-        self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
-        self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
-        self.num_Anlus = self.num_Rin + self.num_Rout
-        self.total_particles = self.num_Anlus + self.num_monos
-        if self.Rin < 1e-6:
-            self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi)
-            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
-            self.theta0 = - 4 * self.dtheta_chain
+
+        if self.Config.Env == "Anlus" or self.Config.Env == "Free":
+            self.Rout = self.Rin + self.Wid  # outer_radius
+            self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
+            self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
+            self.num_obs = int(self.num_Rin + self.num_Rout)
+            self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
+            self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
+            if self.Config.Env == "Free":
+                self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi)
+                self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
+                self.theta0 = - 4 * self.dtheta_chain
+            elif self.Config.Env == "Anlus":
+                self.Rchain = self.Rin + self.sigma + 0.5
+                self.dtheta_chain = self.set_dtheta(self.Rchain)
+                self.theta0 = - 2 * self.dtheta_chain
+        elif self.Config.Env == "Rand":
+            self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
         else:
-            self.Rchain = self.Rin + self.sigma + 0.5
-            self.dtheta_chain = self.set_dtheta(self.Rchain)
-            self.theta0 = - 2 * self.dtheta_chain
+            print(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
+            logging.error(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
+        self.total_particles = self.num_obs + self.num_monos
 
         if self.Config.Type == "Ring":
             self.bonds = self.num_monos - self.num_chains*0
@@ -303,7 +334,6 @@ class _init:
         else:
             self.bonds = self.num_monos - self.num_chains*1
             self.angles = self.num_monos - self.num_chains*2
-
         if (self.num_chains != 1):
             print(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
@@ -311,22 +341,28 @@ class _init:
 
     def set_box(self):
         """计算盒子大小"""
-        if self.Rin != 0.0 and self.Wid != 0.0:
-            self. L_box = self.Rout + 1
+        if self.Config.Type == "Anlus":
+            self. Lbox = self.Rin + self.Wid + 1
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
                 print("N_monos is too Long!")
                 logging.warning("N_monos is too Long!")
                 return True
-        elif self.Rin < 1e-6 and self.Wid < 1e-6:
-            self.L_box = self.N_monos/2 + 10
         else:
-            raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
-        if self.Run.Dimend == 2:
-            self.zlo = -self.sigma_equ/2
-            self.zhi = self.sigma_equ/2
-        elif self.Run.Dimend == 3:
-            self.zlo = - self.L_box / 2.0
-            self.zhi = self.L_box / 2.0
+            self.Lbox = self.N_monos/2 + 10
+        self.v_box = (2 * self.Lbox) ** self.Run.Dimen
+
+        if self.Run.Dimen == 2:
+            self.zlo = -self.sigma/2
+            self.zhi = self.sigma/2
+            self.Ks = 300.0
+            self.v_obs = np.pi * self.Wid ** 2
+        elif self.Run.Dimen == 3:
+            self.zlo = - self.Lbox
+            self.zhi = self.Lbox
+            self.Ks = 3000.0
+            self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
+        else:
+            logging.error(f"Error: Invalid Dimen  => dimension != {Run.Dimen}")
         return False
     
     def set_dtheta(self, R, num_R=None):
@@ -337,7 +373,11 @@ class _init:
             return 0
         else:
             return 2 * np.pi * R / (num_R * R)
-    
+
+    def neighbor_keys(self, key):
+        delta_key = [tuple(d) for d in np.ndindex(*([3] * self.Run.Dimen))]
+        return [tuple(map(lambda x, dx: x + dx, key, dkey)) for dkey in delta_key]
+
     def write_header(self, file):
         # 写入文件头部信息
         file.write("{} LAMMPS data file for initial configuration:\n\n".format(datetime.now().strftime("%Y/%m/%d %H:%M:%S")))
@@ -349,8 +389,8 @@ class _init:
         file.write("5 atom types\n\n")
         file.write("1 bond types\n\n")
         file.write("3 angle types\n\n")
-        file.write(f"-{self.L_box} {self.L_box} xlo xhi\n")
-        file.write(f"-{self.L_box} {self.L_box} ylo yhi\n")
+        file.write(f"-{self.Lbox} {self.Lbox} xlo xhi\n")
+        file.write(f"-{self.Lbox} {self.Lbox} ylo yhi\n")
         file.write(f"{self.zlo} {self.zhi} zlo zhi\n\n")
         file.write("Masses\n\n")
         file.write(f"1 {self.mass}\n")
@@ -358,7 +398,7 @@ class _init:
         file.write(f"3 {self.mass}\n")
         file.write(f"4 {self.mass}\n")
         file.write(f"5 {self.mass}\n\n")
-        
+
     def write_chain(self, file):
         # 写入原子信息
         file.write("Atoms\n\n")
@@ -397,7 +437,6 @@ class _init:
             y = round(self.Rin * np.sin(theta), 4)
             z = 0.0
             file.write(f"{self.N_monos+i+1} 1 4 {x} {y} {z}\n")
-            
         # 写入外环的原子信息
         for i in range(int(self.num_Rout)):
             theta = i * self.dtheta_out
@@ -405,6 +444,62 @@ class _init:
             y =  round(self.Rout * np.sin(theta), 4)
             z = 0.0
             file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {x} {y} {z}\n")
+
+    def write_rand(self, file):
+        file.write("Atoms\n\n")
+        # obstacles: harsh grid and size
+        self.obs_positions = []
+        self.bound = self.Lbox - self.Wid
+        self.hash_grid = defaultdict(list)
+        self.grid_size = 2 * self.Wid + self.sigma * 1.12
+        # Chain: starting position and direction
+        self.chain_positions = []
+        start_position = -self.bound + 2 * np.random.rand(self.Run.Dimen) * self.bound
+        if self.Run.Dimen == 2:
+            file.write(f"1 1 1 {' '.join(map(str,np.append(start_position, 0.0)))}\n")
+        else:
+            file.write(f"1 1 1 {' '.join(map(str, start_position))}\n")
+        self.chain_positions.append(start_position)
+        direction = np.random.randn(self.Run.Dimen)  # Random initial direction
+        direction /= np.linalg.norm(direction)  # Normalize to unit vector
+        for _ in range(self.num_obs):
+            while True:
+                position = -self.bound + 2 * np.random.rand(self.Run.Dimen) * self.bound
+                hash_key = tuple((position // self.grid_size).astype(int))
+                # Check for overlaps using hash grid
+                overlap = False
+                for neighbor_key in self.neighbor_keys(hash_key):
+                    for neighbor_pos in self.hash_grid[neighbor_key]:
+                        if np.linalg.norm(position - neighbor_pos) < self.grid_size:
+                            overlap = True
+                            break
+                if not overlap:
+                    self.obs_positions.append(position)
+                    self.hash_grid[hash_key].append(position)
+                    break
+
+        obs_tree = KDTree(self.obs_positions)
+        for i in range(1, self.N_monos):
+            next_position = self.chain_positions[-1] + direction * self.sigma_equ
+            # Check if it's out of box or too close to obstacles
+            while (next_position.min() < -self.bound or next_position.max() > self.bound or
+                   obs_tree.query(next_position)[0] < (1.12 * self.sigma + 2 * self.Wid)):
+                # Adjust direction slightly
+                direction += 0.1 * np.random.randn(self.Run.Dimen)
+                direction /= np.linalg.norm(direction)
+                next_position = self.chain_positions[-1] + direction * self.sigma_equ
+            self.chain_positions.append(next_position)
+            pos = np.append(next_position, 0.0) if self.Run.Dimen == 2 else  next_position
+            if i == self.N_monos - 1:
+                file.write(f"{i + 1} 1 3 {' '.join(map(str, pos))}\n")
+            else:
+                file.write(f"{i + 1} 1 2 {' '.join(map(str, pos))}\n")
+
+        for i, position in enumerate(self.obs_positions, start=len(self.chain_positions)+1):
+            pos = np.append(position, 0.0) if self.Run.Dimen == 2 else position
+            file.write(f"{i} 1 4 {' '.join(map(str, pos))}\n")
+
+        return self.obs_positions, self.chain_positions
 
     def write_potential(self, file):
         #写入bonds and angles
@@ -433,9 +528,15 @@ class _init:
         # 打开data文件以进行写入
         with open(f"{Path.data_file}", "w") as file:
             self.write_header(file)
-            self.write_chain(file)
-            if self.Config.Env == "Anlus":
-                self.write_anlus(file)
+            if self.Config.Env == "Anlus" or self.Config.Env == "Free":
+                self.write_chain(file)
+                if self.Config.Env == "Anlus":
+                    self.write_anlus(file)
+            elif self.Config.Env == "Rand":
+                self.write_rand(file)
+            else:
+                print(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
             self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
@@ -455,7 +556,7 @@ class _model:
         self.pair = {
         "LJ": '\n'.join([
             '#pair potential',
-            'pair_style      lj/cut 1.12246',
+            'pair_style       lj/cut 1.12246',
             'pair_modify	    shift yes',
             'pair_coeff      *3 *  1 1.0',
             'pair_coeff      4*5 4*5   1 1.0 0.0',
@@ -477,7 +578,7 @@ class _model:
         "fene4422": '\n'.join([
             '# Bond potential',
             'bond_style      fene4422',
-            'bond_coeff      1 300.0 1.05 1.0 1.0',
+            f'bond_coeff      1 {self.Init.Ks} 1.05 1.0 1.0',
             'special_bonds   lj/coul 0.0 1.0 1.0',
         ])}
 
@@ -576,13 +677,14 @@ class _model:
         #log, unfix, dump
         log_cmd ='log	            ${dir_file}.log' if title == v_equ else ''
         unfix_cmd = '' if title == v_data else run.unfix2D
+        type, dt = ('all', "0.0001") if title == v_init else (self.type, run.dt)
 
         return [
-            f'dump	        	{title} {self.type} custom {tdump} {self.iofile("dump", title)} id type {run.Dump}',
+            f'dump	        	{title} {type} custom {tdump} {self.iofile("dump", title)} id type {run.Dump}',
             f'dump_modify     {title} sort id',
             '',
             'reset_timestep	0',
-            f'timestep        {run.dt}',
+            f'timestep        {dt}',
             f'thermo		      {timestep // 200}',
             log_cmd,
             f'run	            {timestep}',
@@ -597,8 +699,9 @@ class _model:
         #from LJ + harmonic ==> LJ4422 + FENE4422
         Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
+        logging.info(f"==> Writing infile ==> {Path.dir_data}")
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
-            logging.info(f"==> Writing infile: {infile}......")
+            print(f"==> Writing infile: {infile}......")
             try:
                 #setup
                 dir_file = os.path.join(f"{Path.dir_data}", infile)
@@ -615,7 +718,7 @@ class _model:
                     initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
                     run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
 
-                #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.L_box} y final 0.0 {Init.L_box} units box remap x',
+                #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
                 initial_fix = self.fix('# for initialization', 1.0, 1.0, Run)
                 equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
                 data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
@@ -633,7 +736,7 @@ class _model:
 
                 # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
-                    self.write_section(file, self.setup(Run.Dimend, dir_file, read))
+                    self.write_section(file, self.setup(Run.Dimen, dir_file, read))
                     if not Run.Params["restart"][0]:
                         self.write_section(file, initial_potential)
                         self.write_section(file, initial_fix)
@@ -667,22 +770,21 @@ class _path:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
         #2D_100G_1.0T_Chain
-        self.dir1= f"{self.Run.Dimend}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
+        self.dir1= f"{self.Run.Dimen}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
-        if self.Init.Rin != 0 and self.Init.Wid != 0:
-            self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Env}"
-        elif self.Init.Rin == 0 and self.Init.Wid == 0:
-            self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}_{self.Config.Env}"
+        if self.Config.Env == "Free":
+            self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}"
         else:
-            raise ValueError("Wrong Rin & Wid: Rin == 0 and Wid == 0")
+            self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}"
+
         #1.0Pe_0.0Xi_8T5
         self.dir3 = f"{self.Model.Pe}Pe_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
-        if self.Config.Type == Bacteria:
+        if self.Config.Type == _BACT:
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5
-        self.dir_data = os.path.join(self.simus, self.dir1, self.dir2, self.dir3)
+        self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_CA.data
         self.data_file = os.path.join(self.dir_data, f"{self.dir2}_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}.data")
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
@@ -690,7 +792,7 @@ class _path:
         print(f"data_file => {self.data_file}")
         logging.info(f"data_file => {self.data_file}")
         #Figures
-        self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, self.dir2, self.dir3)
+        self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)
 
         if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")) or os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.data.lammpstrj")):
@@ -705,16 +807,16 @@ class _plot:
         self.chunk = 9
 
     def set_dump(self):
-        is_bacteria = (self.Config.Type == Bacteria)
+        is_bacteria = (self.Config.Type == _BACT)
         dump = {
             2: "xu yu" + (" vx vy" if is_bacteria else ""),
             3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
         }
         try:
-            return ["id"] + dump[self.Run.Dimend].split(" ")
+            return ["id"] + dump[self.Run.Dimen].split(" ")
         except KeyError:
-            logging.error(f"Error: Wrong Dimend to run => dimension != {self.Run.Dimend}")
-            raise ValueError(f"Invalid dimension: {self.Run.Dimend}")
+            logging.error(f"Error: Wrong Dimension to run => dimension != {self.Run.Dimen}")
+            raise ValueError(f"Invalid dimension: {self.Run.Dimen}")
 
     def read_data(self):
         dump = self.set_dump()
