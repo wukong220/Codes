@@ -40,17 +40,17 @@ if __name__ == "__main__":
             Config = _config(iType, iEnv, params)
             if Config.jump:
                 continue
+            if params['task'] == "Simus" and platform.system() != "Darwin":
+                if check:
+                    check_params(params)  # continue
+                    #check = False
+
             for iDimend in convert2array(params['Dimend']):
                 for iGamma in convert2array(params['Gamma']):
                     for iTemp in convert2array(params['Temp']):
                         # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
                         Run = _run(iDimend, iGamma, iTemp, params['Trun'])  #print(Run.__dict__)
                         Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                        if params['task'] == "Simus" and platform.system() != "Darwin":
-                            if check:
-                                check_params(params) #continue
-                                check = False
-
                         for iRin in convert2array(params['Rin']):
                             for iWid in convert2array(params['Wid']):
                                 for iN in convert2array(params['N_monos']):
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                                                     # prepare files and submit
                                                     Init.data_file(Path)
                                                     Model.in_file(Path)
-                                                    continue
+                                                    #continue
                                                     Run.bsubs(Path)
                                                     #Run.bsubs(Path, 1)
                                                 except Exception as e:

@@ -43,7 +43,7 @@ params = {
     'Gamma': 100,
     'Trun': 5,
     'Dimend': [2,3],
-    #'Dimend': 2,
+    #'Dimend': 3,
     'num_chains': 1,
 }
 class _config:
@@ -71,12 +71,12 @@ class _config:
                 'N_monos': 3,
                 'Xi': 1000,
                 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
-                'Fa': 1.0,
+                #'Fa': 1.0,
                 'Temp': 1.0,
             },
             "Chain": {
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                'N_monos': [100],
+                #'N_monos': [100],
                 'Xi': 0.0,
                 'Fa': [0.0, 1.0],
                 #'Fa': [1.0],
@@ -96,12 +96,12 @@ class _config:
             }
         }
         if self.config["Free"]['Rin'] != FREE_ENV or self.config["Free"]['Wid'] != FREE_ENV:
+            raise ValueError("Free chain should have Rin and Wid as 0.0")
             logging.error("Free chain should have Rin and Wid as 0.0")
-            exit(1)
         elif (convert2array(self.config["Anlus"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Anlus"]["Wid"])[0] == FREE_ENV) or \
               (convert2array(self.config["Rand"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Rand"]["Wid"])[0] == FREE_ENV):
+            raise ValueError("When Rin and Wid are 0.0, it's FREE!")
             logging.error("When Rin and Wid are 0.0, it's FREE!")
-            exit(1)
         self.Params = Params
         self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
         self.Params['marks']['labels'] = self.labels
@@ -130,7 +130,6 @@ class _config:
         except KeyError:
             logging.error(f"Error: Wrong Dimen to run => dimension != {Run.Dimen}")
             raise ValueError(f"Invalid dimension: {Run.Dimen}")
-            exit(1)
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
@@ -204,9 +203,9 @@ class _run:
                 bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
                 bhosts = subprocess.check_output(['bhosts']).decode('utf-8')
             except subprocess.CalledProcessError as e:
-                print(f"Error: {e}")
-                exit(1)
-                
+                logging.error(f"Error: {e}")
+                raise ValueError(f"Error: {e}")
+
             myques = list(queues.keys())
             queue_info = {key: {"NJOBS": 0, "PEND": 0,"RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for key in myques}
             myhosts = {key: value["hosts"] for key, value in queues.items()}
@@ -228,8 +227,8 @@ class _run:
                 try:
                     bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q',  f'{iqueue}']).decode('utf-8')
                 except subprocess.CalledProcessError as e:
-                    print(f"Error: {e}")
-                    exit(1)
+                    logging.error(f"Error: {e}")
+                    raise ValueError(f"Error: {e}")
                 for line in bjobs.strip().split('\n')[1:]:
                     columns = line.split()
                     start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
@@ -243,7 +242,6 @@ class _run:
                     self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
                 elif queue_info[iqueue]["PEND"] > 0:
                     self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
-            #exit(1)
         return self.Queue
     
     def bsubs(self, Path):
@@ -292,12 +290,14 @@ class _run:
                 self.bsubs(Path)
                 #Run.bsubs(Path, 1)
             except Exception as e:
-                print(f"An error occurred: {e}")
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
         elif task == "Anas":
             try:
                 print("Plot")
             except Exception as e:
-                print(f"An error occurred: {e}")
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
 ##########################################END!###############################################################
 
 class _init:
@@ -327,8 +327,8 @@ class _init:
             self.theta0 = - 4 * self.dtheta_chain
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
         else:
-            print(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
             logging.error(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
+            raise ValueError(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
         self.total_particles = self.num_obs + self.num_monos
 
         if self.Config.Type == "Ring":
@@ -338,9 +338,8 @@ class _init:
             self.bonds = self.num_monos - self.num_chains*1
             self.angles = self.num_monos - self.num_chains*2
         if (self.num_chains != 1):
-            print(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
-            exit(1)
+            raise ValueError(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
 
     def set_box(self):
         """计算盒子大小"""
@@ -366,6 +365,8 @@ class _init:
             self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
         else:
             logging.error(f"Error: Invalid Dimen  => dimension != {Run.Dimen}")
+            raise ValueError(f"Error: Invalid Dimen  => dimension != {Run.Dimen}")
+
         return False
     
     def set_dtheta(self, R, num_R=None):
@@ -374,6 +375,8 @@ class _init:
             return 2 * np.pi / np.floor(2 * np.pi * R / self.sigma_equ)
         elif num_R == 0:
             return 0
+        elif num_R < 10:
+            return self.sigma_equ/R
         else:
             return 2 * np.pi * R / (num_R * R)
 
@@ -407,7 +410,8 @@ class _init:
         # 写入链的原子信息
         circle = 1
         theta = self.theta0
-        for i in range(int(self.N_monos)):
+        for i in range(self.N_monos):
+            x, y, z = 0.0, 0.0, 0.0
             if i == 0:
                 x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
                 y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
@@ -518,9 +522,9 @@ class _init:
                    self.write_anlus(file)
                 elif self.Config.Env == "Rand":
                     self.write_rand(file)
-                else:
-                    print(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                elif self.Config.Env != "Free":
                     logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                    raise ValueError(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
                 self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
@@ -733,7 +737,8 @@ class _model:
                     self.write_section(file, refine_read)
                     self.write_section(file, refine_run)
             except Exception as e:
-                print(f"An error occurred: {e}")
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
 
@@ -815,18 +820,18 @@ class _plot:
             dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             if natoms != self.Init.num_monos:
-                print(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
                 logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
+                raise ValueError(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
-                print(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
                 logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
+                raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
             skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             except Exception as e:
-                print(f"ERROR: Could not read the file due to {e}")
                 logging.error(f"ERROR: Could not read the file due to {e}")
-                exit(1)
+                raise ValueError(f"ERROR: Could not read the file due to {e}")
+
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
             #np.save(self.Path.dir_data, data)
