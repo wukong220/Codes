@@ -27,6 +27,7 @@ logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)
 #-----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
 FREE_ENV = 0.0
+HOST = platform.system()
 #-----------------------------------Parameters-------------------------------------------
 types = [_BACT, "Chain", "Ring"]
 envs = ["Free", "Rand", "Anlus"]
@@ -34,7 +35,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:2], 'Envs': envs[0:1]},
+    'labels': {'Types': types[1:2], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -43,63 +44,46 @@ params = {
     'Gamma': 100,
     'Trun': 5,
     'Dimend': [2,3],
-    #'Dimend': 3,
+    'Dimend': 2,
     'num_chains': 1,
 }
 class _config:
     def __init__(self, Type, Env, Params = params):
         self.config = {
-            "Anlus": {
-                # 障碍物参数：环的半径，宽度
-                'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-                'Rin': 5.0,
-                'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
-                'Wid': 5.0,  # annulus width
-            },
-            "Free":{
-                'Rin': 0.0,
-                'Wid': 0.0,
-            },
-            "Rand": {
-                'Rin': [0.03351], # phi
-                'Rin': 0.03351, # phi
-                'Wid': [1],
-                'Wid': 1,
-            },
+            "Linux": {
+                "Anlus": {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
+                              'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                "Free": {'Rin': 0.0, 'Wid': 0.0},
+                "Rand": {'Rin': [0.03351], 'Wid': [1]},
+                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0], 'Temp': [1.0]},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
+                              'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
+                "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
+                             'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                             'Gamma': [0.1, 1, 10, 100]},
+                },
 
-            _BACT: {
-                'N_monos': 3,
-                'Xi': 1000,
-                'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
-                #'Fa': 1.0,
-                'Temp': 1.0,
+            "Darwin": {
+                "Anlus": {'Rin': 5.0,
+                              'Wid': 10.0},
+                "Free": {'Rin': 0.0, 'Wid': 0.0},
+                "Rand": {'Rin': 0.03351,  # phi
+                             'Wid': 1},
+
+                _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0, 'Temp': 1.0},
+                "Chain": {'N_monos': [300], 'Xi': 0.0,
+                    'Fa': [1.0], 'Temp': [1.0]},
+                "Ring": {'N_monos': [100],
+                    'Xi': 0.0, 'Fa': [1.0],
+                    'Temp': [0.01],
+                    'Gamma': 100}
             },
-            "Chain": {
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                #'N_monos': [100],
-                'Xi': 0.0,
-                'Fa': [0.0, 1.0],
-                #'Fa': [1.0],
-                'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                #'Temp': [1.0],
-            },
-            "Ring":{
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                'N_monos': [100],
-                'Xi': 0.0,
-                'Fa': [0.0, 1.0],
-                'Fa': [1.0],
-                'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                'Temp': [0.01],
-                'Gamma': [0.1, 1, 10, 100],
-                'Gamma': 100,
-            }
         }
-        if self.config["Free"]['Rin'] != FREE_ENV or self.config["Free"]['Wid'] != FREE_ENV:
+        if self.config[HOST]["Free"]['Rin'] != FREE_ENV or self.config[HOST]["Free"]['Wid'] != FREE_ENV:
             raise ValueError("Free chain should have Rin and Wid as 0.0")
             logging.error("Free chain should have Rin and Wid as 0.0")
-        elif (convert2array(self.config["Anlus"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Anlus"]["Wid"])[0] == FREE_ENV) or \
-              (convert2array(self.config["Rand"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Rand"]["Wid"])[0] == FREE_ENV):
+        elif (convert2array(self.config[HOST]["Anlus"]["Rin"])[0] == FREE_ENV or convert2array(self.config[HOST]["Anlus"]["Wid"])[0] == FREE_ENV) or \
+              (convert2array(self.config[HOST]["Rand"]["Rin"])[0] == FREE_ENV or convert2array(self.config[HOST]["Rand"]["Wid"])[0] == FREE_ENV):
             raise ValueError("When Rin and Wid are 0.0, it's FREE!")
             logging.error("When Rin and Wid are 0.0, it's FREE!")
         self.Params = Params
@@ -109,14 +93,14 @@ class _config:
         self.Env = Env
         self.Label = self.Type+self.Env
         self.Params["marks"]["config"] = self.Label
-        if self.Type in self.config:
-            self.Params.update(self.config[self.Type])
-        if self.Env in self.config:
-            self.Params.update(self.config[self.Env])
+        if self.Type in self.config[HOST]:
+            self.Params.update(self.config[HOST][self.Type])
+        if self.Env in self.config[HOST]:
+            self.Params.update(self.config[HOST][self.Env])
 
-        if self.Label == "RingAnlus" or self.Label == "RingRand" or (self.Label == "ChainAnlus" and Params["Dimen"] == 3):
+        if self.Label == "RingAnlus" or self.Label == "RingRand" or (self.Label == "ChainAnlus" and Params["Dimend"] == 3):
             self.jump = True
-            print(f"I'm sorry => '{self.Label}' is not ready!")
+            print(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
             logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
         else:
             self.jump = False
@@ -133,7 +117,7 @@ class _config:
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        if platform.system() == "Darwin":
+        if HOST == "Darwin":
             Run.Tdump = Run.Tdump_ref
             Run.Damp = 1.0
             
@@ -198,7 +182,7 @@ class _run:
             "7k83!": {"Usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
             "9654!": {"Usage": 1.0, "hosts": ['a017']}
         }
-        if platform.system() != "Darwin":
+        if HOST != "Darwin":
             try:
                 bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
                 bhosts = subprocess.check_output(['bhosts']).decode('utf-8')
@@ -268,12 +252,12 @@ class _run:
             with open(f"{dir_file}.lsf", "w") as file:
                 for command in bsub:
                     file.write(command + "\n")
-            if platform.system() == "Darwin":
+            if HOST == "Darwin":
                 print(">>> for test......")
                 print(f"mpirun -np 4 lmp_wk -i {dir_file}.in")
                 subprocess.run(f"mpirun -np 4 lmp_wk -i {dir_file}.in", shell=True)
                 print(f"{dir_file}.in ==> Done! \n ==> Please check the results and submit the jobs!")
-            elif platform.system() == "Linux":
+            elif HOST == "Linux":
                 print(">>> Submitting jobs......")
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
@@ -343,7 +327,7 @@ class _init:
 
     def set_box(self):
         """计算盒子大小"""
-        if self.Config.Type == "Anlus":
+        if self.Config.Env == "Anlus":
             self. Lbox = self.Rin + self.Wid + 1
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
                 print("N_monos is too Long!")
@@ -402,36 +386,53 @@ class _init:
         file.write(f"5 {self.mass}\n\n")
 
     def write_chain(self, file):
-        # 写入原子信息
+        """
+        Writes chain data into the file.
+
+        Parameters:
+        - file: file object to write into
+        - system_dim: dimension of the system, either 2 or 3
+        - chain_type: type of the chain, either 'polymer' or 'bacteria'
+        - N_monos: number of monomers in the chain
+        - sigma_equ: equilibrium bond length
+        - Rchain: initial radius for polymer chain
+        - theta0: initial angle
+        - dtheta_chain: change in angle per monomer
+        """
+
         file.write("Atoms\n\n")
         Rchain = self.Rchain
         dtheta_chain = self.dtheta_chain
-        
         # 写入链的原子信息
         circle = 1
         theta = self.theta0
+        phi = 0 # Only used in 3D
+
         for i in range(self.N_monos):
             x, y, z = 0.0, 0.0, 0.0
-            if i == 0:
-                x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
-                y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
-                z = 0
-                file.write(f"{i+1} 1 1 {x} {y} {z}\n")
-                continue
             if theta >= 2 * np.pi - 5 * circle * dtheta_chain:
                 circle += 1
                 Rchain += self.sigma_equ + 0.2
                 dtheta_chain = 2 * np.pi / np.floor(2* np.pi * Rchain/self.sigma_equ)
                 theta = theta - 2 * np.pi - dtheta_chain
+
+            if self.Run.Dimen == 2:
+                x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
+                y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
+            elif self.Run.Dimen == 3:
+                x = round(Rchain * np.sin(theta) * np.cos(phi) * sigma_equ, 2)
+                y = round(Rchain * np.sin(theta) * np.sin(phi) * sigma_equ, 2)
+                z = round(Rchain * np.cos(theta) * sigma_equ, 2)
+                phi += dtheta_chain  # Update phi for 3D
             theta += dtheta_chain
-            x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
-            y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
-            z = 0.0
-            if i == self.N_monos-1:
-                file.write(f"{i+1} 1 3 {x} {y} {z}\n")
-            else:
-                file.write(f"{i+1} 1 2 {x} {y} {z}\n")
-    
+            # Write atom information
+            atom_type = 2  # Default to "middle" of the chain
+            if i == 0:
+                atom_type = 1  # Head
+            elif i == self.N_monos - 1:
+                atom_type = 3  # Tail
+            file.write(f"{i + 1} 1 {atom_type} {x} {y} {z}\n")
+
     def write_anlus(self, file):
         # 写入内环的原子信息
         for i in range(int(self.num_Rin)):
@@ -542,6 +543,15 @@ class _model:
 
         # pairs, bonds, angles
         self.pair = {
+        "INIT": '\n'.join([
+            '# pair potential and  soft potential',
+            'variable          Pre_soft equal ramp(0.0, 10000.0)',
+            'pair_style      hybrid / overlay lj4422 / cut 1.03201 soft 1.54801',
+            'pair_coeff * 3 * 3 lj4422 / cut 1 1.0',
+            'pair_modify     shift yes',
+            'pair_coeff * 4 soft 1.50',
+            'fix              SOFT all adapt 1 pair soft a * 4 4 v_Pre_soft',
+        ]),
         "LJ": '\n'.join([
             '#pair potential',
             'pair_style       lj/cut 1.12246',
