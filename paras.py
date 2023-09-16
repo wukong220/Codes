@@ -34,7 +34,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[2:3], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:2], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -42,8 +42,8 @@ params = {
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': 2,
-    #'Dimend': 3,
+    'Dimend': [2,3],
+    #'Dimend': 2,
     'num_chains': 1,
 }
 class _config:
@@ -52,9 +52,9 @@ class _config:
             "Anlus": {
                 # 障碍物参数：环的半径，宽度
                 'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-                'Rin': [5.0],
+                'Rin': 5.0,
                 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0],  # annulus width
-                'Wid': [5.0],  # annulus width
+                'Wid': 5.0,  # annulus width
             },
             "Free":{
                 'Rin': 0.0,
@@ -62,41 +62,44 @@ class _config:
             },
             "Rand": {
                 'Rin': [0.03351], # phi
+                'Rin': 0.03351, # phi
                 'Wid': [1],
+                'Wid': 1,
             },
 
             _BACT: {
                 'N_monos': 3,
                 'Xi': 1000,
                 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],
+                'Fa': 1.0,
                 'Temp': 1.0,
             },
             "Chain": {
                 'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                 'N_monos': [100],
                 'Xi': 0.0,
-                #'Fa': [0.0, 1.0],
-                'Fa': [1.0],
-                #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                'Temp': [1.0],
-            },
-            "Ring":{
-                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                #'N_monos': [100],
-                'Xi': 0.0,
                 'Fa': [0.0, 1.0],
                 #'Fa': [1.0],
                 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                #'Temp': [0.01],
+                #'Temp': [1.0],
+            },
+            "Ring":{
+                'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                'N_monos': [100],
+                'Xi': 0.0,
+                'Fa': [0.0, 1.0],
+                'Fa': [1.0],
+                'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                'Temp': [0.01],
                 'Gamma': [0.1, 1, 10, 100],
-                #'Gamma': 100,
+                'Gamma': 100,
             }
         }
         if self.config["Free"]['Rin'] != FREE_ENV or self.config["Free"]['Wid'] != FREE_ENV:
             logging.error("Free chain should have Rin and Wid as 0.0")
             exit(1)
-        elif (self.config["Anlus"]["Rin"][0] == FREE_ENV or self.config["Anlus"]["Wid"][0] == FREE_ENV) or \
-              (self.config["Rand"]["Rin"][0] == FREE_ENV or self.config["Rand"]["Wid"][0] == FREE_ENV):
+        elif (convert2array(self.config["Anlus"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Anlus"]["Wid"])[0] == FREE_ENV) or \
+              (convert2array(self.config["Rand"]["Rin"])[0] == FREE_ENV or convert2array(self.config["Rand"]["Wid"])[0] == FREE_ENV):
             logging.error("When Rin and Wid are 0.0, it's FREE!")
             exit(1)
         self.Params = Params
@@ -147,7 +150,7 @@ class _config:
 ##########################################END!###############################################################
 
 class _run:
-    def __init__(self, Gamma, Temp, Trun, Dimen, Params = params, Frames = 2000):
+    def __init__(self, Dimen, Gamma, Temp, Trun, Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
@@ -306,22 +309,22 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
         self.jump = self.set_box()   #set box
 
-        if self.Config.Env == "Anlus" or self.Config.Env == "Free":
+        if self.Config.Env in ["Anlus", "Free"]:
             self.Rout = self.Rin + self.Wid  # outer_radius
             self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
             self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
             self.num_obs = int(self.num_Rin + self.num_Rout)
             self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
             self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
-            if self.Config.Env == "Free":
-                self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi)
-                self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
-                self.theta0 = - 4 * self.dtheta_chain
-            elif self.Config.Env == "Anlus":
-                self.Rchain = self.Rin + self.sigma + 0.5
-                self.dtheta_chain = self.set_dtheta(self.Rchain)
-                self.theta0 = - 2 * self.dtheta_chain
+
+            self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi) if self.Config.Env == "Free" else self.Rin + self.sigma + 0.5
+            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos) if self.Config.Env == "Free" else self.set_dtheta(self.Rchain)
+            self.theta0 = - 4 * self.dtheta_chain if self.Config.Env == "Free" else - 2 * self.dtheta_chain
+
         elif self.Config.Env == "Rand":
+            self.Rchain = self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi)
+            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
+            self.theta0 = - 4 * self.dtheta_chain
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
         else:
             print(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
@@ -373,10 +376,6 @@ class _init:
             return 0
         else:
             return 2 * np.pi * R / (num_R * R)
-
-    def neighbor_keys(self, key):
-        delta_key = [tuple(d) for d in np.ndindex(*([3] * self.Run.Dimen))]
-        return [tuple(map(lambda x, dx: x + dx, key, dkey)) for dkey in delta_key]
 
     def write_header(self, file):
         # 写入文件头部信息
@@ -445,24 +444,28 @@ class _init:
             z = 0.0
             file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {x} {y} {z}\n")
 
+    def periodic_distance(self, pos1, pos2):
+        delta = np.abs(pos1 - pos2)
+        delta = np.where(delta > 0.5 * self.Lbox, delta - self.Lbox, delta)
+        return np.sqrt((delta ** 2).sum())
+
+    def neighbor_keys(self, hash_key):
+        """Generate neighbor hash keys for a given hash_key."""
+        dim = len(hash_key)
+        for d in range(-1, 2):
+            for i in range(dim):
+                neighbor_key = list(hash_key)
+                neighbor_key[i] += d
+                yield tuple(neighbor_key)
+
     def write_rand(self, file):
-        file.write("Atoms\n\n")
         # obstacles: harsh grid and size
         self.obs_positions = []
-        self.bound = self.Lbox - self.Wid
+        self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
         self.hash_grid = defaultdict(list)
         self.grid_size = 2 * self.Wid + self.sigma * 1.12
-        # Chain: starting position and direction
-        self.chain_positions = []
-        start_position = -self.bound + 2 * np.random.rand(self.Run.Dimen) * self.bound
-        if self.Run.Dimen == 2:
-            file.write(f"1 1 1 {' '.join(map(str,np.append(start_position, 0.0)))}\n")
-        else:
-            file.write(f"1 1 1 {' '.join(map(str, start_position))}\n")
-        self.chain_positions.append(start_position)
-        direction = np.random.randn(self.Run.Dimen)  # Random initial direction
-        direction /= np.linalg.norm(direction)  # Normalize to unit vector
-        for _ in range(self.num_obs):
+
+        for i in range(self.num_obs):
             while True:
                 position = -self.bound + 2 * np.random.rand(self.Run.Dimen) * self.bound
                 hash_key = tuple((position // self.grid_size).astype(int))
@@ -470,36 +473,16 @@ class _init:
                 overlap = False
                 for neighbor_key in self.neighbor_keys(hash_key):
                     for neighbor_pos in self.hash_grid[neighbor_key]:
-                        if np.linalg.norm(position - neighbor_pos) < self.grid_size:
+                        if self.periodic_distance(position, neighbor_pos) < self.grid_size:
                             overlap = True
                             break
                 if not overlap:
                     self.obs_positions.append(position)
                     self.hash_grid[hash_key].append(position)
+                    pos = np.append(position, 0.0) if self.Run.Dimen == 2 else position
+                    file.write(f"{int(self.N_monos + i + 1)} 1 4 {' '.join(map(str, pos))}\n")
                     break
-
-        obs_tree = KDTree(self.obs_positions)
-        for i in range(1, self.N_monos):
-            next_position = self.chain_positions[-1] + direction * self.sigma_equ
-            # Check if it's out of box or too close to obstacles
-            while (next_position.min() < -self.bound or next_position.max() > self.bound or
-                   obs_tree.query(next_position)[0] < (1.12 * self.sigma + 2 * self.Wid)):
-                # Adjust direction slightly
-                direction += 0.1 * np.random.randn(self.Run.Dimen)
-                direction /= np.linalg.norm(direction)
-                next_position = self.chain_positions[-1] + direction * self.sigma_equ
-            self.chain_positions.append(next_position)
-            pos = np.append(next_position, 0.0) if self.Run.Dimen == 2 else  next_position
-            if i == self.N_monos - 1:
-                file.write(f"{i + 1} 1 3 {' '.join(map(str, pos))}\n")
-            else:
-                file.write(f"{i + 1} 1 2 {' '.join(map(str, pos))}\n")
-
-        for i, position in enumerate(self.obs_positions, start=len(self.chain_positions)+1):
-            pos = np.append(position, 0.0) if self.Run.Dimen == 2 else position
-            file.write(f"{i} 1 4 {' '.join(map(str, pos))}\n")
-
-        return self.obs_positions, self.chain_positions
+        return self.obs_positions
 
     def write_potential(self, file):
         #写入bonds and angles
@@ -526,18 +509,19 @@ class _init:
         print("==> Preparing initial data file......")
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
-        with open(f"{Path.data_file}", "w") as file:
-            self.write_header(file)
-            if self.Config.Env == "Anlus" or self.Config.Env == "Free":
+        for infile in [f"{i:03}" for i in range(1, self.Run.Trun + 1)]:
+            data_file = os.path.join(f"{Path.dir_data}", f'{infile}.{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}.data')
+            with open(f"{data_file}", "w") as file:
+                self.write_header(file)
                 self.write_chain(file)
                 if self.Config.Env == "Anlus":
-                    self.write_anlus(file)
-            elif self.Config.Env == "Rand":
-                self.write_rand(file)
-            else:
-                print(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
-                logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
-            self.write_potential(file)
+                   self.write_anlus(file)
+                elif self.Config.Env == "Rand":
+                    self.write_rand(file)
+                else:
+                    print(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                    logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
         
@@ -708,7 +692,7 @@ class _model:
                 if Run.Params["restart"][0]:
                     read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
                 else:
-                    read = f'read_data       {Path.data_file}'
+                    read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Config.Env[0].upper()}.data'
 
                 # potential
                 if Config.Type == "Ring":
@@ -786,11 +770,10 @@ class _path:
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5
         self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_CA.data
-        self.data_file = os.path.join(self.dir_data, f"{self.dir2}_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}.data")
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
         shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
-        print(f"data_file => {self.data_file}")
-        logging.info(f"data_file => {self.data_file}")
+        print(f"dir_data => {self.dir_data}")
+        logging.info(f"dir_data => {self.dir_data}")
         #Figures
         self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)

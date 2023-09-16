@@ -40,50 +40,50 @@ if __name__ == "__main__":
             Config = _config(iType, iEnv, params)
             if Config.jump:
                 continue
+            for iDimend in convert2array(params['Dimend']):
+                for iGamma in convert2array(params['Gamma']):
+                    for iTemp in convert2array(params['Temp']):
+                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+                        Run = _run(iDimend, iGamma, iTemp, params['Trun'])  #print(Run.__dict__)
+                        Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+                        if params['task'] == "Simus" and platform.system() != "Darwin":
+                            if check:
+                                check_params(params) #continue
+                                check = False
 
-            for iGamma in convert2array(params['Gamma']):
-                for iTemp in convert2array(params['Temp']):
-                    # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                    Run = _run(iGamma, iTemp, params['Trun'], params['Dimend'])  #print(Run.__dict__)
-                    Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                    if params['task'] == "Simus" and platform.system() != "Darwin":
-                        if check:
-                            check_params(params) #continue
-                            check = False
+                        for iRin in convert2array(params['Rin']):
+                            for iWid in convert2array(params['Wid']):
+                                for iN in convert2array(params['N_monos']):
+                                    # paras for init config: Rin, Wid, N_monos, L_box
+                                    Init = _init(Config, Run, iRin, iWid, iN)
+                                    if Init.jump: # chains are too long
+                                        continue
+                                    queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
+                                    #exit(1)
+                                    #input()#continue
 
-                    for iRin in convert2array(params['Rin']):
-                        for iWid in convert2array(params['Wid']):
-                            for iN in convert2array(params['N_monos']):
-                                # paras for init config: Rin, Wid, N_monos, L_box
-                                Init = _init(Config, Run, iRin, iWid, iN)
-                                if Init.jump: # chains are too long
-                                    continue
-                                queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
-                                #exit(1)
-                                #input()#continue
+                                    for iFa in convert2array(params['Fa']):
+                                        for iXi in convert2array(params['Xi']):
+                                            # paras for model: Pe(Fa), Xi(Kb)
+                                            Model = _model(Init, Run, iFa, iXi)
+                                            Path = _path(Config, Model, Init, Run) # for directory
+                                            Plot = _plot(Path)
 
-                                for iFa in convert2array(params['Fa']):
-                                    for iXi in convert2array(params['Xi']):
-                                        # paras for model: Pe(Fa), Xi(Kb)
-                                        Model = _model(Init, Run, iFa, iXi)
-                                        Path = _path(Config, Model, Init, Run) # for directory
-                                        Plot = _plot(Path)
+                                            if params['task'] == "Simus":
+                                                if Path.jump: # jump for repeat
+                                                    continue
+                                                try:
+                                                    # prepare files and submit
+                                                    Init.data_file(Path)
+                                                    Model.in_file(Path)
+                                                    continue
+                                                    Run.bsubs(Path)
+                                                    #Run.bsubs(Path, 1)
+                                                except Exception as e:
+                                                    print(f"An error occurred: {e}")
 
-                                        if params['task'] == "Simus":
-                                            if Path.jump: # jump for repeat
-                                                continue
-                                            try:
-                                                # prepare files and submit
-                                                Init.data_file(Path)
-                                                Model.in_file(Path)
-                                                #continue
-                                                Run.bsubs(Path)
-                                                #Run.bsubs(Path, 1)
-                                            except Exception as e:
-                                                print(f"An error occurred: {e}")
-
-                                        elif params['task'] == "Anas":
-                                            if Path.jump:
-                                                Plot.plot1()
+                                            elif params['task'] == "Anas":
+                                                if Path.jump:
+                                                    Plot.plot1()
 
 ##########################################END!################################################################
