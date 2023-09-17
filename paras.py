@@ -34,7 +34,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:2], 'Envs': envs[0:1]},
+    'labels': {'Types': types[1:2], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -53,17 +53,19 @@ class _config:
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0], 'Temp': [1.0]},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],  # 'Fa': [0.0],
                           'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
+                          # 'Gamma': [0.1, 1, 10, 100]},
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
-                         'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                         'Gamma': [0.1, 1, 10, 100]},  # 'Gamma': [100]},
+                         'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],},
+                         #'Gamma': [0.1, 1, 10, 100]},  # 'Gamma': [100]},
 
                 "Anlus": {2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                               #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
-                "Rand":{2: {'Rin': [0.125, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
-                            #2: {'Rin': [0.125], 'Wid': [0.5, 1.0]},
+                "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
+                            #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
                             #2: {'Rin': [0.314], 'Wid': [1.0]},
-                            #3: {'Rin': [0.125, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
+                            #2: {'Rin': [0.0.0628], Wid': [1.0, 1.5, 2.0, 2.5]},
+                            #3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 },
 
@@ -79,8 +81,8 @@ class _config:
                 "Anlus": {2: {'Rin': 5.0, 'Wid': 10.0},
                               #3: {'Rin': 5.0, 'Wid': 10.0},
                           },
-                "Rand": {2: {'Rin': 0.1,  'Wid': 1.0},
-                             3: {'Rin': 0.1, 'Wid': 1.0},
+                "Rand": {2: {'Rin': 0.314,  'Wid': 1.0},
+                             3: {'Rin': 0.1256, 'Wid': 2.5},
                          },
             },
         }
@@ -327,7 +329,15 @@ class _init:
                 logging.warning("N_monos is too Long!")
                 return True
         else:
-            self.Lbox = self.N_monos/2 + 10
+            if self.Config.Type == "Chain":
+                self.Lbox = self.N_monos/2 + 10
+            elif self.Config.Type == "Ring":
+                self.Lbox = self.N_monos / 4
+            elif self.Config.Type == _BACT:
+                self.Lbox = self.N_monos * 10
+            else:
+                print(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
+                logging.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
         self.v_box = (2 * self.Lbox) ** self.Config.Dimend
 
         if self.Config.Dimend == 2:
@@ -654,7 +664,7 @@ class _model:
             'comm_modify     mode single cutoff 3.0 vel yes',
             '',
             'neighbor	      1.5 bin',
-            f'neigh_modify	  every 1 delay 0 check yes exclude group chain obs',
+            f'neigh_modify	  every 1 delay 0 check yes exclude group {self.type} obs',
             '',
             prompt,
             '##################################################################',
@@ -809,7 +819,7 @@ class _path:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
         #2D_100G_1.0T_Chain
-        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
+        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Run.Temp}T_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
         if self.Init.Env == "Free":
             self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}"
