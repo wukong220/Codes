@@ -30,7 +30,7 @@ FREE_ENV = 0.0
 HOST = platform.system()
 #-----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
-envs = ["Free", "Rand", "Anlus"]
+envs = ["Rand", "Anlus"]
 tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
@@ -61,7 +61,6 @@ class _config:
                 "Anlus": {2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                               #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
-                "Free": {2: {'Rin': 0.0, 'Wid': 0.0},},
                 "Rand":{2: {'Rin': [0.125, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
                             #2: {'Rin': [0.125], 'Wid': [0.5, 1.0]},
                             #2: {'Rin': [0.314], 'Wid': [1.0]},
@@ -81,19 +80,11 @@ class _config:
                 "Anlus": {2: {'Rin': 5.0, 'Wid': 10.0},
                               #3: {'Rin': 5.0, 'Wid': 10.0},
                           },
-                "Free": {2: {'Rin': 0.0, 'Wid': 0.0},},
                 "Rand": {2: {'Rin': 0.1,  'Wid': 1.0},
                              #3: {'Rin': 0.1, 'Wid': 1.0},
                          },
             },
         }
-        if self.config[HOST]["Free"]['Rin'] != FREE_ENV or self.config[HOST]["Free"]['Wid'] != FREE_ENV:
-            raise ValueError("Free chain should have Rin and Wid as 0.0")
-            logging.error("Free chain should have Rin and Wid as 0.0")
-        elif (convert2array(self.config[HOST]["Anlus"][self.Dimend]["Rin"])[0] == FREE_ENV and convert2array(self.config[HOST]["Anlus"][self.Dimend]["Wid"])[0] == FREE_ENV) or \
-              (convert2array(self.config[HOST]["Rand"][self.Dimend]["Rin"])[0] == FREE_ENV and convert2array(self.config[HOST]["Rand"][self.Dimend]["Wid"])[0] == FREE_ENV):
-            raise ValueError("When Rin and Wid are 0.0, it's FREE!")
-            logging.error("When Rin and Wid are 0.0, it's FREE!")
         self.Params = Params
         self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
         self.Params['marks']['labels'] = self.labels
@@ -300,29 +291,28 @@ class _init:
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
         self.jump = self.set_box()   #set box
+        if self.Rin < 1e-6 and self.Wid < 1e-6:
+            self.Env = "Free"
+        else:
+            self.Env = self.Config.Env
 
-        if self.Config.Env in ["Anlus", "Free"]:
-            self.sigma12 = self.sigma
+        if self.Config.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
             self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
             self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
             self.num_obs = int(self.num_Rin + self.num_Rout)
             self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
             self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
-
-            self.Rchain = self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi) if self.Config.Env == "Free" else self.Rin + self.sigma + 0.5
-            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos) if self.Config.Env == "Free" else self.set_dtheta(self.Rchain)
-            self.theta0 = - 4 * self.dtheta_chain if self.Config.Env == "Free" else - 2 * self.dtheta_chain
-
         elif self.Config.Env == "Rand":
-            self.sigma12 = self.sigma + 2 * self.Wid
-            self.Rchain = self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi)
-            self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
-            self.theta0 = - 4 * self.dtheta_chain
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
         else:
-            logging.error(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
-            raise ValueError(f"Error: wrong environment! => Config.Env = {self.Config.Env}")
+            logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
+            raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
+
+        self.sigma12 = self.sigma  if self.Env == "Anlus" else self.sigma12 = self.sigma + 2 * self.Wid
+        self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
+        self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
+        self.theta0 = - 2 * self.dtheta_chain if self.Env == "Anlus" else - 4 * self.dtheta_chain
         self.total_particles = self.num_obs + self.num_monos
 
         if self.Config.Type == "Ring":
@@ -337,7 +327,7 @@ class _init:
 
     def set_box(self):
         """计算盒子大小"""
-        if self.Config.Env == "Anlus":
+        if self.Env == "Anlus":
             self. Lbox = self.Rin + self.Wid + 1
             if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
                 print("N_monos is too Long!")
@@ -524,18 +514,18 @@ class _init:
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(1, self.Run.Trun + 1)]:
-            data_file = os.path.join(f"{Path.dir_data}", f'{infile}.{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}.data')
+            data_file = os.path.join(f"{Path.dir_data}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
                 self.write_chain(file)
-                if self.Config.Env == "Anlus":
+                if self.Env == "Anlus":
                    self.write_anlus(file)
-                elif self.Config.Env == "Rand":
+                elif self.Env == "Rand":
                     self.write_rand(file)
                     print(f"==> Preparing initial data {infile}......")
-                elif self.Config.Env != "Free":
-                    logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
-                    raise ValueError(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
+                else:
+                    logging.error(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
+                    raise ValueError(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
                 self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
@@ -758,7 +748,7 @@ class _model:
                 if Run.Params["restart"][0]:
                     read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
                 else:
-                    read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Config.Env[0].upper()}.data'
+                    read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Init.Env[0].upper()}.data'
 
                 # potential
                 detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"], self.angle["harmonic"])
@@ -790,7 +780,7 @@ class _model:
                 with open(f"{dir_file}.in", "w") as file:
                     self.write_section(file, self.setup(Config.Dimend, dir_file, read))
                     if not Run.Params["restart"][0]:
-                        if Config.Env == "Rand":
+                        if Init.Env == "Rand":
                             self.write_section(file, detach_potential)
                             self.write_section(file, detach_configure)
                         self.write_section(file, initial_potential)
@@ -828,7 +818,7 @@ class _path:
         #2D_100G_1.0T_Chain
         self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
-        if self.Config.Env == "Free":
+        if self.Init.Env == "Free":
             self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}"
         else:
             self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}"
@@ -836,18 +826,18 @@ class _path:
         #1.0Pe_0.0Xi_8T5
         self.dir3 = f"{self.Model.Pe}Pe_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
         if self.Config.Type == _BACT:
-            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
+            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
-            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Config.Env[0].upper()}"
+            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5
-        self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
+        self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_CA.data
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
         shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
         print(f"dir_data => {self.dir_data}")
         logging.info(f"dir_data => {self.dir_data}")
         #Figures
-        self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Config.Env}', self.dir3)
+        self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)
 
         if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")) or os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.data.lammpstrj")):
