@@ -29,13 +29,13 @@ _BACT = "Bacteria"
 FREE_ENV = 0.0
 HOST = platform.system()
 #-----------------------------------Parameters-------------------------------------------
-types = [_BACT, "Chain", "Ring"]
+types = ["Chain", _BACT, "Ring"]
 envs = ["Free", "Rand", "Anlus"]
 tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[1:2], 'Envs': envs[2:3]},
+    'labels': {'Types': types[0:2], 'Envs': envs[1:2]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -43,52 +43,61 @@ params = {
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': [2,3],
-    'Dimend': 2,
+    'Dimend': 3,
+    # 'Dimend': [2,3],
     'num_chains': 1,
 }
 class _config:
-    def __init__(self, Type, Env, Params = params):
+    def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
-                "Anlus": {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0],
-                              'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
-                "Free": {'Rin': 0.0, 'Wid': 0.0},
-                "Rand": {'Rin': [0.03351], 'Wid': [1]},
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0], 'Temp': [1.0]},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
-                              'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],  # 'Fa': [0.0],
+                          'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
-                             'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                             'Gamma': [0.1, 1, 10, 100]},
+                         'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                         'Gamma': [0.1, 1, 10, 100]},  # 'Gamma': [100]},
+
+                "Anlus": {2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                              #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                            },
+                "Free": {2: {'Rin': 0.0, 'Wid': 0.0},},
+                "Rand":{2: {'Rin': [0.125, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
+                            #2: {'Rin': [0.125], 'Wid': [0.5, 1.0]},
+                            #2: {'Rin': [0.314], 'Wid': [1.0]},
+                            #3: {'Rin': [0.125, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
+                            },
                 },
 
             "Darwin": {
-                "Anlus": {'Rin': 5.0,
-                              'Wid': 10.0},
-                "Free": {'Rin': 0.0, 'Wid': 0.0},
-                "Rand": {'Rin': 0.03351,  # phi
-                             'Wid': 1},
-
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0, 'Temp': 1.0},
-                "Chain": {'N_monos': [300], 'Xi': 0.0,
-                    'Fa': [1.0], 'Temp': [1.0]},
+                "Chain": {'N_monos': [100], 'Xi': 0.0,
+                          'Fa': [1.0], 'Temp': [1.0]},
                 "Ring": {'N_monos': [100],
-                    'Xi': 0.0, 'Fa': [1.0],
-                    'Temp': [0.01],
-                    'Gamma': 100}
+                         'Xi': 0.0, 'Fa': [1.0],
+                         'Temp': [0.01],
+                         'Gamma': 100},
+
+                "Anlus": {2: {'Rin': 5.0, 'Wid': 10.0},
+                              #3: {'Rin': 5.0, 'Wid': 10.0},
+                          },
+                "Free": {2: {'Rin': 0.0, 'Wid': 0.0},},
+                "Rand": {2: {'Rin': 0.1,  'Wid': 1.0},
+                             #3: {'Rin': 0.1, 'Wid': 1.0},
+                         },
             },
         }
         if self.config[HOST]["Free"]['Rin'] != FREE_ENV or self.config[HOST]["Free"]['Wid'] != FREE_ENV:
             raise ValueError("Free chain should have Rin and Wid as 0.0")
             logging.error("Free chain should have Rin and Wid as 0.0")
-        elif (convert2array(self.config[HOST]["Anlus"]["Rin"])[0] == FREE_ENV or convert2array(self.config[HOST]["Anlus"]["Wid"])[0] == FREE_ENV) or \
-              (convert2array(self.config[HOST]["Rand"]["Rin"])[0] == FREE_ENV or convert2array(self.config[HOST]["Rand"]["Wid"])[0] == FREE_ENV):
+        elif (convert2array(self.config[HOST]["Anlus"][self.Dimend]["Rin"])[0] == FREE_ENV and convert2array(self.config[HOST]["Anlus"][self.Dimend]["Wid"])[0] == FREE_ENV) or \
+              (convert2array(self.config[HOST]["Rand"][self.Dimend]["Rin"])[0] == FREE_ENV and convert2array(self.config[HOST]["Rand"][self.Dimend]["Wid"])[0] == FREE_ENV):
             raise ValueError("When Rin and Wid are 0.0, it's FREE!")
             logging.error("When Rin and Wid are 0.0, it's FREE!")
         self.Params = Params
         self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
         self.Params['marks']['labels'] = self.labels
+        self.Dimend = Dimend
         self.Type = Type
         self.Env = Env
         self.Label = self.Type+self.Env
@@ -96,9 +105,9 @@ class _config:
         if self.Type in self.config[HOST]:
             self.Params.update(self.config[HOST][self.Type])
         if self.Env in self.config[HOST]:
-            self.Params.update(self.config[HOST][self.Env])
+            self.Params.update(self.config[HOST][self.Env][self.Dimend])
 
-        if self.Label == "RingAnlus" or self.Label == "RingRand" or (self.Label == "ChainAnlus" and Params["Dimend"] == 3):
+        if (self.Type == "Ring" and self.Env != "Free") or (self.Env == "Anlus" and self.Dimend == 3):
             self.jump = True
             print(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
             logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
@@ -110,21 +119,20 @@ class _config:
         # 定义 dimension 和 dump 的映射
         dim_to_dump = {2: "xu yu vx vy", 3: "xu yu zu vx vy vz"}
         try:
-            Run.Dump = dim_to_dump[Run.Dimen]
+            Run.Dump = dim_to_dump[self.Dimend]
         except KeyError:
-            logging.error(f"Error: Wrong Dimen to run => dimension != {Run.Dimen}")
-            raise ValueError(f"Invalid dimension: {Run.Dimen}")
+            logging.error(f"Error: Wrong Dimend to run => dimension != {self.Dimend}")
+            raise ValueError(f"Invalid dimension: {self.Dimend}")
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
         if HOST == "Darwin":
             Run.Tdump = Run.Tdump_ref
-            Run.Damp = 1.0
-            
-        Run.Tinit = Run.Frames * Run.Tdump_ref
+
+        Run.Tinit = Run.Frames * Run.Tdump_ref // 5
         Run.TSteps = Run.Frames * Run.Tdump
         Run.Tequ = Run.TSteps
-        Run.Tref = Run.Tinit
+        Run.Tref = Run.Frames * Run.Tdump_ref
         Run.Params["Total Run Steps"] = Run.TSteps
 
         if self.Type == _BACT:
@@ -133,13 +141,13 @@ class _config:
 ##########################################END!###############################################################
 
 class _run:
-    def __init__(self, Dimen, Gamma, Temp, Trun, Params = params, Frames = 2000):
+    def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
-        self.Dimen = Dimen
+        self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
         self.SkipRows = 9
@@ -149,7 +157,7 @@ class _run:
             "data": "DATA",
             "refine": "REFINE",
         }
-        if (self.Dimen == 2):
+        if (self.Dimend == 2):
             self.fix2D = f"fix             2D all enforce2d"
             self.unfix2D = '\n'.join([
                 '',
@@ -159,7 +167,7 @@ class _run:
                 'unfix             2D',
                 ])
             self.dump_read = "x y"
-        elif (self.Dimen == 3):
+        elif (self.Dimend == 3):
             self.dump_read = "x y z"
             self.fix2D = ""
             self.unfix2D = '\n'.join([
@@ -285,15 +293,16 @@ class _run:
 ##########################################END!###############################################################
 
 class _init:
-    def __init__(self, Config, Run, Rin, Wid, N_monos, num_chains = params["num_chains"]):
+    def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
         self.sigma_equ, self.mass, self.sigma = 0.945, 1.0, 1.0
-        self.Config, self.Run = Config, Run
+        self.Config, self.Trun = Config, Trun
         self.Rin, self.Wid = Rin, Wid
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
         self.jump = self.set_box()   #set box
 
         if self.Config.Env in ["Anlus", "Free"]:
+            self.sigma12 = self.sigma
             self.Rout = self.Rin + self.Wid  # outer_radius
             self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
             self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
@@ -306,6 +315,7 @@ class _init:
             self.theta0 = - 4 * self.dtheta_chain if self.Config.Env == "Free" else - 2 * self.dtheta_chain
 
         elif self.Config.Env == "Rand":
+            self.sigma12 = self.sigma + 2 * self.Wid
             self.Rchain = self.sigma_equ + self.N_monos * self.sigma_equ / (2 * np.pi)
             self.dtheta_chain = self.set_dtheta(self.Rchain, self.N_monos)
             self.theta0 = - 4 * self.dtheta_chain
@@ -335,21 +345,21 @@ class _init:
                 return True
         else:
             self.Lbox = self.N_monos/2 + 10
-        self.v_box = (2 * self.Lbox) ** self.Run.Dimen
+        self.v_box = (2 * self.Lbox) ** self.Config.Dimend
 
-        if self.Run.Dimen == 2:
+        if self.Config.Dimend == 2:
             self.zlo = -self.sigma/2
             self.zhi = self.sigma/2
             self.Ks = 300.0
             self.v_obs = np.pi * self.Wid ** 2
-        elif self.Run.Dimen == 3:
+        elif self.Config.Dimend == 3:
             self.zlo = - self.Lbox
             self.zhi = self.Lbox
             self.Ks = 3000.0
             self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
         else:
-            logging.error(f"Error: Invalid Dimen  => dimension != {Run.Dimen}")
-            raise ValueError(f"Error: Invalid Dimen  => dimension != {Run.Dimen}")
+            logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
+            raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
 
         return False
     
@@ -416,14 +426,14 @@ class _init:
                 dtheta_chain = 2 * np.pi / np.floor(2* np.pi * Rchain/self.sigma_equ)
                 theta = theta - 2 * np.pi - dtheta_chain
 
-            if self.Run.Dimen == 2:
+            if self.Config.Dimend == 2:
                 x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
                 y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
-            elif self.Run.Dimen == 3:
-                x = round(Rchain * np.sin(theta) * np.cos(phi) * sigma_equ, 2)
-                y = round(Rchain * np.sin(theta) * np.sin(phi) * sigma_equ, 2)
-                z = round(Rchain * np.cos(theta) * sigma_equ, 2)
-                phi += dtheta_chain  # Update phi for 3D
+            elif self.Config.Dimend == 3:
+                x = round(Rchain * np.sin(theta) * np.cos(phi) * self.sigma_equ, 2)
+                y = round(Rchain * np.sin(theta) * np.sin(phi) * self.sigma_equ, 2)
+                z = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
+                #phi += dtheta_chain  # Update phi for 3D
             theta += dtheta_chain
             # Write atom information
             atom_type = 2  # Default to "middle" of the chain
@@ -468,11 +478,10 @@ class _init:
         self.obs_positions = []
         self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
         self.hash_grid = defaultdict(list)
-        self.grid_size = 2 * self.Wid + self.sigma * 1.12
-
+        self.grid_size = 2 * self.Wid
         for i in range(self.num_obs):
             while True:
-                position = -self.bound + 2 * np.random.rand(self.Run.Dimen) * self.bound
+                position = -self.bound + 2 * np.random.rand(self.Config.Dimend) * self.bound
                 hash_key = tuple((position // self.grid_size).astype(int))
                 # Check for overlaps using hash grid
                 overlap = False
@@ -484,7 +493,7 @@ class _init:
                 if not overlap:
                     self.obs_positions.append(position)
                     self.hash_grid[hash_key].append(position)
-                    pos = np.append(position, 0.0) if self.Run.Dimen == 2 else position
+                    pos = np.append(position, 0.0) if self.Config.Dimend == 2 else position
                     file.write(f"{int(self.N_monos + i + 1)} 1 4 {' '.join(map(str, pos))}\n")
                     break
         return self.obs_positions
@@ -511,7 +520,7 @@ class _init:
 
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
-        print("==> Preparing initial data file......")
+        print(f"==> Preparing initial data file......")
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(1, self.Run.Trun + 1)]:
@@ -523,6 +532,7 @@ class _init:
                    self.write_anlus(file)
                 elif self.Config.Env == "Rand":
                     self.write_rand(file)
+                    print(f"==> Preparing initial data {infile}......")
                 elif self.Config.Env != "Free":
                     logging.error(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
                     raise ValueError(f"Wrong envrionment in Init.data_file => Config.Env = {self.Config.Env}")
@@ -543,31 +553,49 @@ class _model:
 
         # pairs, bonds, angles
         self.pair = {
+        "SOFT": '\n'.join([
+                '# pair potential and  soft potential',
+                f'pair_style      hybrid/overlay lj4422/cut 1.03201 soft {1.03201 * (self.Init.Wid * 2 + self.Init.sigma)}',
+                'pair_coeff      *3 *3 lj4422/cut 1 1.0',
+                'pair_modify     shift yes',
+                f'pair_coeff      *3 4*5 soft 1 {1.03201 * self.Init.sigma12 / 2}',
+                f'pair_coeff      4*5 4*5 soft 1',
+         ]),
         "INIT": '\n'.join([
-            '# pair potential and  soft potential',
-            'variable          Pre_soft equal ramp(0.0, 10000.0)',
-            'pair_style      hybrid / overlay lj4422 / cut 1.03201 soft 1.54801',
-            'pair_coeff * 3 * 3 lj4422 / cut 1 1.0',
-            'pair_modify     shift yes',
-            'pair_coeff * 4 soft 1.50',
-            'fix              SOFT all adapt 1 pair soft a * 4 4 v_Pre_soft',
-        ]),
+                '# pair potential and  soft potential',
+                f'pair_style      lj/cut 1.12246',
+                'pair_coeff      *3 *3 1 1.0',
+                'pair_modify     shift yes',
+                f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.12246 * self.Init.sigma12 / 2}',
+                f'pair_coeff      4*5 4*5 1 {self.Init.Wid * 2 + self.Init.sigma} {1.12246 * (self.Init.Wid * 2 + self.Init.sigma)}',
+         ]),
+        "INIT4422": '\n'.join([
+                '# pair potential and  soft potential',
+                f'pair_style      lj4422/cut 1.03201',
+                'pair_coeff      *3 *3 1 1.0',
+                'pair_modify     shift yes',
+                f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.03201 * self.Init.sigma12 / 2}',
+                f'pair_coeff      4*5 4*5 1 {self.Init.Wid * 2 + self.Init.sigma} {1.03201 * (self.Init.Wid * 2 + self.Init.sigma)}',
+         ]),
         "LJ": '\n'.join([
             '#pair potential',
-            'pair_style       lj/cut 1.12246',
+            f'pair_style        lj/cut 1.12246',
             'pair_modify	    shift yes',
-            'pair_coeff      *3 *  1 1.0',
-            'pair_coeff      4*5 4*5   1 1.0 0.0',
+            'pair_coeff      *3 *3 1 1.0',
+            f'pair_coeff      *3 4*5 1 {self.Init.sigma12/2} {1.12246 * self.Init.sigma12/2}',
+            'pair_coeff      4*5 4*5  1 1.0 0.0',
         ]),
         "LJ4422": '\n'.join([
             '#pair potential',
-            'pair_style       lj4422/cut 1.03201',
+            f'pair_style      lj4422/cut 1.03201',
             'pair_modify	    shift yes',
-            'pair_coeff      *3 * 1 1.0',
-            'pair_coeff      4*5 4*5   1 1.0 0.0',
+            'pair_coeff      *3 *3 1 1.0',
+            f'pair_coeff      *3 4*5 1 {self.Init.sigma12/2} {1.03201 * self.Init.sigma12/2}',
+            'pair_coeff      4*5 4*5  1 1.0 0.0',
         ])}
 
-        self.bond = {"harmonic": '\n'.join([
+        self.bond = {
+        "harmonic": '\n'.join([
             '# Bond potential',
             'bond_style      harmonic',
             'bond_coeff      1 4000 1.0',
@@ -581,12 +609,12 @@ class _model:
         ])}
 
         self.angle = {
-            "harmonic": '\n'.join([
-                '# angle potential',
-                'angle_style     harmonic',
-                f'angle_coeff     * {self.Kb} 180',
+        "harmonic": '\n'.join([
+            '# angle potential',
+            'angle_style     harmonic',
+            f'angle_coeff     * {self.Kb} 180',
         ]),
-            "hybrid": '\n'.join([
+        "hybrid": '\n'.join([
             '# Angle potential',
             'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
             f'angle_coeff     1 actharmonic_h2 {self.Kb} 180 {self.Fa} {self.Fa}',
@@ -614,7 +642,8 @@ class _model:
             'boundary        p p p',
             'atom_style      angle',
             '',
-            f'variable dir_file string {dir_file}',
+            'variable        Pre_soft equal ramp(0.0,10000.0)',
+            f'variable      dir_file string {dir_file}',
             read,
             '',
             '#groups',
@@ -635,7 +664,31 @@ class _model:
         elif file == "dump":
             return f'${{dir_file}}{lmp_trj}.lammpstrj'
 
-    def potential(self, prompt: str, pair: str, bond: str, angle: str) -> list:
+    def configure(self, prompt, temp, damp, run):
+        return [
+            '# for communication',
+            'comm_style      brick',
+            'comm_modify     mode single cutoff 3.0 vel yes',
+            '',
+            'neighbor	      1.5 bin',
+            f'neigh_modify	  every 1 delay 0 check yes exclude group chain obs',
+            '',
+            prompt,
+            '##################################################################',
+            f"#fix 	          SOFT all adapt 1 pair soft a *4 4 v_Pre_soft",
+            f'fix      	      LANG obs langevin {temp} {temp} {damp} {run.set_seed()}',
+            f'fix             NVE obs nve/limit 0.01',
+            '',
+            'reset_timestep    0',
+            'timestep        0.001',
+            'run             100000',
+            '',
+            'unfix           LANG',
+            'unfix           NVE',
+            '',
+        ]
+
+    def potential(self, prompt: str, pair: str, bond: str, angle: str, exclude="exclude none") -> list:
         """Define the potential parameters for LAMMPS simulation."""
         return [
             prompt,
@@ -646,21 +699,20 @@ class _model:
             '',
             angle,
             '##################################################################',
+        ]
+
+    def fix(self, prompt: str, temp: float, damp: float, run) -> list:
+        """Define the fix parameters for LAMMPS simulation."""
+        fix_nve = f'fix             NVE {self.type} nve/limit 0.01' if 'init' in prompt else f'fix             NVE {self.type} nve'
+        return [
             '# for communication',
             'comm_style      brick',
             'comm_modify     mode single cutoff 3.0 vel yes',
             '',
             'neighbor	      1.5 bin',
-            'neigh_modify	  every 100 delay 0 check yes #exclude none',
+            'neigh_modify	  every 1 delay 0 check yes exclude none',
             '',
-        ]
-
-    def fix(self, prompt: str, temp: float, damp: float, run) -> list:
-        """Define the fix parameters for LAMMPS simulation."""
-        fix_nve = f'fix             NVE {self.type} nve/limit 0.1' if 'init' in prompt else f'fix             NVE {self.type} nve'
-        return [
-            '',
-            prompt,
+            f'{prompt}',
             '##################################################################',
             f'fix      	      LANG {self.type} langevin {temp} {temp} {damp} {run.set_seed()}',
             fix_nve,
@@ -675,7 +727,7 @@ class _model:
         #log, unfix, dump
         log_cmd ='log	            ${dir_file}.log' if title == v_equ else ''
         unfix_cmd = '' if title == v_data else run.unfix2D
-        type, dt = ('all', "0.0001") if title == v_init else (self.type, run.dt)
+        type, dt = ('all', "0.001") if title == v_init else (self.type, run.dt)
 
         return [
             f'dump	        	{title} {type} custom {tdump} {self.iofile("dump", title)} id type {run.Dump}',
@@ -709,15 +761,17 @@ class _model:
                     read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Config.Env[0].upper()}.data'
 
                 # potential
+                detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"], self.angle["harmonic"])
                 if Config.Type == "Ring":
-                    initial_potential = self.potential('# Ring for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
+                    initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
                     run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
                 else:
-                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
+                    initial_potential = self.potential('# for initialization', self.pair["LJ4422"], self.bond["harmonic"], self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["harmonic"], self.angle["hybrid"])
 
                 #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
-                initial_fix = self.fix('# for initialization', 1.0, 1.0, Run)
+                detach_configure = self.configure('# for configuration', 0.1, 0.01, Run)
+                initial_fix = self.fix('# for initialization', 1.0, 0.01, Run)
                 equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
                 data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
                 refine_read = [
@@ -728,14 +782,17 @@ class _model:
                 ]
                 # run
                 initial_run = self.run(Run.run["init"], Run.Tinit, Run.Tinit//20, Run)
-                equal_run = self.run(Run.run["equ"], Run.Tequ, Run.Tdump, Run)
-                data_run = self.run(Run.run["data"], Run.TSteps, Run.Tdump, Run)
-                refine_run = self.run(Run.run["refine"], Run.Tref, Run.Tdump_ref, Run)
+                equal_run = self.run(Run.run["equ"], Run.Tequ, Run.Tequ//200, Run)
+                data_run = self.run(Run.run["data"], Run.TSteps, Run.TSteps//Run.Frames, Run)
+                refine_run = self.run(Run.run["refine"], Run.Tref, Run.Tref//Run.Frames, Run)
 
                 # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
-                    self.write_section(file, self.setup(Run.Dimen, dir_file, read))
+                    self.write_section(file, self.setup(Config.Dimend, dir_file, read))
                     if not Run.Params["restart"][0]:
+                        if Config.Env == "Rand":
+                            self.write_section(file, detach_potential)
+                            self.write_section(file, detach_configure)
                         self.write_section(file, initial_potential)
                         self.write_section(file, initial_fix)
                         self.write_section(file, initial_run)
@@ -753,14 +810,14 @@ class _model:
 #############################################################################################################
 
 class _path:
-    def __init__(self, Config, Model, Init, Run):
+    def __init__(self, Model):
         #host = os.getcwd()
         self.host = os.path.abspath(os.path.dirname(os.getcwd()))
         self.mydirs = ["Codes", "Simus", "Anas", "Figs"]
-        self.Config = Config
         self.Model = Model
-        self.Init = Init
-        self.Run = Run
+        self.Init = Model.Init
+        self.Config = Model.Init.Config
+        self.Run = Model.Run
         self.jump = self.build_paths()
         
     def build_paths(self):
@@ -769,7 +826,7 @@ class _path:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
         #2D_100G_1.0T_Chain
-        self.dir1= f"{self.Run.Dimen}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
+        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma}G_{self.Run.Temp}T_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
         if self.Config.Env == "Free":
             self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}"
@@ -811,10 +868,10 @@ class _plot:
             3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
         }
         try:
-            return ["id"] + dump[self.Run.Dimen].split(" ")
+            return ["id"] + dump[self.Config.Dimend].split(" ")
         except KeyError:
-            logging.error(f"Error: Wrong Dimension to run => dimension != {self.Run.Dimen}")
-            raise ValueError(f"Invalid dimension: {self.Run.Dimen}")
+            logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
+            raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
 
     def read_data(self):
         dump = self.set_dump()

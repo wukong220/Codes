@@ -35,27 +35,27 @@ def check_params(params):
 #-----------------------------------Part I-------------------------------------------#    
 if __name__ == "__main__":
     check = True
-    for iType in convert2array(params['labels']['Types']):
-        for iEnv in convert2array(params['labels']['Envs']):
-            Config = _config(iType, iEnv, params)
-            if Config.jump:
-                continue
-            if params['task'] == "Simus" and platform.system() != "Darwin":
-                if check:
-                    check_params(params)  # continue
-                    #check = False
+    for iDimend in convert2array(params['Dimend']):
+        for iType in convert2array(params['labels']['Types']):
+            for iEnv in convert2array(params['labels']['Envs']):
+                Config = _config(iDimend, iType, iEnv, params)
+                if Config.jump:
+                    continue
+                if params['task'] == "Simus" and platform.system() != "Darwin":
+                    if check:
+                        check_params(params)  # continue
+                        check = False
 
-            for iDimend in convert2array(params['Dimend']):
                 for iGamma in convert2array(params['Gamma']):
                     for iTemp in convert2array(params['Temp']):
                         # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                        Run = _run(iDimend, iGamma, iTemp, params['Trun'])  #print(Run.__dict__)
+                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  #print(Run.__dict__)
                         Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
                         for iRin in convert2array(params['Rin']):
                             for iWid in convert2array(params['Wid']):
                                 for iN in convert2array(params['N_monos']):
                                     # paras for init config: Rin, Wid, N_monos, L_box
-                                    Init = _init(Config, Run, iRin, iWid, iN)
+                                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
                                     if Init.jump: # chains are too long
                                         continue
                                     queue = Run.set_queue() #print(f"{queue}\n", params["Queues"])
@@ -66,9 +66,9 @@ if __name__ == "__main__":
                                         for iXi in convert2array(params['Xi']):
                                             # paras for model: Pe(Fa), Xi(Kb)
                                             Model = _model(Init, Run, iFa, iXi)
-                                            Path = _path(Config, Model, Init, Run) # for directory
+                                            Path = _path(Model) # for directory
                                             Plot = _plot(Path)
-
+                                            exit(1)
                                             if params['task'] == "Simus":
                                                 if Path.jump: # jump for repeat
                                                     continue
