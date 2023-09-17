@@ -26,7 +26,6 @@ import matplotlib.transforms as mtransforms
 logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 #-----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
-FREE_ENV = 0.0
 HOST = platform.system()
 #-----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
@@ -35,7 +34,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:2], 'Envs': envs[1:2]},
+    'labels': {'Types': types[0:2], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -81,7 +80,7 @@ class _config:
                               #3: {'Rin': 5.0, 'Wid': 10.0},
                           },
                 "Rand": {2: {'Rin': 0.1,  'Wid': 1.0},
-                             #3: {'Rin': 0.1, 'Wid': 1.0},
+                             3: {'Rin': 0.1, 'Wid': 1.0},
                          },
             },
         }
@@ -97,13 +96,6 @@ class _config:
             self.Params.update(self.config[HOST][self.Type])
         if self.Env in self.config[HOST]:
             self.Params.update(self.config[HOST][self.Env][self.Dimend])
-
-        if (self.Type == "Ring" and self.Env != "Free") or (self.Env == "Anlus" and self.Dimend == 3):
-            self.jump = True
-            print(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
-            logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
-        else:
-            self.jump = False
 
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
@@ -290,11 +282,12 @@ class _init:
         self.Rin, self.Wid = Rin, Wid
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
+        self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.jump = self.set_box()   #set box
-        if self.Rin < 1e-6 and self.Wid < 1e-6:
-            self.Env = "Free"
-        else:
-            self.Env = self.Config.Env
+        if (self.Config.Type == "Ring" and self.Env != "Free"):
+            self.jump = True
+            print(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
+            logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
 
         if self.Config.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
@@ -309,7 +302,7 @@ class _init:
             logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
             raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
 
-        self.sigma12 = self.sigma  if self.Env == "Anlus" else self.sigma12 = self.sigma + 2 * self.Wid
+        self.sigma12 = self.sigma  if self.Env == "Anlus" else self.sigma + 2 * self.Wid
         self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
         self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
         self.theta0 = - 2 * self.dtheta_chain if self.Env == "Anlus" else - 4 * self.dtheta_chain
@@ -513,7 +506,7 @@ class _init:
         print(f"==> Preparing initial data file......")
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
-        for infile in [f"{i:03}" for i in range(1, self.Run.Trun + 1)]:
+        for infile in [f"{i:03}" for i in range(1, self.Trun + 1)]:
             data_file = os.path.join(f"{Path.dir_data}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
