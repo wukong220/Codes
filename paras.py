@@ -34,7 +34,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[1:2], 'Envs': envs[0:1]},
+    'labels': {'Types': types[2:3], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -65,7 +65,7 @@ class _config:
                             #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
                             #2: {'Rin': [0.314], 'Wid': [1.0]},
                             #2: {'Rin': [0.0.0628], Wid': [1.0, 1.5, 2.0, 2.5]},
-                            #3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
+                            3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 },
 
@@ -75,14 +75,14 @@ class _config:
                           'Fa': [1.0], 'Temp': [1.0]},
                 "Ring": {'N_monos': [100],
                          'Xi': 0.0, 'Fa': [1.0],
-                         'Temp': [0.01],
+                         'Temp': [0.1],
                          'Gamma': 100},
 
                 "Anlus": {2: {'Rin': 5.0, 'Wid': 10.0},
                               #3: {'Rin': 5.0, 'Wid': 10.0},
                           },
                 "Rand": {2: {'Rin': 0.314,  'Wid': 1.0},
-                             3: {'Rin': 0.1256, 'Wid': 2.5},
+                             3: {'Rin': 0.0314, 'Wid': 2.5},
                          },
             },
         }
@@ -286,9 +286,9 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.jump = self.set_box()   #set box
-        if (self.Config.Type == "Ring" and self.Env != "Free"):
+        if (self.Config.Type == "Ring" and self.Env == "Anlus"):
             self.jump = True
-            print(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
+            print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
             logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
 
         if self.Config.Env == "Anlus":
@@ -332,7 +332,7 @@ class _init:
             if self.Config.Type == "Chain":
                 self.Lbox = self.N_monos/2 + 10
             elif self.Config.Type == "Ring":
-                self.Lbox = self.N_monos / 4
+                self.Lbox = self.N_monos / 4 + 10
             elif self.Config.Type == _BACT:
                 self.Lbox = self.N_monos * 10
             else:
