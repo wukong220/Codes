@@ -155,42 +155,43 @@ class Reorganize:
                 print(f"Removed empty directory: {dirpath}")
 
     def reorganize(self):
-        for dirpath, dirnames, filenames in os.walk(self.start_path):
-            if 'Backup' not in dirpath:
-                for dirname in dirnames:
-                    full_path = os.path.join(dirpath, dirname)
-                    try:
-                        # 使用正则表达式匹配目录名以提取参数
-                        match = re.match(r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)T_(\w+)/([\d.]+?)R([\d.]+?)_(\d+?)N(\d+?)_(\w+)/([\d.]+?)Pe_([\d.]+?)Xi_(\w+)", full_path)
-                        if match:
-                            #print(full_path)
-                            path, D, G, T, Type, Rin, Wid, N, num, Env, Pe, Xi, run = match.groups()
-                            #print(f"path={path}, D={D}, G={G}, T={T}, Type={Type}, Rin={Rin}, Wid={Wid}, N={N}, num={num}, Env={Env}, Pe={Pe}, Xi={Xi}, run={run}\n")
-                            old_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
-                            new_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{Pe}Pe_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{T}T_{Xi}Xi_{run}")
-                            backup_foler_path = os.path.join(f"{self.backup_path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
-                            os.makedirs(new_folder_path, exist_ok=True)
-                            os.makedirs(backup_foler_path, exist_ok=True)
-
-                            print(f"Reorganized: {old_folder_path}/*\nTo {new_folder_path}\n")
-                            logging.info(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
+        #for dirpath, dirnames, filenames in os.walk(self.start_path):
+        for dirpath in os.scandir(self.start_path):
+            if ('Backup' not in dirpath.path) and (dirpath.is_dir()):
+                for dirnames in os.scandir(dirpath.path):
+                    if dirnames.is_dir():
+                        for dirname in os.scandir(dirnames.path):
+                            full_path = dirname.path
                             try:
-                                subprocess.run(["cp", f"{old_folder_path}/*", backup_file_path])
-                                subprocess.run(["mv", f"{old_folder_path}/*", new_folder_path])
-                            except Exception as e:
-                                print(f"Could not move {old_folder_path} to {new_folder_path}, error: {e}")
+                                # 使用正则表达式匹配目录名以提取参数
+                                match = re.match(r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)T_(\w+)/([\d.]+?)R([\d.]+?)_(\d+?)N(\d+?)_(\w+)/([\d.]+?)Pe_([\d.]+?)Xi_(\w+)", full_path)
+                                if match:
+                                    #print(full_path)
+                                    path, D, G, T, Type, Rin, Wid, N, num, Env, Pe, Xi, run = match.groups()
+                                    #print(f"path={path}, D={D}, G={G}, T={T}, Type={Type}, Rin={Rin}, Wid={Wid}, N={N}, num={num}, Env={Env}, Pe={Pe}, Xi={Xi}, run={run}\n")
+                                    old_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
+                                    new_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{Pe}Pe_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{T}T_{Xi}Xi_{run}")
+                                    backup_foler_path = os.path.join(f"{self.backup_path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
+                                    os.makedirs(new_folder_path, exist_ok=True)
+                                    os.makedirs(backup_foler_path, exist_ok=True)
 
-                            for filename in os.listdir(full_path):
-                                old_file_path = os.path.join(old_folder_path, filename)
-                                new_file_path = os.path.join(new_folder_path, filename)
-                                backup_file_path = os.path.join(backup_foler_path, filename)
-                                # 创建备份并移动文件
-                                if not os.path.exists(new_file_path):
-                                    #print(f"old_file_path:{old_file_path}\nnew_file_path:{new_file_path}\nbackup_file_path:{backup_file_path}\n")
-                                    shutil.copy(old_file_path, backup_file_path)
-                                    shutil.move(old_file_path, new_file_path)
-                    except Exception as e:
-                        print(f"Could not extract params from {full_path}, error: {e}")
+                                    print(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
+                                    logging.info(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
+
+                                    for filename in os.listdir(full_path):
+                                        old_file_path = os.path.join(old_folder_path, filename)
+                                        new_file_path = os.path.join(new_folder_path, filename)
+                                        backup_file_path = os.path.join(backup_foler_path, filename)
+                                        # 创建备份并移动文件
+                                        if not os.path.exists(new_file_path):
+                                            #print(f"old_file_path:{old_file_path}\nnew_file_path:{new_file_path}\nbackup_file_path:{backup_file_path}\n")
+                                            try:
+                                                #subprocess.run(["cp", f"{old_file_path}", backup_file_path])
+                                                subprocess.run(["mv", f"{old_file_path}", new_file_path])
+                                            except Exception as e:
+                                                print(f"Could not move {old_file_path} to {new_file_path}, error: {e}")
+                            except Exception as e:
+                                print(f"Could not extract params from {full_path}, error: {e}")
 
         self.remove_empty_dirs(self.start_path)
         logging.info("All folders and files have been reorganized and backed up.")

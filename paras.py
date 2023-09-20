@@ -820,23 +820,23 @@ class _path:
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
-        #2D_100G_1.0T_Chain
-        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Run.Temp}T_{self.Config.Type}"
+        #2D_100G_1.0Pe_Chain
+        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Model.Pe}Pe_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
         if self.Init.Env == "Free":
             self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}"
         else:
             self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}"
 
-        #1.0Pe_0.0Xi_8T5
-        self.dir3 = f"{self.Model.Pe}Pe_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
+        #1.0T_0.0Xi_8T5
+        self.dir3 = f"{self.Run.Temp}T_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
         if self.Config.Type == _BACT:
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
-        #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5
+        #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
         self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
-        #/Users/wukong/Data/Simus/2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus/1.0Pe_0.0Xi_8T5/5.0R5.0_100N1_CA.data
+        #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
         subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
         shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
         print(f"dir_data => {self.dir_data}")
