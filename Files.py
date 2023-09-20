@@ -165,6 +165,8 @@ class Reorganize:
                             try:
                                 # 使用正则表达式匹配目录名以提取参数
                                 match = re.match(r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)T_(\w+)/([\d.]+?)R([\d.]+?)_(\d+?)N(\d+?)_(\w+)/([\d.]+?)Pe_([\d.]+?)Xi_(\w+)", full_path)
+                                #3D_0.1G_0.1T_Ring/250N1_Free/10.0Pe_0.0Xi_8T5
+                                Free = re.match(r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)T_(\w+)/(\d+?)N(\d+?)_(\w+)/([\d.]+?)Pe_([\d.]+?)Xi_(\w+)", full_path)
                                 if match:
                                     #print(full_path)
                                     path, D, G, T, Type, Rin, Wid, N, num, Env, Pe, Xi, run = match.groups()
@@ -172,24 +174,33 @@ class Reorganize:
                                     old_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
                                     new_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{Pe}Pe_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{T}T_{Xi}Xi_{run}")
                                     backup_foler_path = os.path.join(f"{self.backup_path}", f"{D}D_{G}G_{T}T_{Type}", f"{Rin}R{Wid}_{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
-                                    os.makedirs(new_folder_path, exist_ok=True)
-                                    os.makedirs(backup_foler_path, exist_ok=True)
+                                elif Free:
+                                    path, D, G, T, Type, N, num, Env, Pe, Xi, run = Free.groups()
+                                    old_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{T}T_{Type}", f"{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
+                                    new_folder_path =os.path.join(f"{path}", f"{D}D_{G}G_{Pe}Pe_{Type}", f"{N}N{num}_{Env}", f"{T}T_{Xi}Xi_{run}")
+                                    backup_foler_path = os.path.join(f"{self.backup_path}", f"{D}D_{G}G_{T}T_{Type}", f"{N}N{num}_{Env}", f"{Pe}Pe_{Xi}Xi_{run}")
+                                else:
+                                    print(f"Could not extract params from {full_path}, error: {e}")
+                                    
+                                os.makedirs(new_folder_path, exist_ok=True)
+                                os.makedirs(backup_foler_path, exist_ok=True)
 
-                                    print(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
-                                    logging.info(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
+                                print(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
+                                logging.info(f"Reorganized: {old_folder_path}\nTo {new_folder_path}\n")
 
-                                    for filename in os.listdir(full_path):
-                                        old_file_path = os.path.join(old_folder_path, filename)
-                                        new_file_path = os.path.join(new_folder_path, filename)
-                                        backup_file_path = os.path.join(backup_foler_path, filename)
-                                        # 创建备份并移动文件
-                                        if not os.path.exists(new_file_path):
-                                            #print(f"old_file_path:{old_file_path}\nnew_file_path:{new_file_path}\nbackup_file_path:{backup_file_path}\n")
-                                            try:
-                                                #subprocess.run(["cp", f"{old_file_path}", backup_file_path])
-                                                subprocess.run(["mv", f"{old_file_path}", new_file_path])
-                                            except Exception as e:
-                                                print(f"Could not move {old_file_path} to {new_file_path}, error: {e}")
+                                for filename in os.listdir(full_path):
+                                    old_file_path = os.path.join(old_folder_path, filename)
+                                    new_file_path = os.path.join(new_folder_path, filename)
+                                    backup_file_path = os.path.join(backup_foler_path, filename)
+                                    # 创建备份并移动文件
+                                    if not os.path.exists(new_file_path):
+                                        #print(f"old_file_path:{old_file_path}\nnew_file_path:{new_file_path}\nbackup_file_path:{backup_file_path}\n")
+                                        try:
+                                            #subprocess.run(["cp", f"{old_file_path}", backup_file_path])
+                                            subprocess.run(["mv", f"{old_file_path}", new_file_path])
+                                        except Exception as e:
+                                            print(f"Could not move {old_file_path} to {new_file_path}, error: {e}")
+                                    
                             except Exception as e:
                                 print(f"Could not extract params from {full_path}, error: {e}")
 
