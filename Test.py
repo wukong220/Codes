@@ -260,7 +260,6 @@ class Plot:
         y = np.random.normal(0, 1, 100)
 
         # Create bins
-
         x_bins = np.linspace(min(x), max(x), self.num_bins)
         y_bins = np.linspace(min(y), max(y), self.num_bins)
 
