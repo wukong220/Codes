@@ -36,7 +36,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[1:2], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:1], 'Envs': envs[1:2]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -44,8 +44,8 @@ params = {
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
-    #'Dimend': 3,
-    'Dimend': [2,3],
+    'Dimend': 2,
+    #'Dimend': [2,3],
     'num_chains': 1,
 }
 class _config:
@@ -53,8 +53,9 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0], 'Temp': [1.0]},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],  # 'Fa': [0.0],
-                          'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0],  # 'Fa': [0.0],
+                          'Temp': [1.0]},
+                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
                           # 'Gamma': [0.1, 1, 10, 100]},
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
                          'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],},
@@ -66,7 +67,7 @@ class _config:
                 "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
                             #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
                             #2: {'Rin': [0.314], 'Wid': [1.0]},
-                            #2: {'Rin': [0.0628], Wid': [1.0, 1.5, 2.0, 2.5]},
+                            #2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
@@ -738,6 +739,7 @@ class _model:
             f'timestep        {dt}',
             f'thermo		      {timestep // 200}',
             log_cmd,
+            f'restart         {tdump//10}  ${dir_file}.a.restart  ${dir_file}.b.restart ',
             f'run	            {timestep}',
             f'write_restart   {self.iofile("restart", title)}',
             unfix_cmd,

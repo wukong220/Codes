@@ -48,7 +48,6 @@ if __name__ == "__main__":
                     for iTemp in convert2array(params['Temp']):
                         # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
                         Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  #print(Run.__dict__)
-                        queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
                         Config.set_dump(Run) #print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
                         for iRin in convert2array(params['Rin']):
                             for iWid in convert2array(params['Wid']):
@@ -57,7 +56,7 @@ if __name__ == "__main__":
                                     Init = _init(Config, Run.Trun, iRin, iWid, iN)
                                     if Init.jump: # chains are too long or invalid label
                                         continue
-
+                                    queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
                                     for iFa in convert2array(params['Fa']):
                                         for iXi in convert2array(params['Xi']):
                                             # paras for model: Pe(Fa), Xi(Kb)
