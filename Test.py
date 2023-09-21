@@ -101,12 +101,12 @@ class ParticleStructure:
     - points (numpy.ndarray): N x dimension array of points
     """
     
-    def __init__(self, particle_density=1, R_ring=20, r_torus=5, is_3D=True):
+    def __init__(self, particle_density=1, Rin=15, Wid = 10, is_3D=True):
         self.particle_density = particle_density
-        self.R_ring = R_ring
-        self.Rin = R_ring - r_torus
-        self.Rout = R_ring + r_torus
-        self.r_torus = r_torus
+        self.Rin = Rin
+        self.Rout = Rin + Wid
+        self.R_ring = Rin + Wid/2
+        self.r_torus = Wid / 2
         self.is_3D = is_3D
         self.particles = None
         
@@ -133,8 +133,8 @@ class ParticleStructure:
             self.particles = np.vstack([x.flatten(), y.flatten(), z.flatten()]).T
         else:
             # For 2D Ring
-            outer_ring = self.circle(self.R_ring + self.r_torus)
-            inner_ring = self.circle(self.R_ring - self.r_torus)
+            outer_ring = self.circle(self.Rout)
+            inner_ring = self.circle(self.Rin)
             self.particles = np.vstack([outer_ring, inner_ring])
         print(f"{self.particles[:10]}")
         return self.particles
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     #distribution()
 
     # Generate initial config for 3D
-    config_3D = InitialConfig(dimensions_3D, Lbox, Wid, Phi, Sigma, N)
+    config_3D = InitialConfig()
     #config_3D.place_obstacles_with_hash()
     #config_3D.place_chain_with_kdtree()
 
@@ -328,4 +328,3 @@ if __name__ == "__main__":
     coords_2D = particle_structure_2D.generate_coordinates()
     #particle_structure_3D.write_to_data_file("/mnt/data/torus_data.lammps")
     particle_structure_3D.show_coordinates()
-    #particle_structure_2D.show_coordinates()

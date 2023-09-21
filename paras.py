@@ -36,7 +36,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[1:2], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -44,8 +44,8 @@ params = {
     # 动力学方程的重要参数
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': 3,
-    # 'Dimend': [2,3],
+    #'Dimend': 3,
+    'Dimend': [2,3],
     'num_chains': 1,
 }
 class _config:
@@ -837,9 +837,9 @@ class _path:
         #1.0T_0.0Xi_8T5
         self.dir3 = f"{self.Run.Temp}T_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
         if self.Config.Type == _BACT:
-            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
+            self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
-            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
+            self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
         self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data

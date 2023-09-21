@@ -157,7 +157,7 @@ class Reorganize:
     def reorganize(self):
         #for dirpath, dirnames, filenames in os.walk(self.start_path):
         for dirpath in os.scandir(self.start_path):
-            if ('Backup' not in dirpath.path) and (dirpath.is_dir()):
+            if ('Backup' not in dirpath.path) and (dirpath.is_dir()) and ('3D*Chain' not in dirpath.path):
                 for dirnames in os.scandir(dirpath.path):
                     if dirnames.is_dir():
                         for dirname in os.scandir(dirnames.path):
