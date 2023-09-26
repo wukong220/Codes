@@ -12,4 +12,4 @@ end_job_id=$2
 
 # 使用 seq 和 xargs 执行 bkill
 echo "seq $start_job_id $end_job_id | xargs -I {} sh -c 'bkill {} || true'"
-#seq $start_job_id $end_job_id | xargs -I {} sh -c 'bkill {} || true'
+seq $start_job_id $end_job_id | xargs -I {} sh -c 'bkill {} || true'
