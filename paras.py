@@ -31,37 +31,41 @@ _BACT = "Bacteria"
 HOST = platform.system()
 #-----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
-envs = ["Rand", "Anlus", "Slit"]
+envs = ["Anlus", "Rand", "Slit"]
 tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[1:2]},
+    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
+    'Temp': 1.0,
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': 2,
-    #'Dimend': [2,3],
+    #'Dimend': 3,
+    'Dimend': [2,3],
     'num_chains': 1,
 }
 class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
-                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0], 'Temp': [1.0]},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0],  # 'Fa': [0.0],
-                          'Temp': [1.0]},
-                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01]},
-                          # 'Gamma': [0.1, 1, 10, 100]},
-                "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0],
-                         'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],},
-                         #'Gamma': [0.1, 1, 10, 100]},  # 'Gamma': [100]},
+                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0],
+                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                          # 'Gamma': [0.1, 1, 10, 100]
+                          },
+                "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                         'Gamma': [0.1, 1, 10, 100],
+                         # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                         },
 
-                "Anlus": {2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
+                              3: {'Rin': [0.0], 'Wid': [0.0]},
+                              #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                               #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
                 "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
@@ -70,23 +74,20 @@ class _config:
                             #2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
-                "Slit":{2: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
+                "Slit":{#2: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
                         3: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
                         },
                 },
 
             "Darwin": {
-                _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0, 'Temp': 1.0},
+                _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'N_monos': [100], 'Xi': 0.0,
-                          'Fa': [1.0], 'Temp': [1.0]},
-                "Ring": {'N_monos': [100],
-                         'Xi': 0.0, 'Fa': [1.0],
-                         'Temp': [0.1],
-                         'Gamma': 100},
+                          'Fa': [1.0]},
+                "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
-                "Anlus": {2: {'Rin': 5.0, 'Wid': 10.0},
-                              #3: {'Rin': 5.0, 'Wid': 10.0},
-                          },
+                "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
+                            3: {'Rin': [0.0], 'Wid': [0.0]},
+                            },
                 "Rand": {2: {'Rin': 0.314,  'Wid': 1.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                          },
@@ -218,10 +219,10 @@ class _run:
                 for line in bjobs.strip().split('\n')[1:]:
                     columns = line.split()
                     start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
-                    if datetime.now() - start_time > timedelta(hours=24):
+                    if datetime.now() - start_time > timedelta(hours=24) and columns[2] == "RUN":
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
-                queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"]
+                queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"] + 1
                 queue_info[iqueue]["Usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
                 if queue_info[iqueue]["PEND"] == 0:
@@ -288,7 +289,8 @@ class _run:
 
 class _init:
     def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
-        self.sigma_equ, self.mass, self.sigma = 0.945, 1.0, 1.0
+        self.sigma_equ, self.mass, self.sigma = 0.94, 1.0, 1.0
+        self.Ks = 300.0
         self.Config, self.Trun = Config, Trun
         self.Rin, self.Wid = Rin, Wid
         self.N_monos, self.num_chains = int(N_monos), num_chains
@@ -313,7 +315,7 @@ class _init:
             logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
             raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
 
-        self.sigma12 = self.sigma  if self.Env == "Anlus" else self.sigma + 2 * self.Wid
+        self.sigma12 = self.sigma + self.sigma  if self.Env == "Anlus" else self.sigma + 2 * self.Wid
         self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
         self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
         self.theta0 = - 2 * self.dtheta_chain if self.Env == "Anlus" else - 4 * self.dtheta_chain
@@ -339,9 +341,9 @@ class _init:
                 return True
         else:
             if self.Config.Type == "Chain":
-                self.Lbox = self.N_monos/2 + 10
+                self.Lbox = self.N_monos/4 + 10
             elif self.Config.Type == "Ring":
-                self.Lbox = self.N_monos / 4 + 10
+                self.Lbox = self.N_monos / 4 + 5
             elif self.Config.Type == _BACT:
                 self.Lbox = self.N_monos * 10
             else:
@@ -352,12 +354,10 @@ class _init:
         if self.Config.Dimend == 2:
             self.zlo = -self.sigma/2
             self.zhi = self.sigma/2
-            self.Ks = 300.0
             self.v_obs = np.pi * self.Wid ** 2
         elif self.Config.Dimend == 3:
             self.zlo = - self.Lbox
             self.zhi = self.Lbox
-            self.Ks = 3000.0
             self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
         else:
             logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
@@ -429,12 +429,12 @@ class _init:
                 theta = theta - 2 * np.pi - dtheta_chain
 
             if self.Config.Dimend == 2:
-                x = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
-                y = round(Rchain * np.sin(theta) * self.sigma_equ, 2)
+                x = round(Rchain * np.cos(theta) * self.sigma_equ, 5)
+                y = round(Rchain * np.sin(theta) * self.sigma_equ, 5)
             elif self.Config.Dimend == 3:
-                x = round(Rchain * np.sin(theta) * np.cos(phi) * self.sigma_equ, 2)
-                y = round(Rchain * np.sin(theta) * np.sin(phi) * self.sigma_equ, 2)
-                z = round(Rchain * np.cos(theta) * self.sigma_equ, 2)
+                x = round(Rchain * np.sin(theta) * np.cos(phi) * self.sigma_equ, 5)
+                y = round(Rchain * np.sin(theta) * np.sin(phi) * self.sigma_equ, 5)
+                z = round(Rchain * np.cos(theta) * self.sigma_equ, 5)
                 #phi += dtheta_chain  # Update phi for 3D
             theta += dtheta_chain
             # Write atom information
@@ -535,7 +535,7 @@ class _init:
                 elif self.Env == "Rand":
                     self.write_rand(file)
                     print(f"==> Preparing initial data {infile}......")
-                else:
+                elif self.Env != "Free":
                     logging.error(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
                     raise ValueError(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
                 self.write_potential(file)
@@ -739,7 +739,7 @@ class _model:
             f'timestep        {dt}',
             f'thermo		      {timestep // 200}',
             log_cmd,
-            f'restart         {tdump//10}  ${dir_file}.a.restart  ${dir_file}.b.restart ',
+            f'restart         {tdump//10}  ${{dir_file}}.a.restart  ${{dir_file}}.b.restart ',
             f'run	            {timestep}',
             f'write_restart   {self.iofile("restart", title)}',
             unfix_cmd,
@@ -853,7 +853,7 @@ class _path:
         self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
         subprocess.run(f"mkdir -p {self.fig1}", shell=True)
 
-        if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")) or os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.data.lammpstrj")):
+        if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")):
             return True
         else:
             return False

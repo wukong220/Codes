@@ -6,7 +6,6 @@ import platform
 import shutil
 import logging
 from datetime import datetime, timedelta
-logging.basicConfig(filename='Files.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Reorganize:
     def __init__(self, start_path= 'Simus'):
@@ -155,9 +154,10 @@ class Reorganize:
                 print(f"Removed empty directory: {dirpath}")
 
     def reorganize(self):
+        logging.basicConfig(filename='Files.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         #for dirpath, dirnames, filenames in os.walk(self.start_path):
         for dirpath in os.scandir(self.start_path):
-            if ('Backup' not in dirpath.path) and (dirpath.is_dir()) and ('3D*Chain' not in dirpath.path):
+            if ('Backup' not in dirpath.path) and (dirpath.is_dir()):
                 for dirnames in os.scandir(dirpath.path):
                     if dirnames.is_dir():
                         for dirname in os.scandir(dirnames.path):
@@ -207,8 +207,35 @@ class Reorganize:
         self.remove_empty_dirs(self.start_path)
         logging.info("All folders and files have been reorganized and backed up.")
 ##############################################################################
+    def clean_lammpstrj(self):
+        logging.basicConfig(filename='Files.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        print(f"Checking and deleting files…")
+        logging.info(f"\n\nChecking and deleting files…")
+        for dirpath in os.scandir(self.start_path):
+            if ('Backup' not in dirpath.path) and (dirpath.is_dir()) and ('3D*Chain' not in dirpath.path):
+                for dirnames in os.scandir(dirpath.path):
+                    if dirnames.is_dir():
+                        for dirname in os.scandir(dirnames.path):
+                            full_path = dirname.path
+                            if '3D' in full_path and 'Chain' in full_path and 'Rand' in full_path:
+                                refine_lammpstrj_files = []
+                                for i in range(1, 6):  # 1, 2, 3, 4, 5
+                                    file_name = os.path.join(full_path, f"{i:03d}.refine.lammpstrj")
+                                    refine_lammpstrj_files.append(file_name)
+                                    all_files_exist = all(os.path.exists(file) for file in refine_lammpstrj_files)
+
+                                if all(os.path.exists(file) for file in refine_lammpstrj_files):
+                                    continue
+                                else:
+                                    file_to_delete = os.path.join(full_path, "005.lammpstrj")
+                                    print(file_to_delete)
+                                    if os.path.exists(file_to_delete):
+                                        print(f"Deleting file {file_to_delete}")
+                                        logging.info(f"Deleting file {file_to_delete}")
+                                        #os.remove(file_to_delete)
+##############################################################################
 
 #usage
 if __name__ == "__main__":
     reorg = Reorganize()
-    reorg.reorganize()
+    reorg.clean_lammpstrj()
