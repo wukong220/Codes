@@ -327,4 +327,4 @@ if __name__ == "__main__":
     coords_3D = particle_structure_3D.generate_coordinates()
     coords_2D = particle_structure_2D.generate_coordinates()
     #particle_structure_3D.write_to_data_file("/mnt/data/torus_data.lammps")
-    particle_structure_3D.show_coordinates()
+    particle_structure_2D.show_coordinates()

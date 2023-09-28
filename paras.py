@@ -36,7 +36,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -45,8 +45,8 @@ params = {
     'Temp': 1.0,
     'Gamma': 100,
     'Trun': 5,
-    #'Dimend': 3,
-    'Dimend': [2,3],
+    'Dimend': 3,
+    #'Dimend': [2,3],
     'num_chains': 1,
 }
 class _config:
@@ -54,8 +54,8 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0],
-                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
+                          'Temp': [0.2, 0.1, 0.05, 0.01], #'Temp': [1.0],
                           # 'Gamma': [0.1, 1, 10, 100]
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -74,8 +74,8 @@ class _config:
                             #2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
-                "Slit":{#2: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
-                        3: {"Rin":[0.0],"Wid":[2.0, 3.0, 5.0, 10.0, 15.0]},
+                "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
+                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]},
                         },
                 },
 
@@ -146,32 +146,7 @@ class _run:
         self.Frames = Frames
         self.Temp = Temp
         self.SkipRows = 9
-        self.run = {
-            "init": "INIT",
-            "equ": "EQU",
-            "data": "DATA",
-            "refine": "REFINE",
-        }
-        if (self.Dimend == 2):
-            self.fix2D = f"fix             2D all enforce2d"
-            self.unfix2D = '\n'.join([
-                '',
-                'unfix           LANG',
-                'unfix           NVE',
-                'unfix           FREEZE',
-                'unfix             2D',
-                ])
-            self.dump_read = "x y"
-        elif (self.Dimend == 3):
-            self.dump_read = "x y z"
-            self.fix2D = ""
-            self.unfix2D = '\n'.join([
-                '',
-                'unfix           LANG',
-                'unfix           NVE',
-                'unfix           FREEZE',
-            ])
-        
+
         self.dt = 0.001
         self.Seed = self.set_seed()
         self.eSteps = 9 if self.Gamma == 1000 else 8
@@ -297,7 +272,7 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.jump = self.set_box()   #set box
-        if (self.Config.Type == "Ring" and self.Env == "Anlus"):
+        if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
             print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
             logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
@@ -306,16 +281,19 @@ class _init:
             self.Rout = self.Rin + self.Wid  # outer_radius
             self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
             self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
-            self.num_obs = int(self.num_Rin + self.num_Rout)
             self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
             self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
+            self.num_obs = int(self.num_Rin + self.num_Rout)
+
         elif self.Config.Env == "Rand":
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
+        elif self.Config.Env == "Slit":
+            self.num_obs = 0
         else:
             logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
             raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
 
-        self.sigma12 = self.sigma + self.sigma  if self.Env == "Anlus" else self.sigma + 2 * self.Wid
+        self.sigma12 = self.sigma + 2 * self.Wid if (self.Env == "Rand") else 2 * self.sigma
         self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
         self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
         self.theta0 = - 2 * self.dtheta_chain if self.Env == "Anlus" else - 4 * self.dtheta_chain
@@ -342,6 +320,8 @@ class _init:
         else:
             if self.Config.Type == "Chain":
                 self.Lbox = self.N_monos/4 + 10
+                if self.Env == "Slit":
+                    self.Lbox = self.N_monos/2 + 5
             elif self.Config.Type == "Ring":
                 self.Lbox = self.N_monos / 4 + 5
             elif self.Config.Type == _BACT:
@@ -522,11 +502,11 @@ class _init:
 
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
-        print(f"==> Preparing initial data file......")
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(1, self.Trun + 1)]:
             data_file = os.path.join(f"{Path.dir_data}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
+            print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
                 self.write_chain(file)
@@ -534,10 +514,6 @@ class _init:
                    self.write_anlus(file)
                 elif self.Env == "Rand":
                     self.write_rand(file)
-                    print(f"==> Preparing initial data {infile}......")
-                elif self.Env != "Free":
-                    logging.error(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
-                    raise ValueError(f"Wrong envrionment in Init.data_file => Init.Env = {self.Env}")
                 self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
@@ -545,6 +521,7 @@ class _init:
 class _model:
     def __init__(self, Init, Run, Fa, Xi):
         self.Init = Init
+        self.Config = Init.Config
         self.Run = Run
         self.type = Init.Config.Type.lower()
         self.Fa = Fa
@@ -552,6 +529,51 @@ class _model:
         self.Kb = self.Xi * Init.N_monos/4
         #for directory
         self.Pe = self.Fa / self.Run.Temp
+
+        self.dump = {"init": "INIT", "equ": "EQU", "data": "DATA", "refine": "REFINE"}
+        self.dump_read = "x y" if self.Config.Dimend == 2 else "x y z"
+
+        # setup
+        self.fix_cmd = {}
+        dimension = self.Config.Dimend
+        env = self.Init.Env
+        wid = self.Init.Wid+1
+        axis = "y" if dimension == 2 else "z"
+        unfix = '\n'.join([
+            '',
+            'unfix           LANG',
+            'unfix           NVE',
+            'unfix           FREEZE',
+        ])
+        fix_wall_init = '\n'.join([
+                f'fix             WALL1 {self.type} wall/lj126 {axis}lo v_lo 1.0 1.0 1.12246',
+                f'fix             WALL2 {self.type} wall/lj126 {axis}hi v_hi 1.0 1.0 1.12246',
+            ])
+        fix_wall = '\n'.join([
+                f'fix             WALL1 {self.type} wall/lj126 {axis}lo {-wid / 2} 1.0 1.0 1.12246',
+                f'fix             WALL2 {self.type} wall/lj126 {axis}hi {wid / 2} 1.0 1.0 1.12246',
+            ])
+        unfix_wall = '\n'.join([
+                'unfix           WALL1',
+                'unfix           WALL2',
+            ])
+        fix2D = '' if dimension == 3 else '\nfix             2D all enforce2d'
+        unfix2D = '' if dimension == 3 else '\nunfix           2D'
+        if env == "Slit":
+            self.bound = f'boundary        p {"f" if dimension == 2 else "p"} {"f" if dimension == 3 else "p"}'
+            self.lh = '\n'.join([
+                '',
+                f'variable        lo equal ramp({-self.Init.Lbox/2},{-wid / 2})',
+                f'variable        hi equal ramp({self.Init.Lbox/2},{wid / 2})',
+                '',
+            ])
+            self.fix_cmd.update({"init": fix_wall_init + "\n" + fix2D, "data": fix_wall + "\n" + fix2D})
+            self.fix_cmd["unfix"] = '\n'.join([unfix, unfix_wall, unfix2D])
+        else:
+            self.bound = f'boundary        p p p',
+            self.lh = ''
+            self.fix_cmd.update({"init": fix2D, "data": fix2D})
+            self.fix_cmd["unfix"]  = unfix + "\n" + unfix2D
 
         # pairs, bonds, angles
         self.pair = {
@@ -581,7 +603,7 @@ class _model:
          ]),
         "LJ": '\n'.join([
             '#pair potential',
-            f'pair_style        lj/cut 1.12246',
+            f'pair_style      lj/cut 1.12246',
             'pair_modify	    shift yes',
             'pair_coeff      *3 *3 1 1.0',
             f'pair_coeff      *3 4*5 1 {self.Init.sigma12/2} {1.12246 * self.Init.sigma12/2}',
@@ -641,11 +663,12 @@ class _model:
             'echo		        screen',
             'units           lj',
             f'dimension       {dimend}',
-            'boundary        p p p',
+            self.bound,
             'atom_style      angle',
+            self.lh,
+            f'variable        Pre_soft equal ramp(0.0,10000.0)',
+            f'variable        dir_file string {dir_file}',
             '',
-            'variable        Pre_soft equal ramp(0.0,10000.0)',
-            f'variable      dir_file string {dir_file}',
             read,
             '',
             '#groups',
@@ -659,8 +682,8 @@ class _model:
         ]
 
     def iofile(self, file, title):
-        lmp_rest = '' if title == self.Run.run["data"] else f".{title.lower()}"
-        lmp_trj = '' if title == self.Run.run["data"] else f".{self.type}_{title.lower()}"
+        lmp_rest = '' if title == self.dump["data"] else f".{title.lower()}"
+        lmp_trj = '' if title == self.dump["data"] else f".{self.type}_{title.lower()}"
         if file == "restart":
             return f'${{dir_file}}{lmp_rest}.restart'
         elif file == "dump":
@@ -705,7 +728,12 @@ class _model:
 
     def fix(self, prompt: str, temp: float, damp: float, run) -> list:
         """Define the fix parameters for LAMMPS simulation."""
-        fix_nve = f'fix             NVE {self.type} nve/limit 0.01' if 'init' in prompt else f'fix             NVE {self.type} nve'
+        self.fix_cmd["langevin"] = "\n".join([
+            f'fix      	      LANG {self.type} langevin {temp} {temp} {damp} {run.set_seed()}',
+            f'fix             NVE {self.type} nve/limit 0.01' if 'init' in prompt else f'fix             NVE {self.type} nve',
+            f'fix             FREEZE obs setforce 0.0 0.0 0.0',
+        ])
+        fix_cmd = self.fix_cmd["init"] if "init" in prompt else self.fix_cmd["data"]
         return [
             '# for communication',
             'comm_style      brick',
@@ -716,20 +744,17 @@ class _model:
             '',
             f'{prompt}',
             '##################################################################',
-            f'fix      	      LANG {self.type} langevin {temp} {temp} {damp} {run.set_seed()}',
-            fix_nve,
-            'fix             FREEZE obs setforce 0.0 0.0 0.0',
-            run.fix2D,
+            self.fix_cmd["langevin"],
+            fix_cmd,
             '',
         ]
 
     def run(self, title: str, timestep: int, tdump: int, run) -> list:
         """Define the run parameters for LAMMPS simulation."""
-        v_init, v_equ, v_data, v_refine = run.run["init"], run.run["equ"], run.run["data"], run.run["refine"]
-        #log, unfix, dump
-        log_cmd ='log	            ${dir_file}.log' if title == v_equ else ''
-        unfix_cmd = '' if title == v_data else run.unfix2D
-        type, dt = ('all', "0.001") if title == v_init else (self.type, run.dt)
+       #log, unfix, dump
+        log_cmd ='log	            ${dir_file}.log' if title == self.dump["equ"] else ''
+        unfix_cmd = '' if title == self.dump["data"] else self.fix_cmd["unfix"]
+        type, dt = ('all', "0.001") if title == self.dump["init"] else (self.type, run.dt)
 
         return [
             f'dump	        	{title} {type} custom {tdump} {self.iofile("dump", title)} id type {run.Dump}',
@@ -753,6 +778,7 @@ class _model:
         Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
         logging.info(f"==> Writing infile ==> {Path.dir_data}")
+
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(f"==> Writing infile: {infile}......")
             try:
@@ -769,25 +795,26 @@ class _model:
                     initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
                     run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
                 else:
-                    initial_potential = self.potential('# for initialization', self.pair["LJ4422"], self.bond["harmonic"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["harmonic"], self.angle["hybrid"])
+                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
 
                 #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
                 detach_configure = self.configure('# for configuration', 0.1, 0.01, Run)
-                initial_fix = self.fix('# for initialization', 1.0, 0.01, Run)
+                initial_fix = self.fix('# for initialization',  1.0, 1.0, Run)
                 equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
                 data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
                 refine_read = [
                     '# for refine',
                     '##################################################################',
-                    f'read_dump        {self.iofile("dump", Run.run["equ"])} {Run.Tequ} {Run.dump_read} wrapped no format native',
+                    f'read_dump        {self.iofile("dump", self.dump["equ"])} {Run.Tequ} {self.dump_read} wrapped no format native',
                     '',
                 ]
                 # run
-                initial_run = self.run(Run.run["init"], Run.Tinit, Run.Tinit//20, Run)
-                equal_run = self.run(Run.run["equ"], Run.Tequ, Run.Tequ//200, Run)
-                data_run = self.run(Run.run["data"], Run.TSteps, Run.TSteps//Run.Frames, Run)
-                refine_run = self.run(Run.run["refine"], Run.Tref, Run.Tref//Run.Frames, Run)
+                v_init, v_equ, v_data, v_refine = self.dump["init"], self.dump["equ"], self.dump["data"], self.dump["refine"]
+                initial_run = self.run(v_init, Run.Tinit, Run.Tinit//20, Run)
+                equal_run = self.run(v_equ, Run.Tequ, Run.Tequ//200, Run)
+                data_run = self.run(v_data, Run.TSteps, Run.TSteps//Run.Frames, Run)
+                refine_run = self.run(v_refine, Run.Tref, Run.Tref//Run.Frames, Run)
 
                 # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
