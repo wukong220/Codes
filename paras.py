@@ -36,7 +36,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
+    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -82,15 +82,15 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'N_monos': [100], 'Xi': 0.0,
-                          'Fa': [1.0]},
+                              'Fa': [1.0]},
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
-                "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
-                            3: {'Rin': [0.0], 'Wid': [0.0]},
+                "Anlus":{2: {'Rin': [10.0], 'Wid': [3.0]},
+                            3: {'Rin': [10.0], 'Wid': [10.0]},
                             },
                 "Rand": {2: {'Rin': 0.314,  'Wid': 1.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
-                         },
+                            },
                 "Slit": {2: {"Rin": [0.0], "Wid": [3.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},
                          },
@@ -198,7 +198,7 @@ class _run:
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
                 queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"] + 1
-                queue_info[iqueue]["Usage"] = round( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
+                queue_info[iqueue]["Usage"] = np.around( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
                 if queue_info[iqueue]["PEND"] == 0:
                     self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
@@ -268,8 +268,10 @@ class _init:
         self.Ks = 300.0
         self.Config, self.Trun = Config, Trun
         self.Rin, self.Wid = Rin, Wid
+        self.particle_density = 2 if self.Config.Dimend == 3 else 2
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
+
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.jump = self.set_box()   #set box
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
@@ -279,11 +281,14 @@ class _init:
 
         if self.Config.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
-            self.num_Rin = np.ceil(2 * np.pi * self.Rin / (self.sigma_equ / 2))
-            self.num_Rout = np.ceil(2 * np.pi * self.Rout / (self.sigma_equ / 2))
-            self.dtheta_in = self.set_dtheta(self.Rin, self.num_Rin)
-            self.dtheta_out = self.set_dtheta(self.Rout, self.num_Rout)
-            self.num_obs = int(self.num_Rin + self.num_Rout)
+            self.R_ring = self.Rin + self.Wid / 2
+            self.R_torus = self.Wid / 2
+
+            self.num_Rin = np.ceil(self.particle_density * 2 * np.pi * self.Rin / self.sigma)
+            self.num_Rout = np.ceil(self.particle_density * 2 * np.pi * self.Rout / self.sigma)
+            self.num_ring = np.ceil(self.particle_density * 2 * np.pi * self.R_ring / self.sigma)
+            self.num_torus = np.ceil(self.particle_density * 2 * np.pi * self.R_torus / self.sigma)
+            self.num_obs = int(self.num_ring) * int(self.num_torus) if self.Config.Dimend == 3 else int(self.num_Rin + self.num_Rout)
 
         elif self.Config.Env == "Rand":
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
@@ -354,7 +359,7 @@ class _init:
         elif num_R < 10:
             return self.sigma_equ/R
         else:
-            return 2 * np.pi * R / (num_R * R)
+            return 2 * np.pi / num_R
 
     def write_header(self, file):
         # 写入文件头部信息
@@ -409,14 +414,14 @@ class _init:
                 theta = theta - 2 * np.pi - dtheta_chain
 
             if self.Config.Dimend == 2:
-                x = round(Rchain * np.cos(theta) * self.sigma_equ, 5)
-                y = round(Rchain * np.sin(theta) * self.sigma_equ, 5)
+                x = np.around(Rchain * np.cos(theta) * self.sigma_equ, 5)
+                y = np.around(Rchain * np.sin(theta) * self.sigma_equ, 5)
             elif self.Config.Dimend == 3:
-                x = round(Rchain * np.sin(theta) * np.cos(phi) * self.sigma_equ, 5)
-                y = round(Rchain * np.sin(theta) * np.sin(phi) * self.sigma_equ, 5)
-                z = round(Rchain * np.cos(theta) * self.sigma_equ, 5)
-                #phi += dtheta_chain  # Update phi for 3D
+                x = np.around(Rchain * np.cos(phi) * np.cos(theta) * self.sigma_equ, 5)
+                y = np.around(Rchain * np.cos(phi) * np.sin(theta) * self.sigma_equ, 5)
+                z = np.around(Rchain * np.sin(phi) * self.sigma_equ, 5)
             theta += dtheta_chain
+
             # Write atom information
             atom_type = 2  # Default to "middle" of the chain
             if i == 0:
@@ -425,21 +430,30 @@ class _init:
                 atom_type = 3  # Tail
             file.write(f"{i + 1} 1 {atom_type} {x} {y} {z}\n")
 
+    def set_torus(self, R_torus, N_ring, N_torus=0):
+        theta = np.linspace(0, 2 * np.pi, int(N_ring))
+        phi = np.linspace(0, 2 * np.pi, int(N_torus)) if self.Config.Dimend == 3 else 0
+        theta, phi = np.meshgrid(theta, phi)
+
+        x =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.cos(theta), 5)
+        y =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.sin(theta), 5)
+        z =  np.around(R_torus * np.sin(phi), 5)
+
+        return np.vstack([x.flatten(), y.flatten(), z.flatten()]).T
+
     def write_anlus(self, file):
-        # 写入内环的原子信息
-        for i in range(int(self.num_Rin)):
-            theta = i * self.dtheta_in
-            x = round(self.Rin * np.cos(theta), 4)
-            y = round(self.Rin * np.sin(theta), 4)
-            z = 0.0
-            file.write(f"{self.N_monos+i+1} 1 4 {x} {y} {z}\n")
-        # 写入外环的原子信息
-        for i in range(int(self.num_Rout)):
-            theta = i * self.dtheta_out
-            x =  round(self.Rout * np.cos(theta), 4)
-            y =  round(self.Rout * np.sin(theta), 4)
-            z = 0.0
-            file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {x} {y} {z}\n")
+        self.particles = None
+        if self.Config.Dimend == 2:
+            outer_ring = self.set_torus(self.R_torus, self.num_Rout)
+            inner_ring = self.set_torus(-self.R_torus, self.num_Rin)
+            for i, coord in enumerate(inner_ring):
+                file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
+            for i, coord in enumerate(outer_ring):
+                file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {' '.join(map(str, coord))}\n")
+        elif self.Config.Dimend == 3:
+            torus = self.set_torus(self.R_torus, self.num_ring, self.num_torus)
+            for i, coord in enumerate(torus):
+                file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
 
     def periodic_distance(self, pos1, pos2):
         delta = np.abs(pos1 - pos2)
@@ -570,7 +584,7 @@ class _model:
             self.fix_cmd.update({"init": fix_wall_init + "\n" + fix2D, "data": fix_wall + "\n" + fix2D})
             self.fix_cmd["unfix"] = '\n'.join([unfix, unfix_wall, unfix2D])
         else:
-            self.bound = f'boundary        p p p',
+            self.bound = f'boundary        p p p'
             self.lh = ''
             self.fix_cmd.update({"init": fix2D, "data": fix2D})
             self.fix_cmd["unfix"]  = unfix + "\n" + unfix2D
