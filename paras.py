@@ -36,7 +36,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:2], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[0],
     'restart': [False, "equ"],
@@ -45,7 +45,7 @@ params = {
     'Temp': 1.0,
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': 3,
+    'Dimend': 2,
     #'Dimend': [2,3],
     'num_chains': 1,
 }
@@ -54,8 +54,8 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
-                          'Temp': [0.2, 0.1, 0.05, 0.01], #'Temp': [1.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.5, 2.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
+                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Temp': [1.0],
                           # 'Gamma': [0.1, 1, 10, 100]
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -81,17 +81,17 @@ class _config:
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'N_monos': [100], 'Xi': 0.0,
+                "Chain": {'N_monos': [250], 'Xi': 0.0,
                               'Fa': [1.0]},
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
-                "Anlus":{2: {'Rin': [10.0], 'Wid': [3.0]},
+                "Anlus":{2: {'Rin': [10.0], 'Wid': [5.0]},
                             3: {'Rin': [10.0], 'Wid': [10.0]},
                             },
-                "Rand": {2: {'Rin': 0.314,  'Wid': 1.0},
+                "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
-                "Slit": {2: {"Rin": [0.0], "Wid": [3.0]},
+                "Slit": {2: {"Rin": [0.0], "Wid": [4.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},
                          },
             },
@@ -273,7 +273,9 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
 
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
-        self.jump = self.set_box()   #set box
+        self.jump = False
+        self.set_box()   #set box
+
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
             print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
@@ -284,11 +286,15 @@ class _init:
             self.R_ring = self.Rin + self.Wid / 2
             self.R_torus = self.Wid / 2
 
-            self.num_Rin = np.ceil(self.particle_density * 2 * np.pi * self.Rin / self.sigma)
-            self.num_Rout = np.ceil(self.particle_density * 2 * np.pi * self.Rout / self.sigma)
-            self.num_ring = np.ceil(self.particle_density * 2 * np.pi * self.R_ring / self.sigma)
-            self.num_torus = np.ceil(self.particle_density * 2 * np.pi * self.R_torus / self.sigma)
-            self.num_obs = int(self.num_ring) * int(self.num_torus) if self.Config.Dimend == 3 else int(self.num_Rin + self.num_Rout)
+            self.Nobs_Rin, self.Nobs_Rout = self.N_ring(self.Rin, self.sigma), self.N_ring(self.Rout, self.sigma)
+            self.Nobs_ring, self.Nobs_torus = self.N_ring(self.R_ring, self.sigma), self.N_ring(self.R_torus, self.sigma)
+            self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(self.Nobs_Rin + self.Nobs_Rout)
+            self.Rring = self.N_circles()
+            theta = [np.linspace(0, 2 * np.pi, int(2 * np.pi * R / self.sigma_equ + 1))[:-1] for R in self.Rring]
+            if (self.num_monos > sum(itheta.size for itheta in theta)):
+                print("N_monos is too Long!")
+                logging.warning("N_monos is too Long!")
+                self.jump = True
 
         elif self.Config.Env == "Rand":
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
@@ -298,6 +304,7 @@ class _init:
             logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
             raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
 
+        #include Free chain
         self.sigma12 = self.sigma + 2 * self.Wid if (self.Env == "Rand") else 2 * self.sigma
         self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
         self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
@@ -317,11 +324,7 @@ class _init:
     def set_box(self):
         """计算盒子大小"""
         if self.Env == "Anlus":
-            self. Lbox = self.Rin + self.Wid + 1
-            if (self.num_monos > np.pi * (self.Wid * self.Wid + self.Wid * ( 2 * self.Rin - 1) - 2 * self.Rin) ):
-                print("N_monos is too Long!")
-                logging.warning("N_monos is too Long!")
-                return True
+            self.Lbox = self.Rin + self.Wid + 1
         else:
             if self.Config.Type == "Chain":
                 self.Lbox = self.N_monos/4 + 10
@@ -348,8 +351,16 @@ class _init:
             logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
             raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
 
-        return False
-    
+    def N_ring(self, Radius, sigma):
+        return np.ceil(self.particle_density * 2 * np.pi * Radius / sigma)
+
+    def N_circles(self):
+        inter = self.sigma_equ + 0.2
+        start = self.Rin + inter + 0.5
+        stop = self.Rout - inter
+        circles = int((stop - start) / inter) + 1
+        return np.linspace(start, start + inter * circles, circles + 1)
+
     def set_dtheta(self, R, num_R=None):
         """计算角度间隔"""
         if num_R is None:
@@ -360,6 +371,17 @@ class _init:
             return self.sigma_equ/R
         else:
             return 2 * np.pi / num_R
+
+    def set_torus(self, R_torus, Nobs_ring, Nobs_torus=0):
+        theta = np.linspace(0, 2 * np.pi, int(Nobs_ring+1))[:-1]
+        phi = np.linspace(0, 2 * np.pi, int(Nobs_torus+1))[:-1] if self.Config.Dimend == 3 else 0
+        theta, phi = np.meshgrid(theta, phi)
+
+        x =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.cos(theta) * self.sigma, 5)
+        y =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.sin(theta) * self.sigma, 5)
+        z =  np.around(R_torus * np.sin(phi) * self.sigma, 5)
+
+        return np.vstack([x.flatten(), y.flatten(), z.flatten()]).T
 
     def write_header(self, file):
         # 写入文件头部信息
@@ -396,9 +418,82 @@ class _init:
         - theta0: initial angle
         - dtheta_chain: change in angle per monomer
         """
+        #inlude Free chain
+        file.write("Atoms\n\n")
+        if self.Config.Dimend == 2:
+            chain_coords = []
+            theta0 = 0
+            for iRring in self.Rring:
+                theta = np.linspace(theta0, 2 * np.pi+theta0, int(2 * np.pi * iRring / self.sigma_equ + 1))[:-1]
+                x = np.around(iRring * np.cos(theta) * self.sigma_equ, 5)
+                y = np.around(iRring * np.sin(theta) * self.sigma_equ, 5)
+                z = np.zeros_like(x)
+                chain_coords.append(np.column_stack([x, y, z]))
+                theta0 += theta[0] - theta[1]
+            chain = np.vstack(chain_coords)[:self.N_monos]
+            for i, coord in enumerate(chain):
+                atom_type = 2  # Default to "middle" of the chain
+                if i == 0:
+                    atom_type = 1  # Head
+                elif i == self.N_monos - 1:
+                    atom_type = 3  # Tail
+                file.write(f"{i + 1} 1 {atom_type} {' '.join(map(str, coord))}\n")
+
+        elif self.Config.Dimend == 3:
+            inter = self.sigma_equ + 0.2
+            start = self.Rin + inter + 0.5
+            stop = self.Rout - inter
+            circles = int((stop - start) / inter) + 1
+            self.Rchain = np.linspace(start, start + inter * circles, circles + 1)
+            self.Rring = np.linspace(start, start + inter * circles, circles + 1)
+            Rchain = self.R_torus - self.sigma - 0.5
+            Nchain = self.N_ring(Rchain, self.sigma_equ)
+            Rring = self.R_ring + self.sigma + 0.5
+            Nring = self.N_ring(Rring, self.sigma_equ)
+            Rring += self.sigma_equ + 0.2
+            Rchain -= self.sigma_equ + 0.2
+
+            chain_coords = []
+            theta0 = 0
+            phi0 = 0
+            for iRchain in self.Rchain:
+                phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1]
+                for iphi in phi:
+                    for iRring in self.Rring:
+                        theta = np.linspace(theta0, 2 * np.pi+theta0, int(Nring + 1))[:-1] if self.Config.Dimend == 3 else 0
+                        x = np.around((iRring + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
+                        y = np.around((iRring + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
+                        z = np.around(iRchain * np.sin(iphi) * self.sigma_equ, 5)
+                        chain_coords.append(np.column_stack([x, y, z]))
+                        theta0 += theta[0] - theta[1]
+                phi0 += phi[0] - phi[1]
+
+            chain = np.vstack(chain_coords)[:self.N_monos]
+            for i, coord in enumerate(chain):
+                atom_type = 2  # Default to "middle" of the chain
+                if i == 0:
+                    atom_type = 1  # Head
+                elif i == self.N_monos - 1:
+                    atom_type = 3  # Tail
+                file.write(f"{i + 1} 1 {atom_type} {' '.join(map(str, coord))}\n")
+
+    def oldwrite_chain(self, file):
+        """
+        Writes chain data into the file.
+
+        Parameters:
+        - file: file object to write into
+        - system_dim: dimension of the system, either 2 or 3
+        - chain_type: type of the chain, either 'polymer' or 'bacteria'
+        - N_monos: number of monomers in the chain
+        - sigma_equ: equilibrium bond length
+        - Rchain: initial radius for polymer chain
+        - theta0: initial angle
+        - dtheta_chain: change in angle per monomer
+        """
 
         file.write("Atoms\n\n")
-        Rchain = self.Rchain
+        Rchain = self.Rchain + 0.2
         dtheta_chain = self.dtheta_chain
         # 写入链的原子信息
         circle = 1
@@ -430,28 +525,17 @@ class _init:
                 atom_type = 3  # Tail
             file.write(f"{i + 1} 1 {atom_type} {x} {y} {z}\n")
 
-    def set_torus(self, R_torus, N_ring, N_torus=0):
-        theta = np.linspace(0, 2 * np.pi, int(N_ring))
-        phi = np.linspace(0, 2 * np.pi, int(N_torus)) if self.Config.Dimend == 3 else 0
-        theta, phi = np.meshgrid(theta, phi)
-
-        x =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.cos(theta), 5)
-        y =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.sin(theta), 5)
-        z =  np.around(R_torus * np.sin(phi), 5)
-
-        return np.vstack([x.flatten(), y.flatten(), z.flatten()]).T
-
     def write_anlus(self, file):
         self.particles = None
         if self.Config.Dimend == 2:
-            outer_ring = self.set_torus(self.R_torus, self.num_Rout)
-            inner_ring = self.set_torus(-self.R_torus, self.num_Rin)
+            outer_ring = self.set_torus(self.R_torus, self.Nobs_Rout)
+            inner_ring = self.set_torus(-self.R_torus, self.Nobs_Rin)
             for i, coord in enumerate(inner_ring):
                 file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
             for i, coord in enumerate(outer_ring):
-                file.write(f"{int(self.N_monos+self.num_Rin+i+1)} 1 5 {' '.join(map(str, coord))}\n")
+                file.write(f"{int(self.N_monos+self.Nobs_Rin+i+1)} 1 5 {' '.join(map(str, coord))}\n")
         elif self.Config.Dimend == 3:
-            torus = self.set_torus(self.R_torus, self.num_ring, self.num_torus)
+            torus = self.set_torus(self.R_torus, self.Nobs_ring, self.Nobs_torus)
             for i, coord in enumerate(torus):
                 file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
 
@@ -472,7 +556,8 @@ class _init:
     def write_rand(self, file):
         # obstacles: harsh grid and size
         self.obs_positions = []
-        self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
+        self.bound = self.Lbox
+        #self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
         self.hash_grid = defaultdict(list)
         self.grid_size = 2 * self.Wid
         for i in range(self.num_obs):
