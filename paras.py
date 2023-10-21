@@ -14,6 +14,7 @@ import numpy as np
 from numba import vectorize, float64
 from scipy.interpolate import splrep, splev
 from scipy.stats import norm
+from scipy.stats import gaussian_kde
 from scipy.spatial import KDTree
 from collections import defaultdict
 
@@ -24,6 +25,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.backends.backend_pdf import PdfPages as PdfPages
 from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
+import warnings
+warnings.filterwarnings('ignore')
 logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #-----------------------------------Const-------------------------------------------
@@ -36,16 +39,16 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:2], 'Envs': envs[2:3]},
+    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
-    'task': tasks[0],
+    'task': tasks[1],
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
     'Trun': 5,
-    'Dimend': 2,
+    'Dimend': 3,
     #'Dimend': [2,3],
     'num_chains': 1,
 }
@@ -54,8 +57,8 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.5, 2.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
-                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Temp': [1.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
+                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100]
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -63,10 +66,10 @@ class _config:
                          # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                          },
 
-                "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
-                              3: {'Rin': [0.0], 'Wid': [0.0]},
-                              #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
-                              #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                "Anlus": {#2: {'Rin': [0.0], 'Wid': [0.0]},
+                              #3: {'Rin': [0.0], 'Wid': [0.0]},
+                              2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                              3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
                 "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
                             #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
@@ -81,12 +84,15 @@ class _config:
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'N_monos': [250], 'Xi': 0.0,
-                              'Fa': [1.0]},
+                "Chain": {'N_monos': [100], 'Xi': 0.0,
+                              'Fa': [1.0],
+                              'Temp': [0.2],
+                          },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
-                "Anlus":{2: {'Rin': [10.0], 'Wid': [5.0]},
-                            3: {'Rin': [10.0], 'Wid': [10.0]},
+                "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
+                            3: {'Rin': [0.0], 'Wid': [0.0]},
+                            #3: {'Rin': [5.0], 'Wid': [5.0]},
                             },
                 "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
@@ -121,7 +127,7 @@ class _config:
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        if HOST == "Darwin":
+        if HOST == "Darwin" and params['task'] == "Simus":
             Run.Tdump = Run.Tdump_ref
 
         Run.Tinit = Run.Frames * Run.Tdump_ref // 5
@@ -268,11 +274,11 @@ class _init:
         self.Ks = 300.0
         self.Config, self.Trun = Config, Trun
         self.Rin, self.Wid = Rin, Wid
-        self.particle_density = 2 if self.Config.Dimend == 3 else 2
+        self.particle_density = 2
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
-
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
+        self.Rring = self.N_circles()
         self.jump = False
         self.set_box()   #set box
 
@@ -281,36 +287,28 @@ class _init:
             print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
             logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
 
-        if self.Config.Env == "Anlus":
+        if self.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
             self.R_ring = self.Rin + self.Wid / 2
             self.R_torus = self.Wid / 2
 
-            self.Nobs_Rin, self.Nobs_Rout = self.N_ring(self.Rin, self.sigma), self.N_ring(self.Rout, self.sigma)
-            self.Nobs_ring, self.Nobs_torus = self.N_ring(self.R_ring, self.sigma), self.N_ring(self.R_torus, self.sigma)
+            self.Nobs_Rin, self.Nobs_Rout = self.N_ring(self.particle_density, self.Rin, self.sigma), self.N_ring(self.particle_density, self.Rout, self.sigma)
+            self.Nobs_ring, self.Nobs_torus = self.N_ring(self.particle_density, self.R_ring, self.sigma), self.N_ring(self.particle_density, self.R_torus, self.sigma)
             self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(self.Nobs_Rin + self.Nobs_Rout)
-            self.Rring = self.N_circles()
             theta = [np.linspace(0, 2 * np.pi, int(2 * np.pi * R / self.sigma_equ + 1))[:-1] for R in self.Rring]
-            if (self.num_monos > sum(itheta.size for itheta in theta)):
+            if self.Config.Dimend == 2 and (self.num_monos > sum(itheta.size for itheta in theta)):
                 print("N_monos is too Long!")
                 logging.warning("N_monos is too Long!")
                 self.jump = True
 
-        elif self.Config.Env == "Rand":
+        elif self.Env == "Rand":
             self.num_obs = int(np.ceil(self.Rin * self.v_box / self.v_obs))
-        elif self.Config.Env == "Slit":
-            self.num_obs = 0
         else:
-            logging.error(f"Error: wrong environment! => self.Env = {self.Env}")
-            raise ValueError(f"Error: wrong environment! => self.Env = {self.Env}")
+            self.num_obs = 0
 
         #include Free chain
         self.sigma12 = self.sigma + 2 * self.Wid if (self.Env == "Rand") else 2 * self.sigma
-        self.Rchain = self.Rin + self.sigma + 0.5 if self.Env == "Anlus" else (self.Rin + self.sigma_equ + self.N_monos * self.sigma_equ/(2 * np.pi))
-        self.dtheta_chain = self.set_dtheta(self.Rchain) if self.Env == "Anlus" else self.set_dtheta(self.Rchain, self.N_monos)
-        self.theta0 = - 2 * self.dtheta_chain if self.Env == "Anlus" else - 4 * self.dtheta_chain
         self.total_particles = self.num_obs + self.num_monos
-
         if self.Config.Type == "Ring":
             self.bonds = self.num_monos - self.num_chains*0
             self.angles = self.num_monos - self.num_chains*1
@@ -351,26 +349,15 @@ class _init:
             logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
             raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
 
-    def N_ring(self, Radius, sigma):
-        return np.ceil(self.particle_density * 2 * np.pi * Radius / sigma)
+    def N_ring(self, density, Radius, sigma):
+        return np.ceil(density * 2 * np.pi * Radius / sigma)
 
     def N_circles(self):
         inter = self.sigma_equ + 0.2
-        start = self.Rin + inter + 0.5
-        stop = self.Rout - inter
-        circles = int((stop - start) / inter) + 1
+        start = self.Rin + inter + 0.5 if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+        stop = self.Rin + self.Wid - inter
+        circles = int((stop - start) / inter) + 1 if self.Env == "Anlus" else 0
         return np.linspace(start, start + inter * circles, circles + 1)
-
-    def set_dtheta(self, R, num_R=None):
-        """计算角度间隔"""
-        if num_R is None:
-            return 2 * np.pi / np.floor(2 * np.pi * R / self.sigma_equ)
-        elif num_R == 0:
-            return 0
-        elif num_R < 10:
-            return self.sigma_equ/R
-        else:
-            return 2 * np.pi / num_R
 
     def set_torus(self, R_torus, Nobs_ring, Nobs_torus=0):
         theta = np.linspace(0, 2 * np.pi, int(Nobs_ring+1))[:-1]
@@ -441,33 +428,25 @@ class _init:
 
         elif self.Config.Dimend == 3:
             inter = self.sigma_equ + 0.2
-            start = self.Rin + inter + 0.5
-            stop = self.Rout - inter
-            circles = int((stop - start) / inter) + 1
-            self.Rchain = np.linspace(start, start + inter * circles, circles + 1)
-            self.Rring = np.linspace(start, start + inter * circles, circles + 1)
-            Rchain = self.R_torus - self.sigma - 0.5
-            Nchain = self.N_ring(Rchain, self.sigma_equ)
-            Rring = self.R_ring + self.sigma + 0.5
-            Nring = self.N_ring(Rring, self.sigma_equ)
-            Rring += self.sigma_equ + 0.2
-            Rchain -= self.sigma_equ + 0.2
+            stop = (self.Wid- self.sigma_equ - 0.2) / 2  if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+            circles = int(stop / inter) + 1 if self.Env == "Anlus" else 0
 
             chain_coords = []
-            theta0 = 0
-            phi0 = 0
-            for iRchain in self.Rchain:
-                phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1]
+            theta0, phi0 = 0, 0
+            for iRchain in np.linspace(0.5, inter * circles, circles+1)[:-1][::-1]:
+                Nchain = self.N_ring(1, iRchain, self.sigma_equ)
+                phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1] if self.Config.Dimend == 3 else [0]
                 for iphi in phi:
-                    for iRring in self.Rring:
-                        theta = np.linspace(theta0, 2 * np.pi+theta0, int(Nring + 1))[:-1] if self.Config.Dimend == 3 else 0
-                        x = np.around((iRring + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
-                        y = np.around((iRring + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
-                        z = np.around(iRchain * np.sin(iphi) * self.sigma_equ, 5)
-                        chain_coords.append(np.column_stack([x, y, z]))
-                        theta0 += theta[0] - theta[1]
+                    Nring = self.N_ring(1, self.R_ring + iRchain * np.cos(iphi), self.sigma_equ)
+                    theta = np.linspace(theta0, 2 * np.pi+theta0, int(Nring + 1))[:-1]
+                    x = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
+                    y = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
+                    z = np.full_like(theta, np.around(iRchain * np.sin(iphi) * self.sigma_equ, 5))
+                    chain_coords.append(np.column_stack([x, y, z]))
+                    theta0 += theta[0] - theta[1]
                 phi0 += phi[0] - phi[1]
 
+            # Prepare the chain for writing to file
             chain = np.vstack(chain_coords)[:self.N_monos]
             for i, coord in enumerate(chain):
                 atom_type = 2  # Default to "middle" of the chain
@@ -971,24 +950,35 @@ class _path:
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
         self.dir_data = os.path.join(self.simus, self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
-        subprocess.run(f"mkdir -p {self.dir_data}", shell=True)
-        shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
-        print(f"dir_data => {self.dir_data}")
-        logging.info(f"dir_data => {self.dir_data}")
         #Figures
         self.fig1 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}_{self.Init.Env}', self.dir3)
-        subprocess.run(f"mkdir -p {self.fig1}", shell=True)
+        self.lmp_trj = os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")
+        file_exists = os.path.exists(self.lmp_trj)
 
-        if os.path.exists(os.path.join(self.dir_data, f"{self.Run.Trun:03}.lammpstrj")):
-            return True
-        else:
-            return False
+        if params['task'] == "Simus":
+            os.makedirs(self.dir_data, exist_ok=True)
+            shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_data, "paras.py"))
+            message = f"dir_data => {self.dir_data}"
+            print(message)
+            logging.info(message)
+        elif params['task'] == "Anas":
+            if file_exists:
+                subprocess.run(f"mkdir -p {self.fig1}", shell=True)
+            else:
+                message = f"File doesn't exist in data: {self.lmp_trj}"
+                print(message)
+                logging.info(message)
+
+        return file_exists
+
 #############################################################################################################
 
 class _plot:
-    def __init__(self, Path):
+    def __init__(self, Path, bins = 20):
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
         self.chunk = 9
+        self.num_bins = bins
+        self.num_pdf = bins*10
 
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
@@ -997,7 +987,7 @@ class _plot:
             3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
         }
         try:
-            return ["id"] + dump[self.Config.Dimend].split(" ")
+            return dump[self.Config.Dimend].split(" ")
         except KeyError:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
@@ -1005,10 +995,11 @@ class _plot:
     def read_data(self):
         dump = self.set_dump()
         self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
-        logging.info(f"==> Reading {ifile}.lammpstrj file: ......")
         # read the lammpstrj files with 2001 frames
+        print(f"{self.Path.dir_data}")
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun + 1)]):
             dir_file = os.path.join(f"{self.Path.dir_data}", f"{ifile}.lammpstrj")
+            logging.info(f"==> Reading {ifile}.lammpstrj file: ......")
             print(f"==> Reading {ifile}.lammpstrj file: ......")
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
@@ -1019,8 +1010,8 @@ class _plot:
                 logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
                 raise ValueError(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
-                logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
-                raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Fradfmes} * {self.Run.Tdump}")
+                logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
+                raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
             skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
@@ -1033,21 +1024,84 @@ class _plot:
             #np.save(self.Path.dir_data, data)
         return self.data
 
-    def plot1(self):
-        fig_save = os.path.join(f"{self.Path.fig1}", "r(S,T)Dist")
+    def set_dict(self, dict, keys):
+        temp = {
+            keys[0]: dict[keys[0]],
+            keys[1]: dict[keys[1]],
+            keys[2]: dict[keys[2]],
+        }
+        return temp
+
+    def set_data(self):
+        # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
+        # data[ifile][iframe][iatom][xu, yu]
+        self.data_org = self.read_data()
+        self.data_com = self.data_org - np.expand_dims(np.mean(self.data_org, axis=2), axis=2)
+        self.data = np.mean(self.data_com, axis=0)[:100, ...]
+        #self.data = np.mean(self.data_org, axis=0)
+        frames, atoms, coords = self.data.shape
+        self.data_dict = {}
+        if atoms != self.Init.num_monos or frames != self.Run.Frames+1:
+            message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
+            print(message)
+            logging.info(message)
+        times, ids, modules = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1), np.linalg.norm(self.data[ ..., :], axis = -1)
+
+        dict0 = {
+            "x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms),],  # Frame numbers (t coordinate)
+            "y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
+            "z": [modules, modules.flatten(),],  # Magnitude (r coordinate)
+        }
+        dict = {
+            "t": [times, np.repeat(times, atoms),],  # Frame numbers (t coordinate)
+            "s": [ids, np.tile(ids, frames),],  # Particle IDs (s coordinate)
+            "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
+        }
+        self.data_dict = [
+            self.set_dict(dict0, ['x', 'y', 'z']),
+            self.set_dict(dict, ['t', 's', 'r']),
+            self.set_dict(dict, ['r', 't', 's']),
+             self.set_dict(dict, ['r', 's', 't']),]
+        return self.data_dict
+
+    def original(self, data_dict):
+        # ----------------------------> prepare data <----------------------------#
+        print("prepare data......")
+        keys, values = list(data_dict.keys()), list(data_dict.values())
+        x_label, y_label, z_label = keys[0], keys[1], keys[2]
+        x, y, z = values[0][1], values[1][1], values[2][1]
+        # Convert the data to a DataFrame for easier manipulation
+        df_org = pd.DataFrame({x_label: x, y_label: y, z_label: z})
+        grouped = df_org.groupby([f'{x_label}', f'{y_label}'])
+        mean_z, std_z, count_z = grouped[f'{z_label}'].mean().reset_index(), grouped[f'{z_label}'].std().fillna(0).reset_index(), grouped[f'{z_label}'].count().reset_index()
+        df = pd.DataFrame({
+            f'{x_label}': mean_z[f'{x_label}'],
+            f'{y_label}': mean_z[f'{y_label}'],
+            'mean_z': mean_z[f'{z_label}'],
+            'std_z': std_z[f'{z_label}'],
+            'count_z': count_z[f'{z_label}']
+        })
+        mid_x, mid_y = df_org.loc[(df_org[f'{x_label}'] - (df_org[f'{x_label}'].max() + df_org[f'{x_label}'].min()) / 2).abs().idxmin()][f'{x_label}'], df_org.loc[(df_org[f'{y_label}'] - (df_org[f'{y_label}'].max() + df_org[f'{y_label}'].min()) / 2).abs().idxmin()][f'{y_label}']
+        df_org_slicex, df_org_slicey = df_org[df_org[f'{x_label}'] == mid_x][[f'{y_label}', f'{z_label}']], df_org[df_org[f'{y_label}'] == mid_y][[f'{x_label}', f'{z_label}']]
+        df_slicex, df_slicey = df[df[f'{x_label}'] == mid_x].sort_values(by=f'{y_label}'), df[df[f'{y_label}'] == mid_y].sort_values(by=f'{x_label}')
+
+        # Find unique x and y values to create a grid
+        unique_x = np.sort(df[f'{x_label}'].unique())
+        unique_y = np.sort(df[f'{y_label}'].unique())
+        grid_z = np.empty((len(unique_y), len(unique_x)))
+        grid_z.fill(np.nan)
+        for index, row in df.iterrows():
+            x_idx = np.where(unique_x == row[f'{x_label}'])[0][0]
+            y_idx = np.where(unique_y == row[f'{y_label}'])[0][0]
+            grid_z[y_idx, x_idx] = row['mean_z']
+
+        #----------------------------> figure settings <----------------------------#
+        print("plotting……")
+        fig_save = os.path.join(f"{self.Path.fig1}", f"{z_label}({x_label},{y_label})Org")
         pdf = PdfPages(f"{fig_save}.pdf")
         print(f"{fig_save}.pdf")
         logging.info(f"{fig_save}.pdf")
-        # ----------------------------> read data <----------------------------#
-        # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
-        self.data = self.read_data()
-        ids = self.data[0, 0, :, 0]
-        times = np.arange((self.Run.Frames+1))*self.Run.dt*self.Run.Tdump
-        data = np.linalg.norm(self.data[0, ..., 1:3], axis = -1)
-        at_id = self.Init.num_monos//2
-        at_time = self.Run.Frames//2
 
-        #----------------------------> figure settings <----------------------------#
         plt.clf()
         plt.rc('text', usetex=True)
         plt.rc('font', family='Times New Roman')
@@ -1056,70 +1110,202 @@ class _plot:
         plt.rcParams['xtick.labelsize'] = 15
         plt.rcParams['ytick.labelsize'] = 15
 
-        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        # ----------------------------> plot figure<----------------------------#
+        # plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
         # Create the layout
-        fig = plt.figure(figsize=(15, 15))
-        gs = GridSpec(4, 4, figure=fig)
+        fig = plt.figure(figsize=(18, 9))
         fig.subplots_adjust(wspace=0.5, hspace=0.5)
-        ax_a = fig.add_subplot(gs[0:2, 0:2])
-        ax_b = fig.add_subplot(gs[0:2, 2], sharey=ax_a)
-        ax_c = fig.add_subplot(gs[0:2, 3], sharey=ax_a)
-        ax_d = fig.add_subplot(gs[2, 0:2], sharex=ax_a)
-        ax_e = fig.add_subplot(gs[3, 0:2], sharex=ax_a)
-        ax_f = fig.add_subplot(gs[2:, 2:])
+        gs = GridSpec(2, 4, figure=fig)
+        ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
+        ax_b = fig.add_subplot(gs[0, 2])
+        ax_c = fig.add_subplot(gs[0, 3], sharey=ax_b)
+        ax_d = fig.add_subplot(gs[1, 2], sharex=ax_b)
+        ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
 
         # ----------------------------> plot figure<----------------------------#
-        cmap = ax_a.pcolormesh(times[:self.Run.Frames+1], np.arange(1, self.Init.num_monos+1), data.T, shading='auto', cmap='rainbow')
-        # ax_b: Distribution of magnitudes for a specific time frame
-        ax_b.plot(data[at_time, :], ids, 'k')
-        # ax_c: Distribution of magnitudes across all time frames for a specific atom
-        #ax_c.hist(data[:, at_id], bins=20, density=True, orientation='horizontal')
-        pdf_atoms = norm.pdf(np.arange(self.Init.num_monos), 25, 5)
-        ax_c.plot(pdf_atoms, np.arange(1, self.Init.num_monos + 1), 'r')
-        # ax_d: Magnitude vs time for a specific atom (e.g., atom 50)
-        ax_d.plot(times, data[:, at_id], 'b')
-        # ax_e: Distribution of magnitudes across all atoms for a specific time frame (e.g., 50th frame)
-        pdf_time = norm.pdf(times, 5, 1)
-        ax_e.plot(times, pdf_time, 'r')
-        # ax_f: Overall distribution of magnitudes
-        ax_f.plot(np.sort(data.ravel()), np.linspace(0, 1, (self.Run.Frames+1) * self.Init.num_monos), 'k')
-        ax_f2 = ax_f.twinx()
-        pdf_f_times = np.histogram(data.flatten(), bins=50, density=True)[0]
-        ax_f2.bar(range(len(pdf_f_times)), pdf_f_times, color='c', alpha=0.5)
+        print("plotting ax_ab......")
+        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        sc_a = ax_a.scatter(x, y, z, c=z, cmap='rainbow', vmin=z.min(), vmax=z.max())
+        sc_b = ax_b.scatter(df[f'{x_label}'], df[f'{y_label}'], c=df['mean_z'], s=(df['std_z'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=z.min(), vmax=z.max())
+        print("plotting ax_cd......")
+        sc_c = ax_c.scatter(df_org_slicex[f'{z_label}'], df_org_slicex[f'{y_label}'], color='k')
+        ax_c.errorbar(df_slicex['mean_z'], df_slicex[f'{y_label}'], yerr=df_slicex['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+
+        sc_d = ax_d.scatter(df_org_slicey[f'{x_label}'], df_org_slicey[f'{z_label}'], color='k')
+        ax_d.errorbar(df_slicey[f'{x_label}'], df_slicey['mean_z'], xerr=df_slicey['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+
+        print("plotting ax_e......")
+        cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=z.min(), vmax=z.max())
 
         # ----------------------------> adding <----------------------------#
-        ax_a.axhline(y=at_id, linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
-        ax_a.axvline(x=at_time*self.Run.dt*self.Run.Tdump, linestyle='--', lw = 1.5, color='black')  # Selected Time frame
+        ax_b.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        ax_b.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+        ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+
+        axpos = ax_a.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+        cax = fig.add_axes(caxpos)
+        cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
+        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.set_xlabel(f'{z_label}', fontsize=20)
+        for i, txt in enumerate(df['count_z']):
+            if txt > 1:
+                ax_b.annotate(str(txt), (df[f'{x_label}'].iloc[i], df[f'{y_label}'].iloc[i]))
+
+        # ----------------------------> axis settings <----------------------------#
+        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
+        ax_a.set_xlabel(f'{x_label}', fontsize=20)
+        ax_a.set_xlim(min(x), max(x))
+        ax_a.set_ylabel(f'{y_label}', fontsize=20)
+        ax_a.set_ylim(min(y), max(y))
+        ax_a.set_zlabel(f'{z_label}', fontsize=20)
+        ax_a.set_zlim(min(z), max(z))
+
+        ax_b.set_title(f'<{z_label}> in {x_label}-{y_label} Space', loc='right', fontsize=20)
+        ax_b.set_xlabel(f'{x_label}', fontsize=20)
+        ax_b.set_xlim(min(x), max(x))
+        ax_b.set_ylabel(f'{y_label}', fontsize=20)
+        ax_b.set_ylim(min(y), max(y))
+
+        ax_c.set_title(f'${x_label}_0$={mid_x}', loc='right', fontsize=20)
+        ax_c.set_xlabel(f'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
+        ax_c.set_xlim(min(z), max(z))
+        ax_c.set_ylabel(f'{y_label}', fontsize=20)
+
+        ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
+        ax_d.set_xlabel(f'{x_label}', fontsize=20)
+        ax_d.set_ylabel(f'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
+        ax_d.set_ylim(min(z), max(z))
+
+        ax_e.set_title(f'<{z_label}>', loc='right', fontsize=20)
+        ax_e.set_xlabel(f'{x_label}', fontsize=20)
+        ax_e.set_ylabel(f'${y_label}$', fontsize=20)
+        # ----------------------------> linewidth <----------------------------#
+        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)' ]):
+            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                        ha="center", fontsize=20)
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            # ----------------------------> axes lines <----------------------------#
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+
+        print("saving pdf......")
+        # ----------------------------> save fig <----------------------------#
+        fig1 = plt.gcf()
+        pdf.savefig(fig1, dpi=1000, transparent=True)
+        pdf.close()
+
+        #print("saving png......")
+        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+        #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        #plt.show()
+        plt.close()
+        # -------------------------------Done!----------------------------------------#
+
+    def distribution(self, data_dict):
+        # ----------------------------> prepare data <----------------------------#
+        bin_id, pdf_id = self.num_bins//2, self.num_pdf//2
+        keys, values = list(data_dict.keys()), list(data_dict.values())
+        x_label, y_label, z_label = keys[0], keys[1], keys[2]
+        x, y, z = values[0][1], values[1][1], values[2][1]
+
+        # Create a 2D histogram and bin centers
+        hist_x, x_bins = np.histogram(x, bins=self.num_bins, density=True)
+        hist_y, y_bins = np.histogram(y, bins=self.num_bins, density=True)
+        x_bin_centers, y_bin_centers = (x_bins[:-1] + x_bins[1:]) / 2, (y_bins[:-1] + y_bins[1:]) / 2
+        x_range, y_range = np.linspace(min(x), max(x), self.num_pdf), np.linspace(min(y), max(y), self.num_pdf)
+        pdf_x, pdf_y = gaussian_kde(x).evaluate(x_range), gaussian_kde(y).evaluate(y_range)
+        hist_2D = np.histogram2d(x, y, bins=[x_bins, y_bins], density=True)[0]
+        #specific y or x
+        hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
+
+        #----------------------------> figure settings <----------------------------#
+        fig_save = os.path.join(f"{self.Path.fig1}", f"f^{z_label}({x_label},{y_label})Dist")
+        pdf = PdfPages(f"{fig_save}.pdf")
+        print(f"{fig_save}.pdf")
+        logging.info(f"{fig_save}.pdf")
+
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='Times New Roman')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+
+        # ----------------------------> plot figure<----------------------------#
+        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        # Create the layout
+        fig = plt.figure(figsize=(18, 9))
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
+        gs = GridSpec(2, 4, figure=fig)
+        ax_a = fig.add_subplot(gs[0:2, 0:2])
+        ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
+        ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
+        ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
+        ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
+
+        # Plot fz(x,y)
+        cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
+        # Plot Fz(x;y0)
+        ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+
+        # Plot Fzy(x)
+        ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+        ax_c.plot(x_range, pdf_x, 'r', label='PDF')
+        # Plot Fz(y;x0)
+        ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+        # Plot Fzx(y)
+        ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+        ax_e.plot(pdf_y, y_range, 'r', label='PDF')
+
+        # ----------------------------> adding <----------------------------#
+        ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
+        ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
 
         axpos = ax_a.get_position()
         caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
         cax = fig.add_axes(caxpos)
         cbar = plt.colorbar(cmap, cax=cax)
         cbar.ax.yaxis.set_ticks_position('left')
-        cbar.ax.set_xlabel(r'$r$', fontsize=20)
+        cbar.ax.set_xlabel(f"$f^{z_label}({x_label},{y_label})$", fontsize=20)
+
         # ----------------------------> axis settings <----------------------------#
-        ax_a.set_xlabel(r"$t$", fontsize=20)
-        ax_a.set_ylabel(r"$s$", fontsize=20)
-        ax_b.set_xlabel(r'$r_t(s)$', fontsize=20)
-        ax_b.set_ylabel(r'$s$', fontsize=20)
-        ax_b.set_title(f'Time = {int(at_time*self.Run.dt*self.Run.Tdump)}', loc='right')
-        ax_c.set_xlabel(r'$p_t(s)$', fontsize=20)
-        ax_c.set_ylabel(r'$s$', fontsize=20)
-        ax_c.set_title(f'probability', loc='right')
-        ax_d.set_xlabel(r"$t$", fontsize=20)
-        ax_d.set_ylabel(r'$r_s(t)$', fontsize=20)
-        ax_d.set_title(f'Atom = {at_id}', loc='right')
-        ax_e.set_xlabel(r"$t$", fontsize=20)
-        ax_e.set_ylabel(r'$p_s(t)$', fontsize=20)
-        ax_e.set_title('probability', loc='right')
-        ax_f.set_xlabel(r'$r$', fontsize=20)
-        ax_f.set_ylabel(r'$p_s(r)$', fontsize=20)
-        ax_f2.set_ylabel(r'$p_t(r)$', fontsize=20)
-        ax_f.set_title(r'PDF across modules (Time)', loc='right')
+        ax_a.set_title(f"$f^{z_label}({x_label},{y_label})$", fontsize=20)
+        ax_a.set_xlabel(f"{x_label}", fontsize=20)
+        ax_a.set_ylabel(f"{y_label}", fontsize=20)
+        ax_a.set_xlim(x_bin_centers[0], x_bin_centers[-1])
+        ax_a.set_ylim(y_bin_centers[0], y_bin_centers[-1])
+
+        ax_b.set_title(f"${y_label}_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+        ax_b.set_xlabel(f"{x_label}", fontsize=20)
+        ax_b.tick_params(axis='x', rotation=45)
+        ax_b.set_ylabel(f"$f^{z_label}({x_label}; {y_label}_0)$", fontsize=20)
+        ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
+
+        ax_c.set_title("Distribution", loc='right', fontsize=20)
+        ax_c.set_xlabel(f"{x_label}", fontsize=20)
+        ax_c.tick_params(axis='x', rotation=45)
+        ax_c.set_ylabel(f"$f^{z_label}_{y_label}({x_label})$", fontsize=20)
+        ax_c.set_ylim(0, max(hist_x) *1.1)
+
+        ax_d.set_title(f"${x_label}_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+        ax_d.set_xlabel(f"$f^{z_label}({y_label}; {x_label}_0)$", fontsize=20)
+        ax_d.set_ylabel(f"{y_label}", fontsize=20)
+        ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
+
+        ax_e.set_title('Distribution', loc='right', fontsize=20)
+        ax_e.set_xlabel(f"$f^{z_label}_{x_label}({y_label})$", fontsize=20)
+        ax_e.set_ylabel(f"{y_label}", fontsize=20)
+        ax_e.set_xlim(0, max(hist_y)*1.1)
 
         # ----------------------------> linewidth <----------------------------#
-        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e, ax_f], ['(a)', '(b)', '(c)', '(d)', '(e)', '(f)']):
-            ax.annotate(label, (-0.1, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
+            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
             ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
             ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
             # ----------------------------> axes lines <----------------------------#
@@ -1132,13 +1318,13 @@ class _plot:
         # ----------------------------> save fig <----------------------------#
         #plt.tight_layout()
         fig1 = plt.gcf()
-        #pdf.savefig(fig1, dpi=1000, transparent=True)
-        #pdf.close()
+        pdf.savefig(fig1, dpi=1000, transparent=True)
+        pdf.close()
 
         #print("saving png......")
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
         #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        plt.show()
+        #plt.show()
         plt.close()
         # -------------------------------Done!----------------------------------------#
 
@@ -1147,6 +1333,16 @@ class _plot:
         print("-----------------------------------Done!--------------------------------------------")
     def Rg():
         print("-----------------------------------Done!--------------------------------------------")
+
+    def plot(self):
+        for idata in self.set_data():
+            # original
+            timer.start()
+            self.original(idata)
+            timer.stop("idata")
+            # distribution
+            #self.distribution(idata)
+        print(">>>>>>>>>>>>>>>>>>>Done!--------------------------------------------")
 #############################################################################################################
 
 class Timer:

@@ -106,7 +106,39 @@ class Reorganize:
         # 如果运行到这里，说明所有需要重命名的文件夹都已经处理完毕
         print("All folders have been renamed.")
         logging.info("All folders have been renamed.")
+
 ##############################################################################
+    def merge_files(self):
+        logging.basicConfig(filename='Files.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        print(f"Merge folders……")
+        logging.info(f"\n\nMerge folders……")
+        for dirpath in os.scandir(self.start_path):
+            if ('Backup' not in dirpath.path) and (dirpath.is_dir()):
+                for dirnames in os.scandir(dirpath.path):
+                    if dirnames.is_dir():
+                        full_path = dirnames.path
+                        if "2D_100.0G_" in full_path:
+                            match = re.match(r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)Pe_(\w+)/([\d.]+?)R([\d.]+?)_(\d+?)N(\d+?)_(\w+)", full_path)
+                            if match:
+                                path, D, G, Pe, Type, Rin, Wid, N, num, Env = match.groups()
+                                #print(full_path)
+                                #print(f"path={path}, D={D}, G={G}, Pe={Pe}, Type={Type}, Rin={Rin}, Wid={Wid}, N={N}, num={num}, Env={Env}\n")
+                                base_name = os.path.join(f"{path}", f"{D}D_{G}G_{Pe}Pe_{Type}", f"{Rin}R{Wid}_{N}N{num}")
+                                anulus_dir = os.path.join(f"{base_name}_Anulus")
+                                anlus_dir = os.path.join(f"{base_name}_Anlus")
+
+                                # If both Anulus and Anlus exist, merge them
+                                if os.path.exists(anulus_dir) and os.path.exists(anlus_dir):
+                                    print(f"Merging {anulus_dir} into {anlus_dir}")
+                                    subprocess.run(["rsync", "-av", anulus_dir + "/", anlus_dir + "/"])
+                                    #shutil.rmtree(anulus_dir)
+
+                                # If only Anulus exists, rename it to Anlus
+                                elif os.path.exists(anulus_dir):
+                                    print(f"Renaming {anulus_dir} to {anlus_dir}")
+                                    os.rename(anulus_dir, anlus_dir)
+
+    ##############################################################################
     def reorganize_dirs(self):
         for dirpath, dirnames, filenames in os.walk(self.start_path):
             #2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus
@@ -119,7 +151,7 @@ class Reorganize:
                             G, T, D, Rin, Wid, N, num, label = match.groups()
                             # 创建新的母目录和子目录名
                             parent_folder = f"{D}D_{G}G_{T}T"
-                            child_folder = f"{Rin}R{Wid}_{N}N{num}_Anulus"
+                            child_folder = f"{Rin}R{Wid}_{N}N{num}_Anlus"
 
                             # 完整的旧路径和新路径
                             old_path = os.path.join(dirpath, dirname)
@@ -238,4 +270,5 @@ class Reorganize:
 #usage
 if __name__ == "__main__":
     reorg = Reorganize()
-    reorg.clean_lammpstrj()
+    #reorg.clean_lammpstrj()
+    reorg.merge_files()

@@ -1,8 +1,15 @@
 import numpy as np
+import pandas as pd
 from scipy.spatial import KDTree
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from collections import defaultdict
+from matplotlib.gridspec import GridSpec
+from scipy.stats import norm
+from scipy.stats import gaussian_kde
+import matplotlib.transforms as mtransforms
+import warnings
+warnings.filterwarnings('ignore')
 
 class InitialConfig:
     def __init__(self, dimensions=3, Lbox=100, Wid=0.5, Phi=0.03351, Sigma=1.0, N=100, chain_distance=0.945):
@@ -155,16 +162,16 @@ class ParticleStructure:
             fig = plt.figure()
             ax = fig.add_subplot(111, projection='3d')
             ax.scatter(self.particles[:, 0], self.particles[:, 1], self.particles[:, 2], c='r', marker='o')
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.set_zlabel('Z')
+            ax.set_xlabel('x')
+            ax.set_ylabel('y')
+            ax.set_zlabel('z')
             ax.set_zlim(-self.R_ring, self.R_ring)
             plt.title('3D Torus Structure')
             plt.show()
         else:
             plt.scatter(self.particles[:, 0], self.particles[:, 1], c='r', marker='o')
-            plt.xlabel('X')
-            plt.ylabel('Y')
+            plt.xlabel('x')
+            plt.ylabel('y')
             plt.title('2D Ring Structure')
             plt.axis('equal')
             plt.show()
@@ -236,84 +243,260 @@ class RDFPlotter:
         fig, axs = plt.subplots(1, 2, figsize=(20, 10))
 
         # Single point RDF
-        axs[0].plot(x, y_single)
-        axs[0].set_title("Single Point Radial Distribution Function")
-        axs[0].set_xlabel("Distance")
-        axs[0].set_ylabel("g(r)")
+        ax_a.plot(x, y_single)
+        ax_a.set_title("Single Point Radial Distribution Function")
+        ax_a.set_xlabel("Distance")
+        ax_a.set_ylabel("g(r)")
 
         # Multiple points RDF
-        axs[1].plot(x, y_multi)
-        axs[1].set_title("Averaged Radial Distribution Function")
-        axs[1].set_xlabel("Distance")
-        axs[1].set_ylabel("g(r)")
+        ax_c.plot(x, y_multi)
+        ax_c.set_title("Averaged Radial Distribution Function")
+        ax_c.set_xlabel("Distance")
+        ax_c.set_ylabel("g(r)")
 
         plt.show()
 
 class Plot:
-    def __init__(self, bins = 10):
+    def __init__(self, bins = 20):
         self.num_bins = bins
+        self.num_pdf = bins*100
+
+    def original(self):
+        # 生成模拟数据
+        frames = 2000  # 时间帧数
+        atoms = 100  # 粒子数
+        times = np.arange(frames)
+        ids = np.arange(atoms)
+        data = np.random.rand(frames, atoms)
+        data[0][1] = data[0][0]
+        data_dict = {
+            "x": np.repeat(times, atoms),  # 时间帧（t坐标）
+            "y": np.tile(ids, frames),  # 粒子ID（s坐标）
+            "z": data.flatten(),  # 幅度（r坐标）
+        }
+
+        # ----------------------------> prepare data <----------------------------#
+        keys, values = list(data_dict.keys()), list(data_dict.values())
+        x_label, y_label, z_label = keys[0], keys[1], keys[2]
+        x, y, z = values[0], values[1], values[2]
+
+        # Convert the data to a DataFrame for easier manipulation
+        df_org = pd.DataFrame(data_dict)
+        #df_org['x'][0] = df_org['x'][10]
+        #df_org['y'][0] = df_org['y'][10]
+        grouped = df_org.groupby(['x', 'y'])
+        mean_z, std_z, count_z = grouped['z'].mean().reset_index(), grouped['z'].std().fillna(0).reset_index(), grouped['z'].count().reset_index()
+        df = pd.DataFrame({
+            'x': mean_z['x'],
+            'y': mean_z['y'],
+            'mean_z': mean_z['z'],
+            'std_z': std_z['z'],
+            'count_z': count_z['z']
+        })
+        mid_x, mid_y = df_org.loc[(df_org['x'] - (df_org['x'].max() + df_org['x'].min()) / 2).abs().idxmin()]['x'], df_org.loc[(df_org['y'] - (df_org['y'].max() + df_org['y'].min()) / 2).abs().idxmin()]['y']
+        df_org_slicex, df_org_slicey = df_org[df_org['x'] == mid_x][['y', 'z']], df_org[df_org['y'] == mid_y][['x', 'z']]
+        df_slicex, df_slicey = df[df['x'] == mid_x].sort_values(by='y'), df[df['y'] == mid_y].sort_values(by='x')
+
+        # Find unique x and y values to create a grid
+        unique_x = np.sort(df['x'].unique())
+        unique_y = np.sort(df['y'].unique())
+        grid_z = np.empty((len(unique_y), len(unique_x)))
+        grid_z.fill(np.nan)
+        for index, row in df.iterrows():
+            x_idx = np.where(unique_x == row['x'])[0][0]
+            y_idx = np.where(unique_y == row['y'])[0][0]
+            grid_z[y_idx, x_idx] = row['mean_z']
+
+        # ----------------------------> plot figure<----------------------------#
+        # plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        # Create the layout
+        fig = plt.figure(figsize=(18, 9))
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
+        gs = GridSpec(2, 4, figure=fig)
+        ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
+        ax_b = fig.add_subplot(gs[0, 2])
+        ax_c = fig.add_subplot(gs[0, 3], sharey=ax_b)
+        ax_d = fig.add_subplot(gs[1, 2], sharex=ax_b)
+        ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
+
+        # ----------------------------> plot figure<----------------------------#
+        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+        sc_a = ax_a.scatter(x, y, z, c=z, cmap='rainbow', vmin=z.min(), vmax=z.max())
+        sc_b = ax_b.scatter(df['x'], df['y'], c=df['mean_z'], s=(df['std_z'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=z.min(), vmax=z.max())
+
+        sc_c = ax_c.scatter(df_org_slicex['z'], df_org_slicex['y'], color='k')
+        ax_c.errorbar(df_slicex['mean_z'], df_slicex['y'], yerr=df_slicex['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+
+        sc_d = ax_d.scatter(df_org_slicey['x'], df_org_slicey['z'], color='k')
+        ax_d.errorbar(df_slicey['x'], df_slicey['mean_z'], xerr=df_slicey['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+
+        cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=z.min(), vmax=z.max())
+
+        # ----------------------------> adding <----------------------------#
+        ax_b.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        ax_b.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+        ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+
+        axpos = ax_a.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+        cax = fig.add_axes(caxpos)
+        cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
+        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.set_xlabel(f'{z_label}', fontsize=20)
+        for i, txt in enumerate(df['count_z']):
+            if txt > 1:
+                ax_b.annotate(str(txt), (df['x'].iloc[i], df['y'].iloc[i]))
+
+        # ----------------------------> axis settings <----------------------------#
+        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
+        ax_a.set_xlabel(f'{x_label}', fontsize=20)
+        ax_a.set_xlim(min(x), max(x))
+        ax_a.set_ylabel(f'{y_label}', fontsize=20)
+        ax_a.set_ylim(min(y), max(y))
+        ax_a.set_zlabel(f'{z_label}', fontsize=20)
+        ax_a.set_zlim(min(z), max(z))
+
+        ax_b.set_title(f'<{z_label}> in {x_label}-{y_label} Space', loc='right', fontsize=20)
+        ax_b.set_xlabel(f'{x_label}', fontsize=20)
+        ax_b.set_xlim(min(x), max(x))
+        ax_b.set_ylabel(f'{y_label}', fontsize=20)
+        ax_b.set_ylim(min(y), max(y))
+
+        ax_c.set_title(f'${x_label}_0$={mid_x}', loc='right', fontsize=20)
+        ax_c.set_xlabel(f'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
+        ax_c.set_xlim(min(z), max(z))
+        ax_c.set_ylabel(f'{y_label}', fontsize=20)
+
+        ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
+        ax_d.set_xlabel(f'{x_label}', fontsize=20)
+        ax_d.set_ylabel(f'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
+        ax_d.set_ylim(min(z), max(z))
+
+        ax_e.set_title(f'<{z_label}>', loc='right', fontsize=20)
+        ax_e.set_xlabel(f'{x_label}', fontsize=20)
+        ax_e.set_ylabel(f'${y_label}$', fontsize=20)
+        # ----------------------------> linewidth <----------------------------#
+        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)' ]):
+            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                        ha="center", fontsize=20)
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            # ----------------------------> axes lines <----------------------------#
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+
+        # ----------------------------> save fig <----------------------------#
+        plt.show()
+        plt.close()
+        # -------------------------------Done!----------------------------------------#
 
     def distribution(self):
-        # Generate synthetic data for 2D example
-        np.random.seed(0)
-        x = np.random.normal(0, 1, 100)
-        y = np.random.normal(0, 1, 100)
+        """
+        Compute the normalized distribution of the data on the s-t plane.
 
-        # Create bins
-        x_bins = np.linspace(min(x), max(x), self.num_bins)
-        y_bins = np.linspace(min(y), max(y), self.num_bins)
+        Parameters:
+        - data (np.array): A 2D array representing the data at each (s, t) point.
+        - bins (tuple): The number of bins along each dimension (s, t).
 
-        # Count frequency of points in each bin
-        hist_x, _ = np.histogram(x, bins=x_bins)
-        hist_y, _ = np.histogram(y, bins=y_bins)
+        Returns:
+        - normalized_distribution (np.array): A 2D array representing the normalized distribution.
+        """
 
-        # Normalize the histograms
-        hist_x = hist_x / np.sum(hist_x)
-        hist_y = hist_y / np.sum(hist_y)
+        # 生成模拟数据
+        frames = 100  # 时间帧数
+        atoms = 50  # 粒子数
+        times = np.arange(frames)
+        ids = np.arange(atoms)
+        data = np.random.rand(frames, atoms)
 
-        # Create bin centers
+        # 创建一个字典来存储数据
+        data_dict = {
+            "t": np.repeat(times, atoms),  # 时间帧（t坐标）
+            "s": np.tile(ids, frames),  # 粒子ID（s坐标）
+            "r": data.flatten(),  # 幅度（r坐标）
+        }
+
+        keys, values = list(data_dict.keys()), list(data_dict.values())
+        x_label, y_label, z_label = keys[0], keys[1], keys[2]
+        x, y, z = values[0], values[1], values[2]
+
+        # Create a 2D histogram and bin centers
+        bin_id, pdf_id = self.num_bins//2, self.num_pdf//2
+        hist_x, x_bins = np.histogram(x, bins=self.num_bins, density=True)
+        hist_y, y_bins = np.histogram(y, bins=self.num_bins, density=True)
         x_bin_centers = (x_bins[:-1] + x_bins[1:]) / 2
         y_bin_centers = (y_bins[:-1] + y_bins[1:]) / 2
+        x_range = np.linspace(min(x), max(x), self.num_pdf)
+        y_range = np.linspace(min(y), max(y), self.num_pdf)
+        pdf_x = gaussian_kde(x).evaluate(x_range)
+        pdf_y = gaussian_kde(y).evaluate(y_range)
+        hist_2D, _, _ = np.histogram2d(x, y, bins=[x_bins, y_bins], density=True)
 
-        # Create a 2D histogram (fy(x))
-        hist_2D, x_edges, y_edges = np.histogram2d(x, y, bins=[x_bins, y_bins])
-        hist_2D = hist_2D / np.sum(hist_2D)
+        #specific y or x
+        hist_x_at_y = hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
+        hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id])
 
-        # Create bin centers for 2D histogram
-        x_bin_centers_2D = (x_edges[:-1] + x_edges[1:]) / 2
-        y_bin_centers_2D = (y_edges[:-1] + y_edges[1:]) / 2
-
-        # Re-create the code for 2D example with corrected imshow parameters
         # Plotting
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+        fig = plt.figure(figsize=(25, 15))
+        gs = GridSpec(2, 4, figure=fig)
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
+        ax_a = fig.add_subplot(gs[0:2, 0:2])
+        ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
+        ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
+        ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
+        ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
 
-        # Plot fy(x)
-        axs[0].imshow(hist_2D, interpolation='nearest', origin='lower',
-                    extent=[x_bin_centers_2D[0], x_bin_centers_2D[-1], y_bin_centers_2D[0], y_bin_centers_2D[-1]])
-        axs[0].set_title("fy(x)")
-        axs[0].set_xlabel("x")
-        axs[0].set_ylabel("y")
+        # Plot fz(x,y)
+        im = ax_a.imshow(hist_2D, interpolation='nearest', origin='lower',
+                    extent=[x_bin_centers[0], x_bin_centers[-1], y_bin_centers[0], y_bin_centers[-1]])
+        ax_a.set_title(f"$f^{z_label}({x_label},{y_label})$")
+        ax_a.set_xlabel(f"{x_label}")
+        ax_a.set_ylabel(f"{y_label}")
+        ax_a.set_xlim(x_bin_centers[0], x_bin_centers[-1])
+        ax_a.set_ylim(y_bin_centers[0], y_bin_centers[-1])
+        plt.colorbar(im, ax=ax_a, orientation='vertical')
 
-        # Plot Fy(x)
-        axs[1].bar(x_bin_centers, hist_y, width=(x_bins[1] - x_bins[0]))
-        axs[1].set_title("Fy(x)")
-        axs[1].set_xlabel("x")
-        axs[1].set_ylabel("Frequency")
+        # Plot Fzy(x)
+        ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+        ax_b.set_title(f"$f^{z_label}({x_label}; {y_label}_0)$"+f" with {y_label}0 = {y_bins[bin_id]:.2f}")
+        ax_b.set_xlabel(f"{x_label}")
+        ax_b.set_ylabel("Frequency")
+        ax_b.set_ylim(min(hist_x_at_y), max(hist_x_at_y)*1.1)
 
-        # Plot Fx(y)
-        axs[2].barh(y_bin_centers, hist_x, height=(y_bins[1] - y_bins[0]))
-        axs[2].set_title("Fx(y)")
-        axs[2].set_xlabel("Frequency")
-        axs[2].set_ylabel("y")
+        ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+        ax_c.plot(x_range, pdf_x, 'r', label='PDF')
+        ax_c.set_title(f"$f^{z_label}_{y_label}({x_label})$")
+        ax_c.set_xlabel(f"{x_label}")
+        ax_c.set_ylabel("Frequency")
+        ax_c.set_ylim(min(hist_x), max(hist_x) *1.1)
 
+        # Plot Fzx(y)
+        ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+        ax_d.set_title(f"$f^{z_label}({y_label}; {x_label}_0)$"+f" with {x_label}0 = {x_bins[bin_id]:.2f}")
+        ax_d.set_xlabel("Frequency")
+        ax_d.set_ylabel(f"{y_label}")
+        ax_d.set_xlim(min(hist_y_at_x), max(hist_y_at_x)*1.1)
+
+        # Plot Fzx(y)
+        ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+        ax_e.plot(pdf_y, y_range, 'r', label='PDF')
+        ax_e.set_title(f"$f^{z_label}_{x_label}({y_label})$")
+        ax_e.set_xlabel("Frequency")
+        ax_e.set_xlim(min(hist_y), max(hist_y)*1.1)
+        ax_e.set_ylabel(f"{y_label}")
+
+        plt.rc('font', family='Times New Roman')
         plt.tight_layout()
         plt.show()
-    
+
 if __name__ == "__main__":
     # Example usage
     rdf_plotter = RDFPlotter()
+    plot = Plot()
     #rdf_plotter.plot_rdf()
-    #distribution()
 
     # Generate initial config for 3D
     config_3D = InitialConfig()
@@ -324,7 +507,35 @@ if __name__ == "__main__":
     particle_density=2
     particle_structure_3D = ParticleStructure(particle_density, is_3D=True)
     particle_structure_2D = ParticleStructure(particle_density, is_3D=False)
-    coords_3D = particle_structure_3D.generate_coordinates()
-    coords_2D = particle_structure_2D.generate_coordinates()
+    #coords_3D = particle_structure_3D.generate_coordinates()
+    #coords_2D = particle_structure_2D.generate_coordinates()
     #particle_structure_3D.write_to_data_file("/mnt/data/torus_data.lammps")
-    particle_structure_2D.show_coordinates()
+    #particle_structure_2D.show_coordinates()
+
+    plot.original()
+    #plot.distribution(data_dict)
+
+####################################################################
+    # data_r[Pe][N][file][frame][atom]
+    # len_Pe, len_N, len_file, len_frame, len_atom = len(Pes), len(Ns), len(files), len(frames), len(atoms)
+    # Pe_arr = np.repeat(Pes, len_N * len_file * len_frame * len_atom)
+    # N_arr = np.tile(np.repeat(Ns, len_file * len_frame * len_atom), len_Pe)
+    # file_arr = np.tile(np.repeat(files, len_frame * len_atom), len_Pe * len_N)
+    # frame_arr = np.tile(np.repeat(frames, len_atom), len_Pe * len_N * len_file)
+    # atom_arr = np.tile(atoms, len_Pe * len_N * len_file * len_frame)
+
+    # It seems that there was an error. Let's try again.
+    # We need to make sure that the dimensions match for pcolormesh.
+
+    # Create a sample DataFrame
+    mean_z = {'x': [1, 1, 5, 3, 3, 7], 'y': [1, 2, 1, 4, 1, 2], 'z': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]}
+    std_z = {'z': [0.01, 0.02, 0.03, 0.04, 0.05, 0.06]}
+    count_z = {'z': [1, 2, 1, 2, 1, 2]}
+
+    df = pd.DataFrame({
+        'x': mean_z['x'],
+        'y': mean_z['y'],
+        'mean_z': mean_z['z'],
+        'std_z': std_z['z'],
+        'count_z': count_z['z']
+    })
