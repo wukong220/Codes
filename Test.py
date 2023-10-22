@@ -263,7 +263,7 @@ class Plot:
 
     def original(self):
         # 生成模拟数据
-        frames = 2000  # 时间帧数
+        frames = 200  # 时间帧数
         atoms = 100  # 粒子数
         times = np.arange(frames)
         ids = np.arange(atoms)
@@ -357,23 +357,23 @@ class Plot:
         ax_a.set_zlabel(f'{z_label}', fontsize=20)
         ax_a.set_zlim(min(z), max(z))
 
-        ax_b.set_title(f'<{z_label}> in {x_label}-{y_label} Space', loc='right', fontsize=20)
+        ax_b.set_title(fr'$\langle\ {z_label}\ \rangle$ in {x_label}-{y_label} Space', loc='right', fontsize=20)
         ax_b.set_xlabel(f'{x_label}', fontsize=20)
         ax_b.set_xlim(min(x), max(x))
         ax_b.set_ylabel(f'{y_label}', fontsize=20)
         ax_b.set_ylim(min(y), max(y))
 
         ax_c.set_title(f'${x_label}_0$={mid_x}', loc='right', fontsize=20)
-        ax_c.set_xlabel(f'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
+        ax_c.set_xlabel(fr'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
         ax_c.set_xlim(min(z), max(z))
         ax_c.set_ylabel(f'{y_label}', fontsize=20)
 
         ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
         ax_d.set_xlabel(f'{x_label}', fontsize=20)
-        ax_d.set_ylabel(f'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
+        ax_d.set_ylabel(fr'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
         ax_d.set_ylim(min(z), max(z))
 
-        ax_e.set_title(f'<{z_label}>', loc='right', fontsize=20)
+        ax_e.set_title(fr'$\langle\ {z_label}\ \rangle$', loc='right', fontsize=20)
         ax_e.set_xlabel(f'{x_label}', fontsize=20)
         ax_e.set_ylabel(f'${y_label}$', fontsize=20)
         # ----------------------------> linewidth <----------------------------#

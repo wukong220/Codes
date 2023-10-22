@@ -11,7 +11,7 @@ from itertools import combinations, product
 
 import pandas as pd
 import numpy as np
-from numba import vectorize, float64
+from numba import vectorize, float64, jit
 from scipy.interpolate import splrep, splev
 from scipy.stats import norm
 from scipy.stats import gaussian_kde
@@ -979,6 +979,7 @@ class _plot:
         self.chunk = 9
         self.num_bins = bins
         self.num_pdf = bins*10
+        self.simp = 10
 
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
@@ -993,6 +994,8 @@ class _plot:
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
 
     def read_data(self):
+        timer = Timer("Read")
+        timer.start()
         dump = self.set_dump()
         self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
         # read the lammpstrj files with 2001 frames
@@ -1022,6 +1025,8 @@ class _plot:
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
             #np.save(self.Path.dir_data, data)
+        timer.count("Read data")
+        timer.stop()
         return self.data
 
     def set_dict(self, dict, keys):
@@ -1032,71 +1037,77 @@ class _plot:
         }
         return temp
 
-    def set_data(self):
+    def set_data(self, flag=False):
         # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
         # data[ifile][iframe][iatom][xu, yu]
-        self.data_org = self.read_data()
-        self.data_com = self.data_org - np.expand_dims(np.mean(self.data_org, axis=2), axis=2)
-        self.data = np.mean(self.data_com, axis=0)[:100, ...]
-        #self.data = np.mean(self.data_org, axis=0)
-        frames, atoms, coords = self.data.shape
-        self.data_dict = {}
-        if atoms != self.Init.num_monos or frames != self.Run.Frames+1:
+        data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
+        data = np.mean(data_com, axis=0)
+        #self.data = np.mean(data, axis=0)
+
+        frames, atoms, coords = data.shape
+        if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
             message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
             print(message)
             logging.info(message)
-        times, ids, modules = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1), np.linalg.norm(self.data[ ..., :], axis = -1)
+        times, ids, modules = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1), np.linalg.norm(data[ ..., :], axis = -1)
 
-        dict0 = {
-            "x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms),],  # Frame numbers (t coordinate)
+        if flag:
+            data = data[::self.simp, ...]
+            frames = data.shape[0]
+            times, modules = np.arange(frames)*self.Run.dt*self.Run.Tdump * self.simp, np.linalg.norm(data[ ..., :], axis = -1)
+
+        dict = {
+            "x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
             "y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
             "z": [modules, modules.flatten(),],  # Magnitude (r coordinate)
-        }
-        dict = {
             "t": [times, np.repeat(times, atoms),],  # Frame numbers (t coordinate)
             "s": [ids, np.tile(ids, frames),],  # Particle IDs (s coordinate)
             "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
         }
-        self.data_dict = [
-            self.set_dict(dict0, ['x', 'y', 'z']),
+        data_dict = [
+            self.set_dict(dict, ['x', 'y', 'z']),
             self.set_dict(dict, ['t', 's', 'r']),
             self.set_dict(dict, ['r', 't', 's']),
-             self.set_dict(dict, ['r', 's', 't']),]
-        return self.data_dict
+            self.set_dict(dict, ['r', 's', 't']),]
+
+        return dict, data_dict
 
     def original(self, data_dict):
+        timer = Timer("Original")
+        timer.start()
         # ----------------------------> prepare data <----------------------------#
-        print("prepare data......")
         keys, values = list(data_dict.keys()), list(data_dict.values())
         x_label, y_label, z_label = keys[0], keys[1], keys[2]
         x, y, z = values[0][1], values[1][1], values[2][1]
+        # data_a
+        simp_dict = self.set_data(True)[0]
+        simp_x, simp_y, simp_z = simp_dict[keys[0]][1], simp_dict[keys[1]][1], simp_dict[keys[2]][1]
+        #data_b
+        df_simp = pd.DataFrame({x_label: simp_x, y_label: simp_y, z_label: simp_z})
+        df_proj = df_simp.groupby([x_label, y_label])[z_label].agg(['mean', 'std', 'count']).reset_index()
+        df_proj['std'].fillna(0, inplace=True)
+
+        #data_cd
         # Convert the data to a DataFrame for easier manipulation
         df_org = pd.DataFrame({x_label: x, y_label: y, z_label: z})
-        grouped = df_org.groupby([f'{x_label}', f'{y_label}'])
-        mean_z, std_z, count_z = grouped[f'{z_label}'].mean().reset_index(), grouped[f'{z_label}'].std().fillna(0).reset_index(), grouped[f'{z_label}'].count().reset_index()
-        df = pd.DataFrame({
-            f'{x_label}': mean_z[f'{x_label}'],
-            f'{y_label}': mean_z[f'{y_label}'],
-            'mean_z': mean_z[f'{z_label}'],
-            'std_z': std_z[f'{z_label}'],
-            'count_z': count_z[f'{z_label}']
-        })
-        mid_x, mid_y = df_org.loc[(df_org[f'{x_label}'] - (df_org[f'{x_label}'].max() + df_org[f'{x_label}'].min()) / 2).abs().idxmin()][f'{x_label}'], df_org.loc[(df_org[f'{y_label}'] - (df_org[f'{y_label}'].max() + df_org[f'{y_label}'].min()) / 2).abs().idxmin()][f'{y_label}']
-        df_org_slicex, df_org_slicey = df_org[df_org[f'{x_label}'] == mid_x][[f'{y_label}', f'{z_label}']], df_org[df_org[f'{y_label}'] == mid_y][[f'{x_label}', f'{z_label}']]
-        df_slicex, df_slicey = df[df[f'{x_label}'] == mid_x].sort_values(by=f'{y_label}'), df[df[f'{y_label}'] == mid_y].sort_values(by=f'{x_label}')
+        df_grp = df_org.groupby([x_label, y_label])[z_label].agg(['mean', 'std', 'count']).reset_index()
+        df_grp['std'].fillna(0, inplace=True)
+        mid_x, mid_y = df_org.loc[(df_org[x_label] - (df_org[x_label].max() + df_org[x_label].min()) / 2).abs().idxmin()][x_label], df_org.loc[(df_org[y_label] - (df_org[y_label].max() + df_org[y_label].min()) / 2).abs().idxmin()][y_label]
+        df_org_slicex, df_org_slicey = df_org[df_org[x_label] == mid_x][[y_label, z_label]], df_org[df_org[y_label] == mid_y][[x_label, z_label]]
+        df_slicex, df_slicey = df_grp[df_grp[x_label] == mid_x].sort_values(by=y_label), df_grp[df_grp[y_label] == mid_y].sort_values(by=x_label)
 
         # Find unique x and y values to create a grid
-        unique_x = np.sort(df[f'{x_label}'].unique())
-        unique_y = np.sort(df[f'{y_label}'].unique())
-        grid_z = np.empty((len(unique_y), len(unique_x)))
-        grid_z.fill(np.nan)
-        for index, row in df.iterrows():
-            x_idx = np.where(unique_x == row[f'{x_label}'])[0][0]
-            y_idx = np.where(unique_y == row[f'{y_label}'])[0][0]
-            grid_z[y_idx, x_idx] = row['mean_z']
+        #unique_x, unique_y = df_grp[x_label].unique(), df_grp[y_label].unique()
+        #grid_z = np.full((len(unique_y), len(unique_x)), np.nan)
+        #x_idx_map, y_idx_map = {val: idx for idx, val in enumerate(unique_x)}, {val: idx for idx, val in enumerate(unique_y)}
+
+        #for _, row in df_grp.iterrows():
+          #  x_idx = x_idx_map[row[x_label]]
+           # y_idx = y_idx_map[row[y_label]]
+            #grid_z[y_idx, x_idx] = row['mean']
+        timer.count("prepare data")
 
         #----------------------------> figure settings <----------------------------#
-        print("plotting……")
         fig_save = os.path.join(f"{self.Path.fig1}", f"{z_label}({x_label},{y_label})Org")
         pdf = PdfPages(f"{fig_save}.pdf")
         print(f"{fig_save}.pdf")
@@ -1120,69 +1131,66 @@ class _plot:
         ax_b = fig.add_subplot(gs[0, 2])
         ax_c = fig.add_subplot(gs[0, 3], sharey=ax_b)
         ax_d = fig.add_subplot(gs[1, 2], sharex=ax_b)
-        ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
+        #ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
 
         # ----------------------------> plot figure<----------------------------#
-        print("plotting ax_ab......")
         #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        sc_a = ax_a.scatter(x, y, z, c=z, cmap='rainbow', vmin=z.min(), vmax=z.max())
-        sc_b = ax_b.scatter(df[f'{x_label}'], df[f'{y_label}'], c=df['mean_z'], s=(df['std_z'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=z.min(), vmax=z.max())
-        print("plotting ax_cd......")
-        sc_c = ax_c.scatter(df_org_slicex[f'{z_label}'], df_org_slicex[f'{y_label}'], color='k')
-        ax_c.errorbar(df_slicex['mean_z'], df_slicex[f'{y_label}'], yerr=df_slicex['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow', vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        sc_b = ax_b.scatter(df_proj[x_label], df_proj[y_label], c=df_proj['mean'], s=(df_proj['std'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        sc_c = ax_c.scatter(df_org_slicex[z_label], df_org_slicex[y_label], color='k')
+        ax_c.errorbar(df_slicex['mean'], df_slicex[y_label], yerr=df_slicex['std'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+        sc_d = ax_d.scatter(df_org_slicey[x_label], df_org_slicey[z_label], color='k')
+        ax_d.errorbar(df_slicey[x_label], df_slicey['mean'], xerr=df_slicey['std'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
 
-        sc_d = ax_d.scatter(df_org_slicey[f'{x_label}'], df_org_slicey[f'{z_label}'], color='k')
-        ax_d.errorbar(df_slicey[f'{x_label}'], df_slicey['mean_z'], xerr=df_slicey['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
-
-        print("plotting ax_e......")
-        cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=z.min(), vmax=z.max())
+        #cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        #self.timer.count("plotting ax_e")
 
         # ----------------------------> adding <----------------------------#
         ax_b.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
         ax_b.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-        ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+        #ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        #ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
 
         axpos = ax_a.get_position()
         caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
         cax = fig.add_axes(caxpos)
         cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
         cbar.ax.yaxis.set_ticks_position('left')
-        cbar.ax.set_xlabel(f'{z_label}', fontsize=20)
-        for i, txt in enumerate(df['count_z']):
+        cbar.ax.set_xlabel(z_label, fontsize=20)
+        for i, txt in enumerate(df_proj['count']):
             if txt > 1:
-                ax_b.annotate(str(txt), (df[f'{x_label}'].iloc[i], df[f'{y_label}'].iloc[i]))
+                ax_b.annotate(str(txt), (df_proj[x_label].iloc[i], df_proj[y_label].iloc[i]))
 
         # ----------------------------> axis settings <----------------------------#
         ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
-        ax_a.set_xlabel(f'{x_label}', fontsize=20)
+        ax_a.set_xlabel(x_label, fontsize=20)
         ax_a.set_xlim(min(x), max(x))
-        ax_a.set_ylabel(f'{y_label}', fontsize=20)
+        ax_a.set_ylabel(y_label, fontsize=20)
         ax_a.set_ylim(min(y), max(y))
-        ax_a.set_zlabel(f'{z_label}', fontsize=20)
+        ax_a.set_zlabel(z_label, fontsize=20)
         ax_a.set_zlim(min(z), max(z))
 
-        ax_b.set_title(f'<{z_label}> in {x_label}-{y_label} Space', loc='right', fontsize=20)
-        ax_b.set_xlabel(f'{x_label}', fontsize=20)
+        ax_b.set_title(fr'$\langle\ {z_label}\ \rangle$ in {x_label}-{y_label} Space', loc='right', fontsize=20)
+        ax_b.set_xlabel(x_label, fontsize=20)
         ax_b.set_xlim(min(x), max(x))
-        ax_b.set_ylabel(f'{y_label}', fontsize=20)
+        ax_b.set_ylabel(y_label, fontsize=20)
         ax_b.set_ylim(min(y), max(y))
 
-        ax_c.set_title(f'${x_label}_0$={mid_x}', loc='right', fontsize=20)
+        ax_c.set_title(fr'${x_label}_0$={mid_x}', loc='right', fontsize=20)
         ax_c.set_xlabel(f'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
         ax_c.set_xlim(min(z), max(z))
-        ax_c.set_ylabel(f'{y_label}', fontsize=20)
+        ax_c.set_ylabel(y_label, fontsize=20)
 
         ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
-        ax_d.set_xlabel(f'{x_label}', fontsize=20)
+        ax_d.set_xlabel(x_label, fontsize=20)
         ax_d.set_ylabel(f'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
         ax_d.set_ylim(min(z), max(z))
 
-        ax_e.set_title(f'<{z_label}>', loc='right', fontsize=20)
-        ax_e.set_xlabel(f'{x_label}', fontsize=20)
-        ax_e.set_ylabel(f'${y_label}$', fontsize=20)
+        #ax_e.set_title(fr'$\langle\ {z_label}\ \rangle$', loc='right', fontsize=20)
+        #ax_e.set_xlabel(x_label, fontsize=20)
+        #ax_e.set_ylabel(f'${y_label}$', fontsize=20)
         # ----------------------------> linewidth <----------------------------#
-        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)' ]):
+        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ], ['(a)', '(b)', '(c)', '(d)', ]):
             ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
                         ha="center", fontsize=20)
             ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
@@ -1192,21 +1200,23 @@ class _plot:
             ax.spines['left'].set_linewidth(2)
             ax.spines['right'].set_linewidth(2)
             ax.spines['top'].set_linewidth(2)
-
-        print("saving pdf......")
+        #timer.count("plotting")
         # ----------------------------> save fig <----------------------------#
         fig1 = plt.gcf()
-        pdf.savefig(fig1, dpi=1000, transparent=True)
+        pdf.savefig(fig1, dpi=300, transparent=True)
         pdf.close()
-
         #print("saving png......")
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
         #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        #plt.show()
+        #timer.count("saving figure")
+        plt.show()
         plt.close()
+        timer.stop()
         # -------------------------------Done!----------------------------------------#
 
     def distribution(self, data_dict):
+        timer = Timer("Distribution")
+        timer.start()
         # ----------------------------> prepare data <----------------------------#
         bin_id, pdf_id = self.num_bins//2, self.num_pdf//2
         keys, values = list(data_dict.keys()), list(data_dict.values())
@@ -1314,7 +1324,7 @@ class _plot:
             ax.spines['right'].set_linewidth(2)
             ax.spines['top'].set_linewidth(2)
 
-        print("saving pdf......")
+        timer.count("saving figure")
         # ----------------------------> save fig <----------------------------#
         #plt.tight_layout()
         fig1 = plt.gcf()
@@ -1326,6 +1336,7 @@ class _plot:
         #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
         #plt.show()
         plt.close()
+        timer.stop()
         # -------------------------------Done!----------------------------------------#
 
     ##################################################################
@@ -1333,39 +1344,55 @@ class _plot:
         print("-----------------------------------Done!--------------------------------------------")
     def Rg():
         print("-----------------------------------Done!--------------------------------------------")
+    def Cee():
+        print("-----------------------------------Done!--------------------------------------------")
 
     def plot(self):
-        for idata in self.set_data():
+        timer = Timer("Plot")
+        timer.start()
+        self.read_data()
+        for idata in self.set_data()[1]:
             # original
-            timer.start()
             self.original(idata)
-            timer.stop("idata")
             # distribution
             #self.distribution(idata)
-        print(">>>>>>>>>>>>>>>>>>>Done!--------------------------------------------")
+            #self.timer.count("Distribution")
+        timer.count("plot")
+        timer.stop()
 #############################################################################################################
 
 class Timer:
-    def __init__(self, func=time.perf_counter):
+    def __init__(self, tip = "start", func=time.perf_counter):
+            self.tip = tip
             self.elapsed = 0.0
             self._func = func
             self._start = None
-        
+            self.time_dict = {}
+
     def start(self):
             self.elapsed = 0.0
             if self._start is not None:
                     raise RuntimeError('Already started')
             self._start = self._func()
-        
-    def stop(self, str="Time"):
+            print(f"-------------------------------{self.tip}----------------------------------------")
+
+    def stop(self):
             if self._start is None:
                     raise RuntimeError('Not started')
             end = self._func()
             self.elapsed += end - self._start
-            print(str, ":", self.elapsed)
-            logging.info(str, ":", self.elapsed)
+            print(f"-------------------------------{self.tip}: Done!----------------------------------------")
+            #logging.info(str, ":", self.elapsed)
             self._start = None
-        
+
+    def count(self, str="Time"):
+            end = self._func()
+            self.elapsed += end - self._start
+            self.time_dict[str] = self.elapsed
+            print(f"{str}: {self.elapsed}")
+            self.elapsed = 0.0
+            self._start = self._func()
+
     def reset(self):
             self.elapsed = 0.0
             
@@ -1378,7 +1405,7 @@ class Timer:
     
     def __exit__(self, *args):
             self.stop()
-timer = Timer()
+
 #############################################################################################################
 def convert2array(x):
     # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
