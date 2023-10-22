@@ -39,7 +39,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[1],
     'restart': [False, "equ"],
@@ -57,7 +57,7 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 1.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0], #'Fa': [0.0, 1.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100]
                           },
@@ -977,9 +977,10 @@ class _plot:
     def __init__(self, Path, bins = 20):
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
         self.chunk = 9
+        self.simp = 10
         self.num_bins = bins
         self.num_pdf = bins*10
-        self.simp = 10
+        self.jump = True
 
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
@@ -1029,14 +1030,6 @@ class _plot:
         timer.stop()
         return self.data
 
-    def set_dict(self, dict, keys):
-        temp = {
-            keys[0]: dict[keys[0]],
-            keys[1]: dict[keys[1]],
-            keys[2]: dict[keys[2]],
-        }
-        return temp
-
     def set_data(self, flag=False):
         # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
         # data[ifile][iframe][iatom][xu, yu]
@@ -1065,10 +1058,10 @@ class _plot:
             "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
         }
         data_dict = [
-            #self.set_dict(dict, ['x', 'y', 'z']),
-            self.set_dict(dict, ['t', 's', 'r']),
-            self.set_dict(dict, ['r', 't', 's']),
-            self.set_dict(dict, ['r', 's', 't']),]
+            #set_dict(dict, ['x', 'y', 'z']),
+            set_dict(dict, ['t', 's', 'r']),
+            set_dict(dict, ['r', 't', 's']),
+            set_dict(dict, ['r', 's', 't']),]
         return dict, data_dict
 
     def original(self):
@@ -1101,8 +1094,13 @@ class _plot:
         #----------------------------> figure settings <----------------------------#
         fig_save = os.path.join(f"{self.Path.fig1}", f"Org({z_label},{x_label},{y_label})")
         pdf = PdfPages(f"{fig_save}.pdf")
-        print(f"{fig_save}.pdf")
-        logging.info(f"{fig_save}.pdf")
+        if os.path.exists(f"{fig_save}.pdf") and self.jump:
+            print(f"==>{fig_save}.pdf is already!")
+            logging.info(f"==>{fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_save}.pdf")
+            logging.info(f"{fig_save}.pdf")
 
         plt.clf()
         plt.rc('text', usetex=True)
@@ -1224,14 +1222,15 @@ class _plot:
         fig1 = plt.gcf()
         pdf.savefig(fig1, dpi=300, transparent=True)
         pdf.close()
-        #print("saving png......")
+
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
         #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        #timer.count("saving figure")
-        plt.show()
+        timer.count("saving figure")
+        #plt.show()
         plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
+        return False
 
     def distribution(self, data_dict):
         timer = Timer("Distribution")
@@ -1255,8 +1254,13 @@ class _plot:
         #----------------------------> figure settings <----------------------------#
         fig_save = os.path.join(f"{self.Path.fig1}", f"Distf^{z_label}({x_label},{y_label})")
         pdf = PdfPages(f"{fig_save}.pdf")
-        print(f"{fig_save}.pdf")
-        logging.info(f"{fig_save}.pdf")
+        if os.path.exists(f"{fig_save}.pdf") and self.jump:
+            print(f"==>{fig_save}.pdf is already!")
+            logging.info(f"==>{fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_save}.pdf")
+            logging.info(f"{fig_save}.pdf")
 
         plt.clf()
         plt.rc('text', usetex=True)
@@ -1357,6 +1361,7 @@ class _plot:
         plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
+        return False
 
     ##################################################################
     def MSD():
@@ -1369,11 +1374,13 @@ class _plot:
     def plot(self):
         timer = Timer("Plot")
         timer.start()
+        if HOST == "Darwin":
+            self.jump = False
+
         self.read_data()
         self.original()
         for idata in self.set_data()[1]:
             self.distribution(idata)
-
         timer.count("plot")
         timer.stop()
 #############################################################################################################
@@ -1434,7 +1441,17 @@ def convert2array(x):
     else:
         raise ValueError("Unsupported type!")
 
+def set_dict(dict, keys):
+    '''for set_data'''
+    temp = {
+        keys[0]: dict[keys[0]],
+        keys[1]: dict[keys[1]],
+        keys[2]: dict[keys[2]],
+    }
+    return temp
+
 def statistics(data):
+    '''for plot original'''
     unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
     sum_values = np.bincount(indices, weights=data[:, 2])
     mean_values = sum_values / counts

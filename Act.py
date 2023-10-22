@@ -39,7 +39,7 @@ if __name__ == "__main__":
         for iType in convert2array(params['labels']['Types']):
             for iEnv in convert2array(params['labels']['Envs']):
                 Config = _config(iDimend, iType, iEnv, params)
-                if params['task'] == "Simus" and platform.system() != "Darwin":
+                if platform.system() != "Darwin": #params['task'] == "Simus" and
                     if check:
                         check_params(params)  # continue
                         check = False
