@@ -961,13 +961,6 @@ class _path:
             message = f"dir_data => {self.dir_data}"
             print(message)
             logging.info(message)
-        elif params['task'] == "Anas":
-            if file_exists:
-                subprocess.run(f"mkdir -p {self.fig1}", shell=True)
-            else:
-                message = f"File doesn't exist in data: {self.lmp_trj}"
-                print(message)
-                logging.info(message)
 
         return file_exists
 
@@ -981,6 +974,14 @@ class _plot:
         self.num_bins = bins
         self.num_pdf = bins*10
         self.jump = True
+
+        if params['task'] == "Anas":
+            if self.Path.jump:
+                subprocess.run(f"mkdir -p {self.Path.fig1}", shell=True)
+            else:
+                message = f"File doesn't exist in data: {self.Path.lmp_trj}"
+                print(message)
+                logging.info(message)
 
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
@@ -1060,8 +1061,8 @@ class _plot:
         data_dict = [
             #set_dict(dict, ['x', 'y', 'z']),
             set_dict(dict, ['t', 's', 'r']),
-            set_dict(dict, ['r', 't', 's']),
-            set_dict(dict, ['r', 's', 't']),]
+            set_dict(dict, ['t', 'r',  's']),
+            set_dict(dict, ['s', 'r', 't']),]
         return dict, data_dict
 
     def original(self):
@@ -1093,7 +1094,7 @@ class _plot:
 
         #----------------------------> figure settings <----------------------------#
         fig_save = os.path.join(f"{self.Path.fig1}", f"Org({z_label},{x_label},{y_label})")
-        pdf = PdfPages(f"{fig_save}.pdf")
+
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
             logging.info(f"==>{fig_save}.pdf is already!")
@@ -1101,7 +1102,7 @@ class _plot:
         else:
             print(f"{fig_save}.pdf")
             logging.info(f"{fig_save}.pdf")
-
+        pdf = PdfPages(f"{fig_save}.pdf")
         plt.clf()
         plt.rc('text', usetex=True)
         plt.rc('font', family='Times New Roman')
@@ -1253,7 +1254,6 @@ class _plot:
 
         #----------------------------> figure settings <----------------------------#
         fig_save = os.path.join(f"{self.Path.fig1}", f"Distf^{z_label}({x_label},{y_label})")
-        pdf = PdfPages(f"{fig_save}.pdf")
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
             logging.info(f"==>{fig_save}.pdf is already!")
@@ -1261,6 +1261,7 @@ class _plot:
         else:
             print(f"{fig_save}.pdf")
             logging.info(f"{fig_save}.pdf")
+        pdf = PdfPages(f"{fig_save}.pdf")
 
         plt.clf()
         plt.rc('text', usetex=True)
