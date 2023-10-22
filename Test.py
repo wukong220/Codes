@@ -11,6 +11,15 @@ import matplotlib.transforms as mtransforms
 import warnings
 warnings.filterwarnings('ignore')
 
+# Function to calculate mean and variance for scatter plots
+def statistics(data):
+    unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
+    sum_values = np.bincount(indices, weights=data[:, 2])
+    mean_values = sum_values / counts
+    sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
+    var_values = (sum_values_squared / counts) - (mean_values ** 2)
+    return unique_coords, mean_values, var_values, counts
+
 class InitialConfig:
     def __init__(self, dimensions=3, Lbox=100, Wid=0.5, Phi=0.03351, Sigma=1.0, N=100, chain_distance=0.945):
         self.dimensions = dimensions
@@ -262,6 +271,153 @@ class Plot:
         self.num_pdf = bins*100
 
     def original(self):
+        # 生成模拟数据
+        frames = 200  # 时间帧数
+        atoms = 100  # 粒子数
+        times = np.arange(frames)
+        ids = np.arange(atoms)
+        data = np.random.rand(frames, atoms)
+        data_dict = {
+            "x": np.repeat(times, atoms),  # 时间帧（t坐标）
+            "y": np.tile(ids, frames),  # 粒子ID（s坐标）
+            "z": data.flatten(),  # 幅度（r坐标）
+        }
+
+        # ----------------------------> prepare data <----------------------------#
+        keys, values = list(data_dict.keys()), list(data_dict.values())
+        x_label, y_label, z_label = keys[0], keys[1], keys[2]
+        x, y, z = values[0], values[1], values[2]
+        simp_x, simp_y, simp_z = x, y, z
+
+        # Calculate bin size and mid-bin values
+        bin_size_z = (z.max() - z.min()) / 50
+        bin_size_y = (y.max() - y.min()) / 50
+        bin_size_x = (x.max() - x.min()) / 50
+        mid_z = (np.floor(z.min() / bin_size_z) + np.ceil(z.max() / bin_size_z)) / 2 * bin_size_z
+        mid_y = (np.floor(y.min() / bin_size_y) + np.ceil(y.max() / bin_size_y)) / 2 * bin_size_y
+        mid_x = (np.floor(x.min() / bin_size_x) + np.ceil(x.max() / bin_size_x)) / 2 * bin_size_x
+        data_e = np.column_stack([x, y, z])[(z >= mid_z - bin_size_z / 2) & (z <= mid_z + bin_size_z / 2)]
+        data_f = np.column_stack([x, z, y])[(y >= mid_y - bin_size_y / 2) & (y <= mid_y + bin_size_y / 2)]
+        data_g = np.column_stack([y, z, x])[(x >= mid_x - bin_size_x / 2) & (x <= mid_x + bin_size_x / 2)]
+
+        unique_coords_e, _, _, counts_e = statistics(data_e)
+        unique_coords_f, _, _, counts_f = statistics(data_f)
+        unique_coords_g, _, _, counts_g = statistics(data_g)
+
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='Times New Roman')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+
+        # ----------------------------> plot figure<----------------------------#
+        # Prepare figure and subplots
+        fig = plt.figure(figsize=(20, 9))
+        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.5, hspace=0.5)
+        gs = GridSpec(2, 5, figure=fig)
+        ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
+        ax_b = fig.add_subplot(gs[0, 2])
+        ax_c = fig.add_subplot(gs[0, 3])
+        ax_d = fig.add_subplot(gs[0, 4])
+        ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
+        ax_f = fig.add_subplot(gs[1, 3], sharex=ax_c, sharey=ax_c)
+        ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
+
+        #plot figure#
+        # ----------------------------> ax_a <----------------------------#
+        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+
+        # axis settings
+        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
+        ax_a.set_xlabel(x_label, fontsize=20)
+        ax_a.set_xlim(min(simp_x), max(simp_x))
+        ax_a.set_ylabel(y_label, fontsize=20)
+        ax_a.set_ylim(min(simp_y), max(simp_y))
+        ax_a.set_zlabel(z_label, fontsize=20)
+        ax_a.set_zlim(min(simp_z), max(simp_z))
+        # colorbar
+        axpos = ax_a.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.05, axpos.y0, axpos.x0 - 0.03, axpos.y1)
+        cax = fig.add_axes(caxpos)
+        cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.set_xlabel(z_label, fontsize=20)
+
+        # linewidth and note
+        ax_a.annotate("(a)", (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                    ha="center", fontsize=20)
+        ax_a.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+        ax_a.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+        # axes lines
+        ax_a.spines['bottom'].set_linewidth(2)
+        ax_a.spines['left'].set_linewidth(2)
+        ax_a.spines['right'].set_linewidth(2)
+        ax_a.spines['top'].set_linewidth(2)
+
+        ## ----------------------------> ax_bcd <----------------------------#
+        for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
+                                         [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
+                                         [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                         ['(b)', '(c)', '(d)']):
+            unique_coords, mean_values, var_values = statistics(data)[:3]
+            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(var_values + 1) * 10, cmap='rainbow', alpha=0.7)
+
+            # axis settings
+            ax.set_title(fr'$\langle\ {axis_labels[2]}\ \rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
+            ax.set_xlabel(axis_labels[0], fontsize=20)
+            ax.set_ylabel(axis_labels[1], fontsize=20)
+            ax.set_xlim(min(unique_coords[:, 0]), max(unique_coords[:, 0]))
+            ax.set_ylim(min(unique_coords[:, 1]), max(unique_coords[:, 1]))
+
+            # colorbar
+            axpos = ax.get_position()
+            caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.005, axpos.y0, axpos.x1 + 0.015, axpos.y1)
+            cax = fig.add_axes(caxpos)
+            cbar = plt.colorbar(sc, ax=ax, cax=cax)
+            cbar.ax.yaxis.set_ticks_position('right')
+            cbar.ax.set_xlabel(axis_labels[2], fontsize=20)
+
+            # linewidth and note
+            ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            #axes lines
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+
+        # ----------------------------> ax_efg <----------------------------#
+        for ax, data, bin, counts, axis_labels, note in zip([ax_e, ax_f, ax_g],
+                                                      [unique_coords_e, unique_coords_f, unique_coords_g],
+                                                      [({mid_z - bin_size_z / 2}, {mid_z + bin_size_z / 2}), ({mid_y - bin_size_y / 2}, {mid_y + bin_size_y / 2}),({mid_x - bin_size_x / 2}, {mid_x + bin_size_x / 2})],
+                                                      [counts_e, counts_f, counts_g],
+                                                      [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                                      ['(e)', '(f)', '(g)']):
+
+            sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
+            # axis settings
+            ax.set_title(fr'${axis_labels[2]}_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
+            ax.set_xlabel(axis_labels[0], fontsize=20)
+            ax.set_ylabel(axis_labels[1], fontsize=20)
+
+            # linewidth and note
+            ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                        ha="center", fontsize=20)
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            #axes lines
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+        plt.show()
+
+    def original1(self):
         # 生成模拟数据
         frames = 200  # 时间帧数
         atoms = 100  # 粒子数

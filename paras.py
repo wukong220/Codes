@@ -1057,58 +1057,49 @@ class _plot:
             times, modules = np.arange(frames)*self.Run.dt*self.Run.Tdump * self.simp, np.linalg.norm(data[ ..., :], axis = -1)
 
         dict = {
-            "x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
-            "y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
-            "z": [modules, modules.flatten(),],  # Magnitude (r coordinate)
+            #"x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
+            #"y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
+            #"z": [modules, modules.flatten(),],  # Magnitude (r coordinate)
             "t": [times, np.repeat(times, atoms),],  # Frame numbers (t coordinate)
             "s": [ids, np.tile(ids, frames),],  # Particle IDs (s coordinate)
             "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
         }
         data_dict = [
-            self.set_dict(dict, ['x', 'y', 'z']),
+            #self.set_dict(dict, ['x', 'y', 'z']),
             self.set_dict(dict, ['t', 's', 'r']),
             self.set_dict(dict, ['r', 't', 's']),
             self.set_dict(dict, ['r', 's', 't']),]
-
         return dict, data_dict
 
-    def original(self, data_dict):
+    def original(self):
         timer = Timer("Original")
         timer.start()
         # ----------------------------> prepare data <----------------------------#
+        data_dict = self.set_data()[0]
+        simp_dict = self.set_data(True)[0]
         keys, values = list(data_dict.keys()), list(data_dict.values())
         x_label, y_label, z_label = keys[0], keys[1], keys[2]
         x, y, z = values[0][1], values[1][1], values[2][1]
-        # data_a
-        simp_dict = self.set_data(True)[0]
         simp_x, simp_y, simp_z = simp_dict[keys[0]][1], simp_dict[keys[1]][1], simp_dict[keys[2]][1]
-        #data_b
-        df_simp = pd.DataFrame({x_label: simp_x, y_label: simp_y, z_label: simp_z})
-        df_proj = df_simp.groupby([x_label, y_label])[z_label].agg(['mean', 'std', 'count']).reset_index()
-        df_proj['std'].fillna(0, inplace=True)
 
-        #data_cd
-        # Convert the data to a DataFrame for easier manipulation
-        df_org = pd.DataFrame({x_label: x, y_label: y, z_label: z})
-        df_grp = df_org.groupby([x_label, y_label])[z_label].agg(['mean', 'std', 'count']).reset_index()
-        df_grp['std'].fillna(0, inplace=True)
-        mid_x, mid_y = df_org.loc[(df_org[x_label] - (df_org[x_label].max() + df_org[x_label].min()) / 2).abs().idxmin()][x_label], df_org.loc[(df_org[y_label] - (df_org[y_label].max() + df_org[y_label].min()) / 2).abs().idxmin()][y_label]
-        df_org_slicex, df_org_slicey = df_org[df_org[x_label] == mid_x][[y_label, z_label]], df_org[df_org[y_label] == mid_y][[x_label, z_label]]
-        df_slicex, df_slicey = df_grp[df_grp[x_label] == mid_x].sort_values(by=y_label), df_grp[df_grp[y_label] == mid_y].sort_values(by=x_label)
+        # Calculate bin size and mid-bin values
+        bin_size_z = (z.max() - z.min()) / 200
+        bin_size_y = (y.max() - y.min()) / 200
+        bin_size_x = (x.max() - x.min()) / 200
+        sorted_x, sorted_y, sorted_z = np.sort(x), np.sort(y), np.sort(z)
+        mid_x = sorted_x[np.argmin(np.abs(sorted_x - (x.max() - x.min())/2))]
+        mid_y = sorted_y[np.argmin(np.abs(sorted_y - (y.max() - y.min())/2))]
+        mid_z = sorted_z[np.argmin(np.abs(sorted_z - (z.max() - z.min())/2))]
+        data_e = np.column_stack([x, y, z])[(z >= mid_z - bin_size_z / 2) & (z <= mid_z + bin_size_z / 2)]
+        data_f = np.column_stack([x, z, y])[(y >= mid_y - bin_size_y / 2) & (y <= mid_y + bin_size_y / 2)]
+        data_g = np.column_stack([y, z, x])[(x >= mid_x - bin_size_x / 2) & (x <= mid_x + bin_size_x / 2)]
 
-        # Find unique x and y values to create a grid
-        #unique_x, unique_y = df_grp[x_label].unique(), df_grp[y_label].unique()
-        #grid_z = np.full((len(unique_y), len(unique_x)), np.nan)
-        #x_idx_map, y_idx_map = {val: idx for idx, val in enumerate(unique_x)}, {val: idx for idx, val in enumerate(unique_y)}
-
-        #for _, row in df_grp.iterrows():
-          #  x_idx = x_idx_map[row[x_label]]
-           # y_idx = y_idx_map[row[y_label]]
-            #grid_z[y_idx, x_idx] = row['mean']
-        timer.count("prepare data")
+        unique_coords_e, _, _, counts_e = statistics(data_e)
+        unique_coords_f, _, _, counts_f = statistics(data_f)
+        unique_coords_g, _, _, counts_g = statistics(data_g)
 
         #----------------------------> figure settings <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig1}", f"{z_label}({x_label},{y_label})Org")
+        fig_save = os.path.join(f"{self.Path.fig1}", f"Org({z_label},{x_label},{y_label})")
         pdf = PdfPages(f"{fig_save}.pdf")
         print(f"{fig_save}.pdf")
         logging.info(f"{fig_save}.pdf")
@@ -1122,85 +1113,113 @@ class _plot:
         plt.rcParams['ytick.labelsize'] = 15
 
         # ----------------------------> plot figure<----------------------------#
-        # plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        # Create the layout
-        fig = plt.figure(figsize=(18, 9))
-        fig.subplots_adjust(wspace=0.5, hspace=0.5)
-        gs = GridSpec(2, 4, figure=fig)
+        # Prepare figure and subplots
+        fig = plt.figure(figsize=(20, 9))
+        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.5, hspace=0.5)
+        gs = GridSpec(2, 5, figure=fig)
         ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
         ax_b = fig.add_subplot(gs[0, 2])
-        ax_c = fig.add_subplot(gs[0, 3], sharey=ax_b)
-        ax_d = fig.add_subplot(gs[1, 2], sharex=ax_b)
-        #ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
+        ax_c = fig.add_subplot(gs[0, 3])
+        ax_d = fig.add_subplot(gs[0, 4])
+        ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
+        ax_f = fig.add_subplot(gs[1, 3], sharex=ax_c, sharey=ax_c)
+        ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
 
-        # ----------------------------> plot figure<----------------------------#
-        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow', vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
-        sc_b = ax_b.scatter(df_proj[x_label], df_proj[y_label], c=df_proj['mean'], s=(df_proj['std'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
-        sc_c = ax_c.scatter(df_org_slicex[z_label], df_org_slicex[y_label], color='k')
-        ax_c.errorbar(df_slicex['mean'], df_slicex[y_label], yerr=df_slicex['std'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
-        sc_d = ax_d.scatter(df_org_slicey[x_label], df_org_slicey[z_label], color='k')
-        ax_d.errorbar(df_slicey[x_label], df_slicey['mean'], xerr=df_slicey['std'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
+        #plot figure#
+        # ----------------------------> ax_a <----------------------------#
+        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
 
-        #cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
-        #self.timer.count("plotting ax_e")
+        # axis settings
+        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
+        ax_a.set_xlabel(x_label, fontsize=20, labelpad=10)
+        ax_a.set_xlim(min(simp_x), max(simp_x))
+        ax_a.set_ylabel(y_label, fontsize=20)
+        ax_a.set_ylim(min(simp_y), max(simp_y))
+        ax_a.set_zlabel(z_label, fontsize=20)
+        ax_a.set_zlim(min(simp_z), max(simp_z))
 
-        # ----------------------------> adding <----------------------------#
-        ax_b.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        ax_b.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-        #ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        #ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-
+        # colorbar
         axpos = ax_a.get_position()
-        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.05, axpos.y0, axpos.x0 - 0.03, axpos.y1)
         cax = fig.add_axes(caxpos)
         cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
-        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.set_xlabel(z_label, fontsize=20)
-        for i, txt in enumerate(df_proj['count']):
-            if txt > 1:
-                ax_b.annotate(str(txt), (df_proj[x_label].iloc[i], df_proj[y_label].iloc[i]))
 
-        # ----------------------------> axis settings <----------------------------#
-        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
-        ax_a.set_xlabel(x_label, fontsize=20)
-        ax_a.set_xlim(min(x), max(x))
-        ax_a.set_ylabel(y_label, fontsize=20)
-        ax_a.set_ylim(min(y), max(y))
-        ax_a.set_zlabel(z_label, fontsize=20)
-        ax_a.set_zlim(min(z), max(z))
+        # linewidth and note
+        ax_a.annotate("(a)", (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                    ha="center", fontsize=20)
+        ax_a.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+        ax_a.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+        # axes lines
+        ax_a.spines['bottom'].set_linewidth(2)
+        ax_a.spines['left'].set_linewidth(2)
+        ax_a.spines['right'].set_linewidth(2)
+        ax_a.spines['top'].set_linewidth(2)
 
-        ax_b.set_title(fr'$\langle\ {z_label}\ \rangle$ in {x_label}-{y_label} Space', loc='right', fontsize=20)
-        ax_b.set_xlabel(x_label, fontsize=20)
-        ax_b.set_xlim(min(x), max(x))
-        ax_b.set_ylabel(y_label, fontsize=20)
-        ax_b.set_ylim(min(y), max(y))
+        ## ----------------------------> ax_bcd <----------------------------#
+        for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
+                                         [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
+                                         [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                         ['(b)', '(c)', '(d)']):
+            unique_coords, mean_values, var_values = statistics(data)[:3]
+            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(var_values + 1) * 10, cmap='rainbow', alpha=0.7)
 
-        ax_c.set_title(fr'${x_label}_0$={mid_x}', loc='right', fontsize=20)
-        ax_c.set_xlabel(f'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
-        ax_c.set_xlim(min(z), max(z))
-        ax_c.set_ylabel(y_label, fontsize=20)
+            # axis settings
+            ax.set_title(fr'$\langle\ {axis_labels[2]}\ \rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
+            ax.tick_params(axis='x', rotation=-45)
+            ax.set_xlabel(axis_labels[0], fontsize=20)
+            ax.set_ylabel(axis_labels[1], fontsize=20)
+            ax.set_xlim(min(unique_coords[:, 0]), max(unique_coords[:, 0]))
+            ax.set_ylim(min(unique_coords[:, 1]), max(unique_coords[:, 1]))
 
-        ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
-        ax_d.set_xlabel(x_label, fontsize=20)
-        ax_d.set_ylabel(f'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
-        ax_d.set_ylim(min(z), max(z))
+            # colorbar
+            axpos = ax.get_position()
+            caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.005, axpos.y0, axpos.x1 + 0.015, axpos.y1)
+            cax = fig.add_axes(caxpos)
+            cbar = plt.colorbar(sc, ax=ax, cax=cax)
+            cbar.ax.yaxis.set_ticks_position('right')
+            cbar.ax.set_xlabel(axis_labels[2], fontsize=20)
 
-        #ax_e.set_title(fr'$\langle\ {z_label}\ \rangle$', loc='right', fontsize=20)
-        #ax_e.set_xlabel(x_label, fontsize=20)
-        #ax_e.set_ylabel(f'${y_label}$', fontsize=20)
-        # ----------------------------> linewidth <----------------------------#
-        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ], ['(a)', '(b)', '(c)', '(d)', ]):
-            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
-                        ha="center", fontsize=20)
+            # linewidth and note
+            ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
             ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
             ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
-            # ----------------------------> axes lines <----------------------------#
+            #axes lines
             ax.spines['bottom'].set_linewidth(2)
             ax.spines['left'].set_linewidth(2)
             ax.spines['right'].set_linewidth(2)
             ax.spines['top'].set_linewidth(2)
-        #timer.count("plotting")
+
+        # ----------------------------> ax_efg <----------------------------#
+        for ax, data, bin, counts, axis_labels, note in zip([ax_e, ax_f, ax_g],
+                                                      [unique_coords_e, unique_coords_f, unique_coords_g],
+                                                      [({np.around(mid_z - bin_size_z / 2, 2)}, {np.around(mid_z + bin_size_z / 2, 2)}),
+                                                       ({np.around(mid_y - bin_size_y / 2, 2)}, {np.around(mid_y + bin_size_y / 2, 2)}),
+                                                       ({np.around(mid_x - bin_size_x / 2, 2)}, {np.around(mid_x + bin_size_x / 2, 2)})],
+                                                      [counts_e, counts_f, counts_g],
+                                                      [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                                      ['(e)', '(f)', '(g)']):
+
+            sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
+            # axis settings
+            ax.set_title(fr'${axis_labels[2]}_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
+            ax.set_xlabel(axis_labels[0], fontsize=20)
+            ax.set_ylabel(axis_labels[1], fontsize=20)
+
+            # linewidth and note
+            ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
+                        ha="center", fontsize=20)
+            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+            #axes lines
+            ax.spines['bottom'].set_linewidth(2)
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+
         # ----------------------------> save fig <----------------------------#
         fig1 = plt.gcf()
         pdf.savefig(fig1, dpi=300, transparent=True)
@@ -1234,7 +1253,7 @@ class _plot:
         hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
 
         #----------------------------> figure settings <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig1}", f"f^{z_label}({x_label},{y_label})Dist")
+        fig_save = os.path.join(f"{self.Path.fig1}", f"Distf^{z_label}({x_label},{y_label})")
         pdf = PdfPages(f"{fig_save}.pdf")
         print(f"{fig_save}.pdf")
         logging.info(f"{fig_save}.pdf")
@@ -1351,12 +1370,10 @@ class _plot:
         timer = Timer("Plot")
         timer.start()
         self.read_data()
+        self.original()
         for idata in self.set_data()[1]:
-            # original
-            self.original(idata)
-            # distribution
-            #self.distribution(idata)
-            #self.timer.count("Distribution")
+            self.distribution(idata)
+
         timer.count("plot")
         timer.stop()
 #############################################################################################################
@@ -1416,6 +1433,14 @@ def convert2array(x):
         return np.array([x])
     else:
         raise ValueError("Unsupported type!")
+
+def statistics(data):
+    unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
+    sum_values = np.bincount(indices, weights=data[:, 2])
+    mean_values = sum_values / counts
+    sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
+    var_values = (sum_values_squared / counts) - (mean_values ** 2)
+    return unique_coords, mean_values, var_values, counts
 
 __all__ = [
     "params",
