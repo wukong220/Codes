@@ -2,7 +2,7 @@ from paras import *
 import platform
 from datetime import datetime
 import numpy as np
-from lammps import lammps, PyLammps
+#from lammps import lammps, PyLammps
 
 def convert2array(x):
     # 如果x已经是一个列表，numpy数组，直接转换为numpy数组

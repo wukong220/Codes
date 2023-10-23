@@ -39,7 +39,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
+    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[1],
     'restart': [False, "equ"],
@@ -1036,7 +1036,7 @@ class _plot:
         # data[ifile][iframe][iatom][xu, yu]
         data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
         data = np.mean(data_com, axis=0)
-        #self.data = np.mean(data, axis=0)
+        #data = np.mean(self.data, axis=0)
 
         frames, atoms, coords = data.shape
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
@@ -1103,9 +1103,9 @@ class _plot:
             print(f"{fig_save}.pdf")
             logging.info(f"{fig_save}.pdf")
         pdf = PdfPages(f"{fig_save}.pdf")
-        plt.clf()
+        #plt.clf()
         plt.rc('text', usetex=True)
-        plt.rc('font', family='Times New Roman')
+        plt.rc('font', family='serif')
         plt.rcParams['xtick.direction'] = 'in'
         plt.rcParams['ytick.direction'] = 'in'
         plt.rcParams['xtick.labelsize'] = 15
@@ -1263,9 +1263,9 @@ class _plot:
             logging.info(f"{fig_save}.pdf")
         pdf = PdfPages(f"{fig_save}.pdf")
 
-        plt.clf()
+        #plt.clf()
         plt.rc('text', usetex=True)
-        plt.rc('font', family='Times New Roman')
+        plt.rc('font', family='serif')
         plt.rcParams['xtick.direction'] = 'in'
         plt.rcParams['ytick.direction'] = 'in'
         plt.rcParams['xtick.labelsize'] = 15
