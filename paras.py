@@ -7,7 +7,7 @@ import platform
 import time
 import logging
 from datetime import datetime, timedelta
-from itertools import combinations, product
+from itertools import combinations, product, permutations
 
 import pandas as pd
 import numpy as np
@@ -15,6 +15,7 @@ from numba import vectorize, float64, jit
 from scipy.interpolate import splrep, splev
 from scipy.stats import norm
 from scipy.stats import gaussian_kde
+from scipy.stats import multivariate_normal
 from scipy.spatial import KDTree
 from collections import defaultdict
 
@@ -262,6 +263,7 @@ class _run:
                 raise ValueError(f"An error occurred: {e}")
         elif task == "Anas":
             try:
+                # prepare files and submit
                 print("Plot")
             except Exception as e:
                 logging.error(f"An error occurred: {e}")
@@ -1031,12 +1033,13 @@ class _plot:
         timer.stop()
         return self.data
 
-    def set_data(self, flag=False):
+    def set_data(self, flag=False, str="Com"):
         # 1. Plot particle ID vs time, color-coded by the magnitude of the particle coordinates
         # data[ifile][iframe][iatom][xu, yu]
         data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
         data = np.mean(data_com, axis=0)
         #data = np.mean(self.data, axis=0)
+        self.describe = str
 
         frames, atoms, coords = data.shape
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
@@ -1058,23 +1061,16 @@ class _plot:
             "s": [ids, np.tile(ids, frames),],  # Particle IDs (s coordinate)
             "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
         }
-        data_dict = [
-            #set_dict(dict, ['x', 'y', 'z']),
-            set_dict(dict, ['t', 's', 'r']),
-            set_dict(dict, ['t', 'r',  's']),
-            set_dict(dict, ['s', 'r', 't']),]
-        return dict, data_dict
+        return dict
 
     def original(self):
         timer = Timer("Original")
         timer.start()
         # ----------------------------> prepare data <----------------------------#
-        data_dict = self.set_data()[0]
-        simp_dict = self.set_data(True)[0]
-        keys, values = list(data_dict.keys()), list(data_dict.values())
+        keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
         x_label, y_label, z_label = keys[0], keys[1], keys[2]
-        x, y, z = values[0][1], values[1][1], values[2][1]
-        simp_x, simp_y, simp_z = simp_dict[keys[0]][1], simp_dict[keys[1]][1], simp_dict[keys[2]][1]
+        x, y, z = self.data_dict[keys[0]][1], self.data_dict[keys[1]][1], self.data_dict[keys[2]][1]
+        simp_x, simp_y, simp_z = self.simp_dict[keys[0]][1], self.simp_dict[keys[1]][1], self.simp_dict[keys[2]][1]
 
         # Calculate bin size and mid-bin values
         bin_size_z = (z.max() - z.min()) / 200
@@ -1093,7 +1089,7 @@ class _plot:
         unique_coords_g, _, _, counts_g = statistics(data_g)
 
         #----------------------------> figure settings <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig1}", f"Org({z_label},{x_label},{y_label})")
+        fig_save = os.path.join(f"{self.Path.fig1}", f"{self.describe}.Org({z_label},{x_label},{y_label})")
 
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
@@ -1163,8 +1159,8 @@ class _plot:
                                          [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
                                          [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
                                          ['(b)', '(c)', '(d)']):
-            unique_coords, mean_values, var_values = statistics(data)[:3]
-            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(var_values + 1) * 10, cmap='rainbow', alpha=0.7)
+            unique_coords, mean_values, std_values = statistics(data)[:3]
+            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
 
             # axis settings
             ax.set_title(fr'$\langle\ {axis_labels[2]}\ \rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
@@ -1227,143 +1223,145 @@ class _plot:
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
         #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
         timer.count("saving figure")
-        #plt.show()
+        plt.show()
         plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
 
-    def distribution(self, data_dict):
+    def distribution(self):
         timer = Timer("Distribution")
         timer.start()
         # ----------------------------> prepare data <----------------------------#
-        bin_id, pdf_id = self.num_bins//2, self.num_pdf//2
-        keys, values = list(data_dict.keys()), list(data_dict.values())
-        x_label, y_label, z_label = keys[0], keys[1], keys[2]
-        x, y, z = values[0][1], values[1][1], values[2][1]
+        bin_id, pdf_id = self.num_bins // 2, self.num_pdf // 2
+        keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
+        for i, j, k in [(0, 1, 2), (0, 2, 1), (1, 2, 0)]:
+            x_label, y_label, z_label = keys[i], keys[j], keys[k]
+            x, y, z = values[i][1], values[j][1], values[k][1]
+            # Create a 2D histogram and bin centers
+            hist_x, x_bins = np.histogram(x, bins=self.num_bins, density=True)
+            hist_y, y_bins = np.histogram(y, bins=self.num_bins, density=True)
+            x_bin_centers, y_bin_centers = (x_bins[:-1] + x_bins[1:]) / 2, (y_bins[:-1] + y_bins[1:]) / 2
+            x_range, y_range = np.linspace(min(x), max(x), self.num_pdf), np.linspace(min(y), max(y), self.num_pdf)
+            pdf_x, pdf_y = gaussian_kde(x).evaluate(x_range), gaussian_kde(y).evaluate(y_range)
+            hist_2D = np.histogram2d(x, y, bins=[x_bins, y_bins], density=True)[0]
+            #specific y or x
+            hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
 
-        # Create a 2D histogram and bin centers
-        hist_x, x_bins = np.histogram(x, bins=self.num_bins, density=True)
-        hist_y, y_bins = np.histogram(y, bins=self.num_bins, density=True)
-        x_bin_centers, y_bin_centers = (x_bins[:-1] + x_bins[1:]) / 2, (y_bins[:-1] + y_bins[1:]) / 2
-        x_range, y_range = np.linspace(min(x), max(x), self.num_pdf), np.linspace(min(y), max(y), self.num_pdf)
-        pdf_x, pdf_y = gaussian_kde(x).evaluate(x_range), gaussian_kde(y).evaluate(y_range)
-        hist_2D = np.histogram2d(x, y, bins=[x_bins, y_bins], density=True)[0]
-        #specific y or x
-        hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
+            #----------------------------> figure settings <----------------------------#
+            fig_save = os.path.join(f"{self.Path.fig1}", f"{self.describe}.Dist.f^{z_label}({x_label},{y_label})")
+            if os.path.exists(f"{fig_save}.pdf") and self.jump:
+                print(f"==>{fig_save}.pdf is already!")
+                logging.info(f"==>{fig_save}.pdf is already!")
+                return True
+            else:
+                print(f"{fig_save}.pdf")
+                logging.info(f"{fig_save}.pdf")
+            pdf = PdfPages(f"{fig_save}.pdf")
 
-        #----------------------------> figure settings <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig1}", f"Distf^{z_label}({x_label},{y_label})")
-        if os.path.exists(f"{fig_save}.pdf") and self.jump:
-            print(f"==>{fig_save}.pdf is already!")
-            logging.info(f"==>{fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{fig_save}.pdf")
-            logging.info(f"{fig_save}.pdf")
-        pdf = PdfPages(f"{fig_save}.pdf")
+            #plt.clf()
+            plt.rc('text', usetex=True)
+            plt.rc('font', family='serif')
+            plt.rcParams['xtick.direction'] = 'in'
+            plt.rcParams['ytick.direction'] = 'in'
+            plt.rcParams['xtick.labelsize'] = 15
+            plt.rcParams['ytick.labelsize'] = 15
 
-        #plt.clf()
-        plt.rc('text', usetex=True)
-        plt.rc('font', family='serif')
-        plt.rcParams['xtick.direction'] = 'in'
-        plt.rcParams['ytick.direction'] = 'in'
-        plt.rcParams['xtick.labelsize'] = 15
-        plt.rcParams['ytick.labelsize'] = 15
+            # ----------------------------> plot figure<----------------------------#
+            #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
+            # Create the layout
+            fig = plt.figure(figsize=(18, 9))
+            fig.subplots_adjust(wspace=0.5, hspace=0.5)
+            gs = GridSpec(2, 4, figure=fig)
+            ax_a = fig.add_subplot(gs[0:2, 0:2])
+            ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
+            ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
+            ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
+            ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
 
-        # ----------------------------> plot figure<----------------------------#
-        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        # Create the layout
-        fig = plt.figure(figsize=(18, 9))
-        fig.subplots_adjust(wspace=0.5, hspace=0.5)
-        gs = GridSpec(2, 4, figure=fig)
-        ax_a = fig.add_subplot(gs[0:2, 0:2])
-        ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
-        ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
-        ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
-        ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
+            # Plot fz(x,y)
+            cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
+            # Plot Fz(x;y0)
+            ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
 
-        # Plot fz(x,y)
-        cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
-        # Plot Fz(x;y0)
-        ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+            # Plot Fzy(x)
+            ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+            ax_c.plot(x_range, pdf_x, 'r', label='PDF')
+            # Plot Fz(y;x0)
+            ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+            # Plot Fzx(y)
+            ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+            ax_e.plot(pdf_y, y_range, 'r', label='PDF')
 
-        # Plot Fzy(x)
-        ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-        ax_c.plot(x_range, pdf_x, 'r', label='PDF')
-        # Plot Fz(y;x0)
-        ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-        # Plot Fzx(y)
-        ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-        ax_e.plot(pdf_y, y_range, 'r', label='PDF')
+            # ----------------------------> adding <----------------------------#
+            ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
+            ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
 
-        # ----------------------------> adding <----------------------------#
-        ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
-        ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
+            axpos = ax_a.get_position()
+            caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+            cax = fig.add_axes(caxpos)
+            cbar = plt.colorbar(cmap, cax=cax)
+            cbar.ax.yaxis.set_ticks_position('left')
+            cbar.ax.set_xlabel(fr"$f^{z_label}({x_label},{y_label})$", fontsize=20)
 
-        axpos = ax_a.get_position()
-        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
-        cax = fig.add_axes(caxpos)
-        cbar = plt.colorbar(cmap, cax=cax)
-        cbar.ax.yaxis.set_ticks_position('left')
-        cbar.ax.set_xlabel(f"$f^{z_label}({x_label},{y_label})$", fontsize=20)
+            # ----------------------------> axis settings <----------------------------#
+            ax_a.set_title(fr"$f^{z_label}({x_label},{y_label})$", fontsize=20)
+            ax_a.set_xlabel(f"{x_label}", fontsize=20)
+            ax_a.set_ylabel(f"{y_label}", fontsize=20)
+            ax_a.set_xlim(x_bin_centers[0], x_bin_centers[-1])
+            ax_a.set_ylim(y_bin_centers[0], y_bin_centers[-1])
 
-        # ----------------------------> axis settings <----------------------------#
-        ax_a.set_title(f"$f^{z_label}({x_label},{y_label})$", fontsize=20)
-        ax_a.set_xlabel(f"{x_label}", fontsize=20)
-        ax_a.set_ylabel(f"{y_label}", fontsize=20)
-        ax_a.set_xlim(x_bin_centers[0], x_bin_centers[-1])
-        ax_a.set_ylim(y_bin_centers[0], y_bin_centers[-1])
+            ax_b.set_title(fr"${y_label}_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+            ax_b.set_xlabel(f"{x_label}", fontsize=20)
+            ax_b.tick_params(axis='x', rotation=45)
+            ax_b.set_ylabel(fr"$f^{z_label}({x_label}; {y_label}_0)$", fontsize=20)
+            ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
 
-        ax_b.set_title(f"${y_label}_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-        ax_b.set_xlabel(f"{x_label}", fontsize=20)
-        ax_b.tick_params(axis='x', rotation=45)
-        ax_b.set_ylabel(f"$f^{z_label}({x_label}; {y_label}_0)$", fontsize=20)
-        ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
+            ax_c.set_title("Distribution", loc='right', fontsize=20)
+            ax_c.set_xlabel(f"{x_label}", fontsize=20)
+            ax_c.tick_params(axis='x', rotation=45)
+            ax_c.set_ylabel(fr"$f^{z_label}_{y_label}({x_label})$", fontsize=20)
+            ax_c.set_ylim(0, max(hist_x) *1.1)
 
-        ax_c.set_title("Distribution", loc='right', fontsize=20)
-        ax_c.set_xlabel(f"{x_label}", fontsize=20)
-        ax_c.tick_params(axis='x', rotation=45)
-        ax_c.set_ylabel(f"$f^{z_label}_{y_label}({x_label})$", fontsize=20)
-        ax_c.set_ylim(0, max(hist_x) *1.1)
+            ax_d.set_title(fr"${x_label}_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+            ax_d.set_xlabel(fr"$f^{z_label}({y_label}; {x_label}_0)$", fontsize=20)
+            ax_d.set_ylabel(f"{y_label}", fontsize=20)
+            ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
 
-        ax_d.set_title(f"${x_label}_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-        ax_d.set_xlabel(f"$f^{z_label}({y_label}; {x_label}_0)$", fontsize=20)
-        ax_d.set_ylabel(f"{y_label}", fontsize=20)
-        ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
+            ax_e.set_title('Distribution', loc='right', fontsize=20)
+            ax_e.set_xlabel(fr"$f^{z_label}_{x_label}({y_label})$", fontsize=20)
+            ax_e.set_ylabel(f"{y_label}", fontsize=20)
+            ax_e.set_xlim(0, max(hist_y)*1.1)
 
-        ax_e.set_title('Distribution', loc='right', fontsize=20)
-        ax_e.set_xlabel(f"$f^{z_label}_{x_label}({y_label})$", fontsize=20)
-        ax_e.set_ylabel(f"{y_label}", fontsize=20)
-        ax_e.set_xlim(0, max(hist_y)*1.1)
+            # ----------------------------> linewidth <----------------------------#
+            for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
+                ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+                ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
+                ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
+                # ----------------------------> axes lines <----------------------------#
+                ax.spines['bottom'].set_linewidth(2)
+                ax.spines['left'].set_linewidth(2)
+                ax.spines['right'].set_linewidth(2)
+                ax.spines['top'].set_linewidth(2)
 
-        # ----------------------------> linewidth <----------------------------#
-        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
-            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
-            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
-            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
-            # ----------------------------> axes lines <----------------------------#
-            ax.spines['bottom'].set_linewidth(2)
-            ax.spines['left'].set_linewidth(2)
-            ax.spines['right'].set_linewidth(2)
-            ax.spines['top'].set_linewidth(2)
+            timer.count("saving figure")
+            # ----------------------------> save fig <----------------------------#
+            #plt.tight_layout()
+            fig1 = plt.gcf()
+            pdf.savefig(fig1, dpi=1000, transparent=True)
+            pdf.close()
 
-        timer.count("saving figure")
-        # ----------------------------> save fig <----------------------------#
-        #plt.tight_layout()
-        fig1 = plt.gcf()
-        pdf.savefig(fig1, dpi=1000, transparent=True)
-        pdf.close()
-
-        #print("saving png......")
-        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        #plt.show()
-        plt.close()
+            #print("saving png......")
+            # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+            #fig1.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+            plt.show()
+            plt.close()
+            # -------------------------------Done!----------------------------------------#
         timer.stop()
-        # -------------------------------Done!----------------------------------------#
         return False
 
+    def distatis(self):
+        print("-----------------------------------Done!--------------------------------------------")
     ##################################################################
     def MSD():
         print("-----------------------------------Done!--------------------------------------------")
@@ -1371,19 +1369,25 @@ class _plot:
         print("-----------------------------------Done!--------------------------------------------")
     def Cee():
         print("-----------------------------------Done!--------------------------------------------")
-
+    ##################################################################
     def plot(self):
         timer = Timer("Plot")
         timer.start()
         if HOST == "Darwin":
             self.jump = False
-
         self.read_data()
+        self.data_dict, self.simp_dict = self.set_data("Com"), self.set_data(True, "Com")
+        #plotting
         self.original()
-        for idata in self.set_data()[1]:
-            self.distribution(idata)
+        self.distribution()
+
         timer.count("plot")
         timer.stop()
+
+    def infile(self):
+        print("-----------------------------------Done!--------------------------------------------")
+    def bsubs(self):
+        print("-----------------------------------Done!--------------------------------------------")
 #############################################################################################################
 
 class Timer:
@@ -1457,8 +1461,8 @@ def statistics(data):
     sum_values = np.bincount(indices, weights=data[:, 2])
     mean_values = sum_values / counts
     sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
-    var_values = (sum_values_squared / counts) - (mean_values ** 2)
-    return unique_coords, mean_values, var_values, counts
+    std_values = np.sqrt( (sum_values_squared / counts) - (mean_values ** 2))
+    return unique_coords, mean_values, std_values, counts
 
 __all__ = [
     "params",

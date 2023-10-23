@@ -7,9 +7,12 @@ from collections import defaultdict
 from matplotlib.gridspec import GridSpec
 from scipy.stats import norm
 from scipy.stats import gaussian_kde
+from scipy.stats import multivariate_normal
 import matplotlib.transforms as mtransforms
+import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
+
 
 # Function to calculate mean and variance for scatter plots
 def statistics(data):
@@ -695,3 +698,47 @@ if __name__ == "__main__":
         'std_z': std_z['z'],
         'count_z': count_z['z']
     })
+
+# Generate synthetic data for demonstration
+np.random.seed(0)
+x = np.random.uniform(0, 10, 100)
+y = np.random.uniform(0, 10, 100)
+z = 2 * np.sin(x) + 3 * np.cos(y) + np.random.normal(0, 1, 100)  # some function of x and y plus noise
+
+# Calculate mean and standard deviation of z for each (x, y) pair
+unique_coords, indices, counts = np.unique(np.column_stack((x, y)), axis=0, return_inverse=True, return_counts=True)
+sum_values = np.bincount(indices, weights=z)
+mean_values = sum_values / counts
+sum_values_squared = np.bincount(indices, weights=z ** 2)
+std_values = np.sqrt((sum_values_squared / counts) - (mean_values ** 2))
+
+# Plot scatter plot with error bars
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 3, 1)
+plt.errorbar(unique_coords[:, 0], unique_coords[:, 1], yerr=std_values, fmt='o', label='Data points')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Scatter Plot with Error Bars')
+plt.legend()
+
+# Plot contour plot
+plt.subplot(1, 3, 2)
+grid_x, grid_y = np.meshgrid(np.linspace(0, 10, 100), np.linspace(0, 10, 100))
+grid_z = multivariate_normal.pdf(np.column_stack((grid_x.ravel(), grid_y.ravel())), mean=[5, 5], cov=[[1, 0.5], [0.5, 1]])
+grid_z = grid_z.reshape(100, 100)
+plt.contourf(grid_x, grid_y, grid_z, cmap='viridis')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Contour Plot')
+plt.colorbar(label='z')
+
+# Plot KDE
+plt.subplot(1, 3, 3)
+sns.kdeplot(x=x, y=y, cmap='viridis', fill=True)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('KDE Plot')
+plt.colorbar(label='Density')
+
+plt.tight_layout()
+plt.show()

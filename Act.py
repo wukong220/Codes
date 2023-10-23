@@ -40,6 +40,7 @@ if __name__ == "__main__":
             for iEnv in convert2array(params['labels']['Envs']):
                 Config = _config(iDimend, iType, iEnv, params)
                 if platform.system() != "Darwin": #params['task'] == "Simus" and
+                    mpl.use("agg")
                     if check:
                         check_params(params)  # continue
                         check = False
