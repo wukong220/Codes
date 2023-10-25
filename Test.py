@@ -420,138 +420,6 @@ class Plot:
             ax.spines['top'].set_linewidth(2)
         plt.show()
 
-    def original1(self):
-        # 生成模拟数据
-        frames = 200  # 时间帧数
-        atoms = 100  # 粒子数
-        times = np.arange(frames)
-        ids = np.arange(atoms)
-        data = np.random.rand(frames, atoms)
-        data[0][1] = data[0][0]
-        data_dict = {
-            "x": np.repeat(times, atoms),  # 时间帧（t坐标）
-            "y": np.tile(ids, frames),  # 粒子ID（s坐标）
-            "z": data.flatten(),  # 幅度（r坐标）
-        }
-
-        # ----------------------------> prepare data <----------------------------#
-        keys, values = list(data_dict.keys()), list(data_dict.values())
-        x_label, y_label, z_label = keys[0], keys[1], keys[2]
-        x, y, z = values[0], values[1], values[2]
-
-        # Convert the data to a DataFrame for easier manipulation
-        df_org = pd.DataFrame(data_dict)
-        #df_org['x'][0] = df_org['x'][10]
-        #df_org['y'][0] = df_org['y'][10]
-        grouped = df_org.groupby(['x', 'y'])
-        mean_z, std_z, count_z = grouped['z'].mean().reset_index(), grouped['z'].std().fillna(0).reset_index(), grouped['z'].count().reset_index()
-        df = pd.DataFrame({
-            'x': mean_z['x'],
-            'y': mean_z['y'],
-            'mean_z': mean_z['z'],
-            'std_z': std_z['z'],
-            'count_z': count_z['z']
-        })
-        mid_x, mid_y = df_org.loc[(df_org['x'] - (df_org['x'].max() + df_org['x'].min()) / 2).abs().idxmin()]['x'], df_org.loc[(df_org['y'] - (df_org['y'].max() + df_org['y'].min()) / 2).abs().idxmin()]['y']
-        df_org_slicex, df_org_slicey = df_org[df_org['x'] == mid_x][['y', 'z']], df_org[df_org['y'] == mid_y][['x', 'z']]
-        df_slicex, df_slicey = df[df['x'] == mid_x].sort_values(by='y'), df[df['y'] == mid_y].sort_values(by='x')
-
-        # Find unique x and y values to create a grid
-        unique_x = np.sort(df['x'].unique())
-        unique_y = np.sort(df['y'].unique())
-        grid_z = np.empty((len(unique_y), len(unique_x)))
-        grid_z.fill(np.nan)
-        for index, row in df.iterrows():
-            x_idx = np.where(unique_x == row['x'])[0][0]
-            y_idx = np.where(unique_y == row['y'])[0][0]
-            grid_z[y_idx, x_idx] = row['mean_z']
-
-        # ----------------------------> plot figure<----------------------------#
-        # plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        # Create the layout
-        fig = plt.figure(figsize=(18, 9))
-        fig.subplots_adjust(wspace=0.5, hspace=0.5)
-        gs = GridSpec(2, 4, figure=fig)
-        ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
-        ax_b = fig.add_subplot(gs[0, 2])
-        ax_c = fig.add_subplot(gs[0, 3], sharey=ax_b)
-        ax_d = fig.add_subplot(gs[1, 2], sharex=ax_b)
-        ax_e = fig.add_subplot(gs[1, 3], sharex=ax_b, sharey=ax_b)
-
-        # ----------------------------> plot figure<----------------------------#
-        #plt.subplots_adjust(left=0.15, right=0.85, bottom=0.13, top=0.9, wspace=0.2, hspace=0.2)
-        sc_a = ax_a.scatter(x, y, z, c=z, cmap='rainbow', vmin=z.min(), vmax=z.max())
-        sc_b = ax_b.scatter(df['x'], df['y'], c=df['mean_z'], s=(df['std_z'] + 1) * 10, cmap='rainbow', alpha=0.7, vmin=z.min(), vmax=z.max())
-
-        sc_c = ax_c.scatter(df_org_slicex['z'], df_org_slicex['y'], color='k')
-        ax_c.errorbar(df_slicex['mean_z'], df_slicex['y'], yerr=df_slicex['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
-
-        sc_d = ax_d.scatter(df_org_slicey['x'], df_org_slicey['z'], color='k')
-        ax_d.errorbar(df_slicey['x'], df_slicey['mean_z'], xerr=df_slicey['std_z'], fmt='^-', color='r', ecolor='r', capsize=5, alpha=0.6)
-
-        cmap = ax_e.pcolormesh(unique_x, unique_y, grid_z, shading='auto', cmap='rainbow', vmin=z.min(), vmax=z.max())
-
-        # ----------------------------> adding <----------------------------#
-        ax_b.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        ax_b.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-        ax_e.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        ax_e.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-
-        axpos = ax_a.get_position()
-        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
-        cax = fig.add_axes(caxpos)
-        cbar = plt.colorbar(sc_a, ax=ax_a, cax=cax)
-        cbar.ax.yaxis.set_ticks_position('left')
-        cbar.ax.set_xlabel(f'{z_label}', fontsize=20)
-        for i, txt in enumerate(df['count_z']):
-            if txt > 1:
-                ax_b.annotate(str(txt), (df['x'].iloc[i], df['y'].iloc[i]))
-
-        # ----------------------------> axis settings <----------------------------#
-        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
-        ax_a.set_xlabel(f'{x_label}', fontsize=20)
-        ax_a.set_xlim(min(x), max(x))
-        ax_a.set_ylabel(f'{y_label}', fontsize=20)
-        ax_a.set_ylim(min(y), max(y))
-        ax_a.set_zlabel(f'{z_label}', fontsize=20)
-        ax_a.set_zlim(min(z), max(z))
-
-        ax_b.set_title(fr'$\langle\ {z_label}\ \rangle$ in {x_label}-{y_label} Space', loc='right', fontsize=20)
-        ax_b.set_xlabel(f'{x_label}', fontsize=20)
-        ax_b.set_xlim(min(x), max(x))
-        ax_b.set_ylabel(f'{y_label}', fontsize=20)
-        ax_b.set_ylim(min(y), max(y))
-
-        ax_c.set_title(f'${x_label}_0$={mid_x}', loc='right', fontsize=20)
-        ax_c.set_xlabel(fr'{z_label}({y_label}, ${x_label}_0$)', fontsize=20)
-        ax_c.set_xlim(min(z), max(z))
-        ax_c.set_ylabel(f'{y_label}', fontsize=20)
-
-        ax_d.set_title(f'${y_label}_0$={mid_y}', loc='right', fontsize=20)
-        ax_d.set_xlabel(f'{x_label}', fontsize=20)
-        ax_d.set_ylabel(fr'{z_label}({x_label}, ${y_label}_0$)', fontsize=20)
-        ax_d.set_ylim(min(z), max(z))
-
-        ax_e.set_title(fr'$\langle\ {z_label}\ \rangle$', loc='right', fontsize=20)
-        ax_e.set_xlabel(f'{x_label}', fontsize=20)
-        ax_e.set_ylabel(f'${y_label}$', fontsize=20)
-        # ----------------------------> linewidth <----------------------------#
-        for ax, label in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)' ]):
-            ax.annotate(label, (-0.3, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
-                        ha="center", fontsize=20)
-            ax.tick_params(axis='both', which="major", width=2, labelsize=15, pad=7.0)
-            ax.tick_params(axis='both', which="minor", width=2, labelsize=15, pad=4.0)
-            # ----------------------------> axes lines <----------------------------#
-            ax.spines['bottom'].set_linewidth(2)
-            ax.spines['left'].set_linewidth(2)
-            ax.spines['right'].set_linewidth(2)
-            ax.spines['top'].set_linewidth(2)
-
-        # ----------------------------> save fig <----------------------------#
-        plt.show()
-        plt.close()
-        # -------------------------------Done!----------------------------------------#
-
     def distribution(self):
         """
         Compute the normalized distribution of the data on the s-t plane.
@@ -651,6 +519,60 @@ class Plot:
         plt.tight_layout()
         plt.show()
 
+    def xyz():
+        # Generate synthetic data for demonstration
+        np.random.seed(0)
+        x = np.random.choice(np.linspace(0, 10, 11), size=500)
+        y = np.random.choice(np.linspace(0, 10, 11), size=500)
+        z = 2 * np.sin(x) + 3 * np.cos(y) + np.random.normal(0, 1, 500)  # some function of x and y plus noise
+
+        # Process data: Calculate mean and standard deviation of z for each (x, y) pair
+        data = np.column_stack((x, y, z))
+        unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
+        sum_values = np.bincount(indices, weights=data[:, 2])
+        mean_values = sum_values / counts
+        sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
+        std_values = np.sqrt((sum_values_squared / counts) - (mean_values ** 2))
+
+        # Create the plots
+        plt.figure(figsize=(18, 6))
+
+        # 1. Scatter plot with error bars and color-coded mean
+        plt.subplot(1, 3, 1)
+        sc = plt.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, cmap='viridis', edgecolors='k')
+        plt.errorbar(unique_coords[:, 0], unique_coords[:, 1], yerr=std_values, fmt='none', ecolor='red', alpha=0.5,
+                     label='Std Dev')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('Scatter Plot with Error Bars & Color-coded Mean')
+        plt.colorbar(label='Mean z')
+        plt.legend()
+
+        # 2. Contour plot for mean z values
+        plt.subplot(1, 3, 2)
+        grid_x, grid_y = np.meshgrid(np.linspace(0, 10, 11), np.linspace(0, 10, 11))
+        grid_z = np.empty_like(grid_x)
+        grid_z.fill(np.nan)
+        for i in range(len(unique_coords)):
+            x_idx = np.where(grid_x[0, :] == unique_coords[i, 0])[0][0]
+            y_idx = np.where(grid_y[:, 0] == unique_coords[i, 1])[0][0]
+            grid_z[y_idx, x_idx] = mean_values[i]
+        plt.contourf(grid_x, grid_y, grid_z, cmap='viridis')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('Contour Plot for Mean z values')
+
+        # 3. KDE for the density of z values
+        plt.subplot(1, 3, 3)
+        sns.kdeplot(x=x, y=y, weights=counts[indices], cmap='viridis', fill=True)
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('KDE for Density of z values')
+        plt.colorbar(label='Density')
+
+        plt.tight_layout()
+        plt.show()
+
 if __name__ == "__main__":
     # Example usage
     rdf_plotter = RDFPlotter()
@@ -671,8 +593,9 @@ if __name__ == "__main__":
     #particle_structure_3D.write_to_data_file("/mnt/data/torus_data.lammps")
     #particle_structure_2D.show_coordinates()
 
-    plot.original()
+    #plot.original()
     #plot.distribution(data_dict)
+    plot.xyz()
 
 ####################################################################
     # data_r[Pe][N][file][frame][atom]
@@ -698,47 +621,3 @@ if __name__ == "__main__":
         'std_z': std_z['z'],
         'count_z': count_z['z']
     })
-
-# Generate synthetic data for demonstration
-np.random.seed(0)
-x = np.random.uniform(0, 10, 100)
-y = np.random.uniform(0, 10, 100)
-z = 2 * np.sin(x) + 3 * np.cos(y) + np.random.normal(0, 1, 100)  # some function of x and y plus noise
-
-# Calculate mean and standard deviation of z for each (x, y) pair
-unique_coords, indices, counts = np.unique(np.column_stack((x, y)), axis=0, return_inverse=True, return_counts=True)
-sum_values = np.bincount(indices, weights=z)
-mean_values = sum_values / counts
-sum_values_squared = np.bincount(indices, weights=z ** 2)
-std_values = np.sqrt((sum_values_squared / counts) - (mean_values ** 2))
-
-# Plot scatter plot with error bars
-plt.figure(figsize=(12, 4))
-plt.subplot(1, 3, 1)
-plt.errorbar(unique_coords[:, 0], unique_coords[:, 1], yerr=std_values, fmt='o', label='Data points')
-plt.xlabel('x')
-plt.ylabel('y')
-plt.title('Scatter Plot with Error Bars')
-plt.legend()
-
-# Plot contour plot
-plt.subplot(1, 3, 2)
-grid_x, grid_y = np.meshgrid(np.linspace(0, 10, 100), np.linspace(0, 10, 100))
-grid_z = multivariate_normal.pdf(np.column_stack((grid_x.ravel(), grid_y.ravel())), mean=[5, 5], cov=[[1, 0.5], [0.5, 1]])
-grid_z = grid_z.reshape(100, 100)
-plt.contourf(grid_x, grid_y, grid_z, cmap='viridis')
-plt.xlabel('x')
-plt.ylabel('y')
-plt.title('Contour Plot')
-plt.colorbar(label='z')
-
-# Plot KDE
-plt.subplot(1, 3, 3)
-sns.kdeplot(x=x, y=y, cmap='viridis', fill=True)
-plt.xlabel('x')
-plt.ylabel('y')
-plt.title('KDE Plot')
-plt.colorbar(label='Density')
-
-plt.tight_layout()
-plt.show()

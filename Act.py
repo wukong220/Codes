@@ -4,34 +4,6 @@ from datetime import datetime
 import numpy as np
 #from lammps import lammps, PyLammps
 
-def convert2array(x):
-    # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
-    if isinstance(x, (list, np.ndarray, tuple)):
-        return np.array(x)
-    # 如果x是一个单一的数值，转换为包含该数值的numpy数组
-    elif isinstance(x, (int, float, str)):
-        return np.array([x])
-    else:
-        raise ValueError("Unsupported type!")
-
-def check_params(params):
-    print("===> Caveats: Please confirm the following parameters:")
-    first_key = True
-    for key, value in params.items():
-        if first_key:
-            first_key = False
-            continue
-
-        user_input = input(f"{key} = {value}    (y/n)?: ")
-        if user_input.lower() == "y":
-            break
-        elif user_input.lower() == '':
-            continue
-        else:
-            new_value = input(f"Please enter the new value for {key}: ")
-            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
-    return params
-
 #-----------------------------------Part I-------------------------------------------#    
 if __name__ == "__main__":
     check = True
@@ -71,13 +43,13 @@ if __name__ == "__main__":
                                                     Init.data_file(Path)
                                                     Model.in_file(Path)
                                                     #continue
-                                                    Run.bsubs(Path)
-                                                    #Run.bsubs(Path, 1)
+                                                    Run.bsub(Path)
+                                                    #Run.bsub(Path, 1)
                                                 except Exception as e:
                                                     print(f"An error occurred: {e}")
 
                                             elif params['task'] == "Anas":
                                                 if Path.jump:
-                                                    Plot.plot()
-
+                                                    #Plot.plot()
+                                                    Plot.write_runfile()
 ##########################################END!################################################################

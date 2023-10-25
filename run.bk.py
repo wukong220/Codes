@@ -28,7 +28,7 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 import warnings
 warnings.filterwarnings('ignore')
-logging.basicConfig(filename='paras.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #-----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
@@ -247,35 +247,6 @@ class _run:
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}")
-# -----------------------------------bsub-------------------------------------------#
-    def bsub(self, Path, task):
-        Init, Model = Path.Init, Path.Model
-        if task == "Simus":
-            if Path.jump: # jump for repeat: check lammpstrj
-                return
-            try:
-                # prepare files and submit
-                Init.data_file(Path)
-                Model.in_file(Path)
-                # return
-                self.sub_file(Path)
-                # Run.sub_file(Path, 1)
-            except Exception as e:
-                logging.error(f"An error occurred: {e}")
-                raise ValueError(f"An error occurred: {e}")
-
-        elif task == "Anas":
-            if Path.jump:
-                try:
-                    Plot = _plot(Path)
-                    # prepare files and submit
-                    # Plot.plot()
-                    Plot.write_runfile()
-                    print("Plot")
-                except Exception as e:
-                    logging.error(f"An error occurred: {e}")
-                    raise ValueError(f"An error occurred: {e}")
-
 ##########################################END!###############################################################
 
 class _init:
@@ -889,9 +860,11 @@ class _path:
         self.Config = Model.Init.Config
         self.Run = Model.Run
         self.jump = self.build_paths()
-        
+
     def build_paths(self):
         self.simus = os.path.join(self.host, self.mydirs[1])
+        self.current = os.path.abspath(__file__)
+        filename = os.path.basename(self.current)
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
             subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
@@ -920,13 +893,13 @@ class _path:
         if params['task'] == "Simus":
             #os.makedirs(self.dir_simus, exist_ok=True)
             subprocess.run(f"mkdir -p {self.dir_simus}", shell=True)
-            shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.dir_simus, "paras.py"))
+            shutil.copy2(os.path.join(self.host, self.mydirs[0], filename), os.path.join(self.dir_simus, filename))
             message = f"dir_simus => {self.dir_simus}"
         elif params['task'] == "Anas":
             if file_exists:
                 subprocess.run(f"mkdir -p {self.fig0}", shell=True)
-                shutil.copy2(os.path.join(self.host, self.mydirs[0], "paras.py"), os.path.join(self.fig0, "paras.py"))
-                message = f"dir_simus => {self.fig0}"
+                shutil.copy2(os.path.join(self.host, self.mydirs[0], filename), os.path.join(self.fig0, filename))
+                message = f"dir_figs => {self.fig0}"
             else:
                 message = f"File doesn't exist in data: {self.lmp_trj}"
         print(message)
@@ -1362,20 +1335,10 @@ class _plot:
         timer.count("plot")
         timer.stop()
 
-    def write_runfile(self):
-        self.Path.show()
-        runfile= '\n'.join([
-            "import",
-        ])
-        with open(os.path.join(self.Path.fig0, f"{self.runfile}.py"), "w") as file:
-            file.write(
-                ""
-            )
-        print("-----------------------------------Done!--------------------------------------------")
-
-    def bsub(self, Path):
-        print(f">>> Preparing sub file: {Path.fig0}")
-        logging.info(f">>> Preparing sub file: {Path.fig0}")
+    def sub_file(self):
+        Path = self.Path
+        print(f">>> Preparing sub file......")
+        logging.info(f">>> Preparing sub file......")
         dir_file = os.path.join(f"{Path.fig0}", f"{self.runfile}")
         bsub = [
             f'#!/bin/bash',
@@ -1399,7 +1362,7 @@ class _plot:
             print(">>> for test......")
             print(f"python3 {dir_file}.py")
             subprocess.run(f"python3 {dir_file}.py", shell=True)
-            print(f"{dir_file}.py ==> Done! \n ==> Please check the results and submit the jobs!")
+            print(f"==> Done! \n ==> Please check the results and submit the jobs!")
         elif HOST == "Linux":
             print(">>> Submitting jobs......")
             print(f"bsub < {dir_file}.lsf")
@@ -1519,6 +1482,39 @@ __all__ = [
     "describe",
 ]
 
+# -----------------------------------bsub-------------------------------------------#
+def bsub(Path, task):
+    Init, Model, Run = Path.Init, Path.Model, Path.Run
+    if task == "Simus":
+        if Path.jump: # jump for repeat: check lammpstrj
+            return
+        try:
+            if "Codes" in Path.current:
+                # prepare files and submit
+                Init.data_file(Path)
+                Model.in_file(Path)
+                # return
+                Run.sub_file(Path)
+                # Run.sub_file(Path, 1)
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            raise ValueError(f"An error occurred: {e}")
+
+    elif task == "Anas":
+        if Path.jump:
+            try:
+                Plot = _plot(Path)
+
+                timer.count("plot")
+                timer.stop()
+                # prepare files and submit
+                # Plot.plot()
+                #Plot.sub_file()
+                Plot.plot()
+            except Exception as e:
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
+
 # -----------------------------------Act-------------------------------------------#
 def Act_simus():
     check = True
@@ -1550,6 +1546,6 @@ def Act_simus():
                                             # paras for model: Pe(Fa), Xi(Kb)
                                             Model = _model(Init, Run, iFa, iXi)
                                             Path = _path(Model)  # for directory
-                                            Run.bsub(Path, params["task"])
+                                            bsub(Path, params["task"])
 
 Act_simus()

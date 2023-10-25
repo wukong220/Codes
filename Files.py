@@ -5,12 +5,23 @@ import subprocess
 import platform
 import shutil
 import logging
+from pathlib import Path as Pathlib
 from datetime import datetime, timedelta
 
+def wrap_coordinates(coord, box_min, box_max):
+    return (coord - box_min) % (box_max - box_min) + box_min
+
 class Reorganize:
-    def __init__(self, start_path= 'Simus'):
+    def __init__(self, start_path= 'Simus', fig_path="Figs"):
         self.start_path = os.path.join(os.path.dirname(os.getcwd()), start_path)
+        self.fig_path = os.path.join(os.path.dirname(os.getcwd()), fig_path)
         self.backup_path = os.path.join(self.start_path, "Backup")
+
+        # Input and output filenames
+        self.file_path = os.path.join(self.start_path, "2D_100.0G_100.0Pe_Chain","0.0R5.0_100N1_Slit", "1.0T_0.0Xi_8T5")
+        self.input_file = [f"{i:03}.lammpstrj" for i in range(1, 6)]
+        self.output_file = [f"{i:03}p.lammpstrj" for i in range(1, 6)]
+
         self.queues = {
             "7k83!": {"usage": 1.0, "hosts": ['g009', 'g008', 'a016']},
             "9654!": {"usage": 1.0, "hosts": ['a017']}
@@ -68,7 +79,7 @@ class Reorganize:
         optimal_queue = min(queue_names, key=lambda x: queue_info[x]['usage'])
         return optimal_queue, queue_info
 ##############################################################################
-    def rename_files(self):
+    def rename_folders(self):
         print(f"Rename folders……")
         logging.info(f"\n\nRename folders……")
         # 获取当前目录下的所有条目，并过滤出文件夹
@@ -107,7 +118,23 @@ class Reorganize:
         print("All folders have been renamed.")
         logging.info("All folders have been renamed.")
 
-##############################################################################
+    def rename_files(self):
+        print(f"Rename files……")
+        logging.info(f"\n\nRename files……")
+        path = Pathlib(self.fig_path)
+        for file in path.rglob("*.pdf"):
+            if file.is_file():
+                old_name = file.name
+                new_name = old_name
+                if old_name.startswith("Org"):
+                    new_name = old_name.replace("Org", "Com.Org.", 1)
+                elif old_name.startswith("Dist"):
+                    new_name = old_name.replace("Dist", "Com.Dist.", 1)
+                if new_name != old_name:
+                    file.rename(file.with_name(new_name))
+                    print(f"Renamed: {file} -> {file.with_name(new_name)}")
+
+    ##############################################################################
     def merge_files(self):
         logging.basicConfig(filename='Files.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         print(f"Merge folders……")
@@ -138,7 +165,6 @@ class Reorganize:
                                     print(f"Renaming {anulus_dir} to {anlus_dir}")
                                     os.rename(anulus_dir, anlus_dir)
 
-    ##############################################################################
     def reorganize_dirs(self):
         for dirpath, dirnames, filenames in os.walk(self.start_path):
             #2D_100G_1.0T_Chain/5.0R5.0_100N1_Anulus
@@ -266,9 +292,45 @@ class Reorganize:
                                         logging.info(f"Deleting file {file_to_delete}")
                                         #os.remove(file_to_delete)
 ##############################################################################
+    # Define a function to read and process the LAMMPS trajectory file
+    def wrap_lammpstrj(self):
+        for input, output in zip(self.input_file, self.output_file):
+            input_file = os.path.join(self.file_path, input)
+            output_file = os.path.join(self.file_path, output)
+            print(f"Wrapping {input_file} to {output_file}......")
+            logging.info(f"Wrapping {input_file} to {output_file}......")
+            box_min_x, box_max_x = -55, 55
+            box_min_y, box_max_y = -55, 55
+            with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
+                while True:
+                    try:
+                        # Copy the headers for each frame
+                        for _ in range(9):
+                            header_line = next(infile)
+                            outfile.write(header_line)
+
+                        # Read and process the atoms data
+                        for _ in range(100):  # Assuming there are 100 atoms in each frame
+                            atom_line = next(infile).strip()
+                            atom_data = atom_line.split()
+                            atom_id, atom_type = atom_data[0], atom_data[1]
+                            xu, yu = float(atom_data[2]), float(atom_data[3])
+
+                            # Wrap the coordinates
+                            xu_wrapped = wrap_coordinates(xu, box_min_x, box_max_x)
+                            yu_wrapped = wrap_coordinates(yu, box_min_y, box_max_y)
+
+                            # Write the new line to output file
+                            outfile.write(
+                                f"{atom_id} {atom_type} {xu_wrapped} {yu_wrapped} {' '.join(atom_data[4:])}\n")
+
+                    except StopIteration:
+                        break  # End of file
 
 #usage
 if __name__ == "__main__":
     reorg = Reorganize()
     #reorg.clean_lammpstrj()
-    reorg.merge_files()
+    #reorg.merge_files()
+    reorg.rename_files()
+    #reorg.wrap_lammpstrj()
