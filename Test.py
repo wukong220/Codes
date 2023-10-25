@@ -595,7 +595,7 @@ if __name__ == "__main__":
 
     #plot.original()
     #plot.distribution(data_dict)
-    plot.xyz()
+    #plot.xyz()
 
 ####################################################################
     # data_r[Pe][N][file][frame][atom]
@@ -621,3 +621,5 @@ if __name__ == "__main__":
         'std_z': std_z['z'],
         'count_z': count_z['z']
     })
+
+

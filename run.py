@@ -1,11 +1,12 @@
-import os
 import re
+import os
 import sys
-import subprocess
-import shutil
-import platform
 import time
+import glob
+import shutil
 import logging
+import platform
+import subprocess
 from datetime import datetime, timedelta
 from itertools import combinations, product, permutations
 
@@ -33,6 +34,7 @@ logging.basicConfig(filename='run.log', level=logging.INFO, format='%(asctime)s 
 #-----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
 HOST = platform.system()
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 #-----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
 envs = ["Anlus", "Rand", "Slit"]
@@ -40,7 +42,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[2:]},
+    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[1],
     'restart': [False, "equ"],
@@ -48,7 +50,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': 5,
+    'Trun': 1,
     'Dimend': 2,
     #'Dimend': [2,3],
     'num_chains': 1,
@@ -57,7 +59,7 @@ class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
-                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
+                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [20.0, 100.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100]
@@ -67,9 +69,9 @@ class _config:
                          # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                          },
 
-                "Anlus": {#2: {'Rin': [0.0], 'Wid': [0.0]},
+                "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
                               #3: {'Rin': [0.0], 'Wid': [0.0]},
-                              2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                              #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                               3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
                 "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
@@ -98,7 +100,7 @@ class _config:
                 "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
-                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
+                "Slit": {2: {"Rin": [0.0], "Wid": [4.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},
                          },
             },
@@ -213,10 +215,9 @@ class _run:
                     self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
     
-    def sub_file(self, Path):
-        Run = Path.Run
+    def sub_file(self, Path, infiles):
         logging.info(f">>> Preparing sub file: {Path.dir_simus}")
-        for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
+        for infile in infiles:
             print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.dir_simus}", infile)
             bsub=[
@@ -229,14 +230,17 @@ class _run:
                 f'#BSUB -n 1',
                 f'#BSUB -oo {dir_file}.out',
                 f'#BSUB -eo {dir_file}.err',
+                f'export RUN_ON_CLUSTER=true',
                 f'cd {Path.dir_simus}',
-                f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
-                f'mpirun -np 1 lmp_wk -i {infile}.in',
+                f'echo "python3 run.py {infile}"',
+                f'python3 run.py {infile}',
+                #f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
+                #f'mpirun -np 1 lmp_wk -i {infile}.in',
             ]
-            
-            with open(f"{dir_file}.lsf", "w") as file:
-                for command in bsub:
-                    file.write(command + "\n")
+
+        with open(f"{dir_file}.lsf", "w") as file:
+            for command in bsub:
+                file.write(command + "\n")
 ##########################################END!###############################################################
 
 class _init:
@@ -850,6 +854,7 @@ class _path:
         self.Config = Model.Init.Config
         self.Run = Model.Run
         self.jump = self.build_paths()
+        self.filename = os.path.basename(os.path.abspath(__file__))
 
     def build_paths(self):
         self.simus = os.path.join(self.host, self.mydirs[1])
@@ -1446,110 +1451,195 @@ __all__ = [
 ]
 
 # -----------------------------------bsub-------------------------------------------#
-def sub_job(Path, task):
-    Init, Model, Run = Path.Init, Path.Model, Path.Run
-    # simulation or analysis
-    if task == "Simus":
-        if Path.jump: # jump for repeat: check lammpstrj
-            return
-        # os.makedirs(Path.dir_simus, exist_ok=True)
-        subprocess.run(f"mkdir -p {Path.dir_simus}", shell=True)
-        shutil.copy2(os.path.join(Path.host, Path.mydirs[0], filename), os.path.join(Path.dir_simus, filename))
-        message = f"dir_simus => {Path.dir_simus}"
+def exe_simus(task, path, infile):
+    dir_file = os.path.join(path, infile)
+    if task == "Run":
+        print(f">>> Running jobs......")
+        logging.info(f">>> Running jobs......")
+
+        print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
+        subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
+        print(f"{dir_file}.in ==> Done! \n")
+
+    elif task == "Submit":
+        print(f">>> Running jobs......")
+        logging.info(f">>> Running jobs......")
+
+        print(f"bsub < {dir_file}.lsf")
+        subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+        print(f"Submitted: {dir_file}")
+
+    else:
+        message = f"ERROR: Wrong task => {task} != Run or Submit"
         print(message)
-        logging.info(message)
-        # jobs
-        for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
-            # prepare files
-            dir_file = os.path.join(f"{Path.dir_simus}", infile)
-            Init.data_file(Path)
-            Model.in_file(Path)            # return
-            Run.sub_file(Path)
+        logging.error(message)
+        raise ValueError(message)
 
-            #run or submit
-            if HOST == "Darwin":
-                print(">>> Testing jobs......")
-                logging.info(">>> Testing jobs......")
-                print(f"mpirun -np 4 lmp_wk -i {dir_file}.in")
-                subprocess.run(f"mpirun -np 4 lmp_wk -i {dir_file}.in", shell=True)
-                print(f"{dir_file}.in ==> Done! \n ==> Please check the results and submit the jobs!")
-            elif HOST == "Linux":
-                print(">>> Submitting jobs......")
-                logging.info(">>> Submitting jobs......")
-                print(f"bsub < {dir_file}.lsf")
-                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}")
+def sub_job(Path):
+    # Initialize directories and files
+    Init, Model, Run = Path.Init, Path.Model, Path.Run
+    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+    if Path.jump:  # jump for repeat: check lammpstrj
+        return
 
-    elif task == "Anas":
-        if Path.jump:
-            subprocess.run(f"mkdir -p {Path.fig0}", shell=True)
-            shutil.copy2(os.path.join(Path.host, Path.mydirs[0], filename), os.path.join(Path.fig0, filename))
-            message = f"dir_figs => {Path.fig0}"
-            print(message)
-            logging.info(message)
+    # Create simulation directory and copy run.py
+    message = f"dir_simus => {Path.dir_simus}"
+    print(message)
+    logging.info(message)
+    os.makedirs(Path.dir_simus, exist_ok=True)
+    shutil.copy2(
+        os.path.join(Path.host, Path.mydirs[0], Path.filename),
+        os.path.join(Path.dir_simus, Path.filename))
 
-            Plot = _plot(Path)
-            # prepare files and submit
-            if "Codes" in current:
-                Plot.sub_file()
+    # prepare files
+    infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
+    Init.data_file(Path)
+    Model.in_file(Path)  # return
+    Run.sub_file(Path, infiles)
 
-            if HOST == "Darwin":
-                print(">>> for test......")
-                print(f"python3 {dir_file}.py")
-                subprocess.run(f"python3 {dir_file}.py", shell=True)
-                print(f"==> Done! \n ==> Please check the results and submit the jobs!")
-            elif HOST == "Linux":
-                print(">>> Submitting jobs......")
-                print(f"bsub < {dir_file}.lsf")
-                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
+    # excute jobs
+    if input:
+        # running files
+        if HOST == "Darwin":  # macOS
+            Path.exe_simus("Run", Path.dir_simus, input)
+        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+            exe_simus("Submit", Path.dir_simus, input)
 
-        else:
-            message = f"File doesn't exist in data: {Path.lmp_trj}"
-            print(message)
-            logging.info(message)
+    for infile in infiles:
+        # running files
+        if HOST == "Darwin":  # macOS
+            exe_simus("Run", Path.dir_simus, infile)
+        # submitting files
+        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+            exe_simus("Submit", Path.dir_simus, infile)
 
 # -----------------------------------Act-------------------------------------------#
+def simus(check):
+    for iDimend in convert2array(params['Dimend']):
+        for iType in convert2array(params['labels']['Types']):
+            for iEnv in convert2array(params['labels']['Envs']):
+                Config = _config(iDimend, iType, iEnv, params)
+                if platform.system() == "Linux":  # params['task'] == "Simus" and
+                    mpl.use("agg")
+                    if check:
+                        check_params(params)
+                        check = False
+
+                for iGamma in convert2array(params['Gamma']):
+                    for iTemp in convert2array(params['Temp']):
+                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
+                        Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+                        for iRin in convert2array(params['Rin']):
+                            for iWid in convert2array(params['Wid']):
+                                for iN in convert2array(params['N_monos']):
+                                    # paras for init config: Rin, Wid, N_monos, L_box
+                                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                                    if Init.jump:  # chains are too long or invalid label
+                                        continue
+                                    queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
+                                    for iFa in convert2array(params['Fa']):
+                                        for iXi in convert2array(params['Xi']):
+                                            # paras for model: Pe(Fa), Xi(Kb)
+                                            Model = _model(Init, Run, iFa, iXi)
+                                            Path = _path(Model)  # for directory
+                                            sub_job(Path)
+
 if __name__ == "__main__":
-    current = os.path.abspath(__file__)
-    filename = os.path.basename(current)
-    if "Codes" in current:
-        check = True
-        for iDimend in convert2array(params['Dimend']):
-            for iType in convert2array(params['labels']['Types']):
-                for iEnv in convert2array(params['labels']['Envs']):
-                    Config = _config(iDimend, iType, iEnv, params)
-                    if platform.system() != "Darwin":  # params['task'] == "Simus" and
-                        mpl.use("agg")
-                        if check:
-                            check_params(params)  # continue
-                            check = False
+    task = params["task"]
+    input = sys.argv[1] if len(sys.argv) > 1 else None
+    usage = "run.py infile or bsub < infile.lsf"
+    print(usage)
+    # simulation or analysis
+    ###################################################################
+    # Simulations
+    if task == "Simus":
+        if "Codes" in CURRENT_DIR:
+            simus(True)
+        elif "Simus" in CURRENT_DIR: # 计算节点: "run.py infile" == "bsub < infile.lsf"
+            try:
+                if input:
+                    exe_simus("Run", CURRENT_DIR, input)
+                else:
+                    for infile in [f"{i:03}" for i in range(1, params['Trun'] + 1)]:
+                        exe_simus("Run", CURRENT_DIR, infile)
+            except Exception as e:
+                print(usage)
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
 
-                    for iGamma in convert2array(params['Gamma']):
-                        for iTemp in convert2array(params['Temp']):
-                            # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                            Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
-                            Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                            for iRin in convert2array(params['Rin']):
-                                for iWid in convert2array(params['Wid']):
-                                    for iN in convert2array(params['N_monos']):
-                                        # paras for init config: Rin, Wid, N_monos, L_box
-                                        Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                                        if Init.jump:  # chains are too long or invalid label
-                                            continue
-                                        queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
-                                        for iFa in convert2array(params['Fa']):
-                                            for iXi in convert2array(params['Xi']):
-                                                # paras for model: Pe(Fa), Xi(Kb)
-                                                Model = _model(Init, Run, iFa, iXi)
-                                                Path = _path(Model)  # for directory
-                                                sub_job(Path, params["task"])
-    elif "Simus" in current:
-        print(">>> Running jobs......")
-        logging.info(">>> testing jobs......")
-        print(f"mpirun -np 4 lmp_wk -i {dir_file}.in")
-        subprocess.run(f"mpirun -np 4 lmp_wk -i {dir_file}.in", shell=True)
-        print(f"{dir_file}.in ==> Done! \n ==> Please check the results and submit the jobs!")
+    # Analysis
+    elif task == "Anas":
+        input = sys.argv[1] if len(sys.argv) > 1 else None
+        usage = "run.py infile or bsub < infile.lsf"
+        if "Codes" in CURRENT_DIR:
+            check = True
+            for iDimend in convert2array(params['Dimend']):
+                for iType in convert2array(params['labels']['Types']):
+                    for iEnv in convert2array(params['labels']['Envs']):
+                        Config = _config(iDimend, iType, iEnv, params)
+                        if platform.system() == "Linux":  # params['task'] == "Simus" and
+                            mpl.use("agg")
+                            if check:
+                                check_params(params)
+                                check = False
 
-    elif "Figs" in current:
-        Plot.plot()
+                        for iGamma in convert2array(params['Gamma']):
+                            for iTemp in convert2array(params['Temp']):
+                                # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+                                Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
+                                Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+                                for iRin in convert2array(params['Rin']):
+                                    for iWid in convert2array(params['Wid']):
+                                        for iN in convert2array(params['N_monos']):
+                                            # paras for init config: Rin, Wid, N_monos, L_box
+                                            Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                                            if Init.jump:  # chains are too long or invalid label
+                                                continue
+                                            queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
+                                            for iFa in convert2array(params['Fa']):
+                                                for iXi in convert2array(params['Xi']):
+                                                    # paras for model: Pe(Fa), Xi(Kb)
+                                                    Model = _model(Init, Run, iFa, iXi)
+                                                    Path = _path(Model)  # for directory
+                                                    ###################################################################
+                                                    task = params["task"]
+                                                    Init, Model, Run = Path.Init, Path.Model, Path.Run
+                                                    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+                                                    print(usage)
+
+                                                    if Path.jump:  # according to lammpstrj files
+                                                        Plot = _plot(Path)
+
+                                                        # copy run.py
+                                                        message = f"dir_figs => {Path.fig0}"
+                                                        subprocess.run(f"mkdir -p {Path.fig0}", shell=True)
+                                                        shutil.copy2(os.path.join(Path.host, Path.mydirs[0], Path.filename), os.path.join(Path.fig0, Path.filename))
+                                                        print(message)
+                                                        logging.info(message)
+
+                                                        # prepare files
+                                                        Plot.sub_file()
+
+                                                        # running files
+                                                        dir_file = os.path.join(f"{Path.fig0}", f"{Plot.runfile}")
+                                                        if HOST == "Darwin":  # macOS
+                                                            print(">>> Plotting tests......")
+                                                            logging.info(">>> Plotting tests......")
+                                                            print(f"python3 {dir_file}.py")
+                                                            subprocess.run(f"python3 {dir_file}.py", shell=True)
+                                                            print(f"==> Done! \n ==> Please check the results and submit the plots!")
+
+                                                        # submitting files
+                                                        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+                                                            print(">>> Submitting plots......")
+                                                            logging.info(">>> Submitting plots......")
+                                                            print(f"bsub < {dir_file}.lsf")
+                                                            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                                                            print(f"Submitted: {dir_file}.py")
+                                                    else:
+                                                        message = f"File doesn't exist in data: {Path.lmp_trj}"
+                                                        print(message)
+                                                        logging.info(message)
+        elif "Figs" in CURRENT_DIR:
+            Plot.plot()

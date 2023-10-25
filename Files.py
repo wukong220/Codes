@@ -327,6 +327,22 @@ class Reorganize:
                     except StopIteration:
                         break  # End of file
 
+
+def match(current):
+    regex = r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)Pe_(\w+)/([\d.]+?)R([\d.]+?)_(\d+?)N(\d+?)_(\w+)/([\d.]+?)T_([\d.]+?)Xi_(\d+?)T(\d+)"
+    free_re = r"(.*)/(\d)D_([\d.]+?)G_([\d.]+?)Pe_(\w+)/(\d+?)N(\d+?)_(\w+)/([\d.]+?)T_([\d.]+?)Xi_(\d+?)T(\d+)"
+    match = re.match(regex, current)
+    free_match = re.match(free_re, current)
+    if match:
+        path, D, G, Pe, Type, Rin, Wid, N, num, Env, T, Xi, run = match.groups()
+    elif free_match:
+        path, D, G, Pe, Type, N, num, Env, T, Xi, run = match.groups()
+    else:
+        message = f"Could not extract params from {current}, error: {e}"
+        print(message)
+        logging.error(message)
+        raise ValueError(message)
+
 #usage
 if __name__ == "__main__":
     reorg = Reorganize()
