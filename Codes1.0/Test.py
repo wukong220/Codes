@@ -11,8 +11,8 @@ from scipy.stats import multivariate_normal
 import matplotlib.transforms as mtransforms
 import seaborn as sns
 import warnings
-from itertools import combinations, product, permutations, islice
 warnings.filterwarnings('ignore')
+
 
 # Function to calculate mean and variance for scatter plots
 def statistics(data):
@@ -622,35 +622,4 @@ if __name__ == "__main__":
         'count_z': count_z['z']
     })
 
-params = {
-    'num_chains': 1,
-    'Dimend': [2.0,3.0],
 
-}
-data_shape = (5, 2001, 100, 3)
-data = np.random.rand(*data_shape)
-Lx = 10.0
-frames = data.shape[1]
-
-
-
-# Example setup
-data_shape = (5, 2001, 100, 3)  # Replace with your actual data shape
-data = np.random.rand(*data_shape)  # Replace with your actual data
-lox, hix = 0, 10  # Replace with your actual boundary values
-Lx = hix - lox
-
-# Make a copy of the original data to store the unwrapped coordinates
-
-def unwrap(data, start_frame, Lx):
-    frames = data.shape[1]
-    for i in range(start_frame, frames):
-        dx = data[:, i, :, 0] - data[:, i - 1, :, 0]
-        crossed = np.abs(dx) > Lx / 2
-        if np.any(crossed):
-            update_values = np.sign(dx) * Lx * crossed
-            data[:, i:, crossed, 0] -= update_values[:, crossed][:, None]
-            unwrap(data, i+1, Lx)
-# Start unwrapping from the second frame (index 1)
-unwrap(data, 1, Lx)
-# Now data_unwrapped should contain the unwrapped x-coordinates.

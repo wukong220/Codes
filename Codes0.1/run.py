@@ -8,7 +8,7 @@ import logging
 import platform
 import subprocess
 from datetime import datetime, timedelta
-from itertools import combinations, product, permutations, islice
+from itertools import combinations, product, permutations
 
 import pandas as pd
 import numpy as np
@@ -29,13 +29,12 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 import warnings
 warnings.filterwarnings('ignore')
-logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #-----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
 HOST = platform.system()
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-input_file = sys.argv[1] if len(sys.argv) > 1 else None
 #-----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
 envs = ["Anlus", "Rand", "Slit"]
@@ -43,7 +42,7 @@ tasks = ["Simus", "Anas"]
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[1],
     'restart': [False, "equ"],
@@ -51,8 +50,8 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': 5,
-    'Dimend': 3,
+    'Trun': 1,
+    'Dimend': 2,
     #'Dimend': [2,3],
     'num_chains': 1,
 }
@@ -88,9 +87,9 @@ class _config:
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
-                              'Fa': [1.0],
-                              'Temp': [0.2],
+                "Chain": {'N_monos': [100], 'Xi': 0.0,
+                              'Fa': [100.0],
+                              #'Temp': [0.2],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -101,7 +100,7 @@ class _config:
                 "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
-                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
+                "Slit": {2: {"Rin": [0.0], "Wid": [4.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},
                          },
             },
@@ -217,10 +216,10 @@ class _run:
         return self.Queue
     
     def sub_file(self, Path, infiles):
-        logging.info(f">>> Preparing sub file: {Path.simus}")
+        logging.info(f">>> Preparing sub file: {Path.dir_simus}")
         for infile in infiles:
             print(">>> Preparing sub file......")
-            dir_file = os.path.join(f"{Path.simus}", infile)
+            dir_file = os.path.join(f"{Path.dir_simus}", infile)
             bsub=[
                 f'#!/bin/bash',
                 f'',
@@ -232,18 +231,16 @@ class _run:
                 f'#BSUB -oo {dir_file}.out',
                 f'#BSUB -eo {dir_file}.err',
                 f'export RUN_ON_CLUSTER=true',
-                f'cd {Path.simus}',
-                f'echo "python3 Run.py {infile}"',
-                f'python3 Run.py {infile}',
+                f'cd {Path.dir_simus}',
+                f'echo "python3 run.py {infile}"',
+                f'python3 run.py {infile}',
                 #f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
                 #f'mpirun -np 1 lmp_wk -i {infile}.in',
             ]
 
-            with open(f"{dir_file}.lsf", "w") as file:
-                for command in bsub:
-                    file.write(command + "\n")
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        with open(f"{dir_file}.lsf", "w") as file:
+            for command in bsub:
+                file.write(command + "\n")
 ##########################################END!###############################################################
 
 class _init:
@@ -513,7 +510,7 @@ class _init:
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(1, self.Trun + 1)]:
-            data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
+            data_file = os.path.join(f"{Path.dir_simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
@@ -785,13 +782,13 @@ class _model:
         #from LJ + harmonic ==> LJ4422 + FENE4422
         Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
-        logging.info(f"==> Writing infile ==> {Path.simus}")
+        logging.info(f"==> Writing infile ==> {Path.dir_simus}")
 
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(f"==> Writing infile: {infile}......")
             try:
                 #setup
-                dir_file = os.path.join(f"{Path.simus}", infile)
+                dir_file = os.path.join(f"{Path.dir_simus}", infile)
                 if Run.Params["restart"][0]:
                     read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
                 else:
@@ -863,7 +860,7 @@ class _path:
         self.simus = os.path.join(self.host, self.mydirs[1])
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
-            os.makedirs(self.host_dir, exist_ok=True)
+            subprocess.run(f"mkdir -p {self.host_dir}", shell=True)
         #2D_100G_1.0Pe_Chain
         self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Model.Pe}Pe_{self.Config.Type}"
         #5.0R5.0_100N1_Anulus
@@ -879,26 +876,28 @@ class _path:
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
-        self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', self.dir3)
+        self.dir_simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', self.dir3)
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
-
-        #Anas and Figures
-        self.fig0 = self.simus.replace(self.mydirs[1], self.mydirs[3])
-        self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun:03}.lammpstrj")
-        return os.path.exists(self.lmp_trj)
+        #Figures
+        self.fig0 = os.path.join(self.host, self.mydirs[3], self.dir1, f'{self.dir2}', self.dir3)
+        self.lmp_trj = os.path.join(self.dir_simus, f"{self.Run.Trun:03}.lammpstrj")
+        file_exists = os.path.exists(self.lmp_trj)
+        return file_exists
 
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
-              f"Path.simus: {self.simus}\nPath.fig0: {self.fig0}")
+              f"Path.dir_simus: {self.dir_simus}\nPath.fig0: {self.fig0}")
 #############################################################################################################
 
-class _anas:
-    def __init__(self, Path, Pe):
+class _plot:
+    def __init__(self, Path, bins = 20):
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
-        self.Pe = Pe
+        self.runfile = "dana_org"
         self.chunk = 9
         self.simp = 10
+        self.num_bins = bins
+        self.num_pdf = bins*10
         self.jump = True
 
     def set_dump(self):
@@ -913,31 +912,15 @@ class _anas:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
 
-    def unwrap_x(self, Lx):
-        frames = self.data.shape[1]
-        for i in range(1, frames):
-            while True:
-                dx = self.data[:, i, :, 0] - self.data[:, i - 1, :, 0]
-                crossed = np.abs(dx) > Lx / 2
-                if not np.any(crossed):
-                    break
-                for file_idx in range(self.data.shape[0]):
-                    for atom_idx in range(self.data.shape[2]):
-                        if crossed[file_idx, atom_idx]:
-                            self.data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
-        return self.data
-
     def read_data(self):
         timer = Timer("Read")
         timer.start()
         dump = self.set_dump()
-        lox, hix = -self.Init.Lbox * 1025, self.Init.Lbox * 1023
-
         self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
         # read the lammpstrj files with 2001 frames
-        print(f"{self.Path.simus}")
+        print(f"{self.Path.dir_simus}")
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun + 1)]):
-            dir_file = os.path.join(f"{self.Path.simus}", f"{ifile}.lammpstrj")
+            dir_file = os.path.join(f"{self.Path.dir_simus}", f"{ifile}.lammpstrj")
             logging.info(f"==> Reading {ifile}.lammpstrj file: ......")
             print(f"==> Reading {ifile}.lammpstrj file: ......")
             # extract natoms, time steps, and check the last time step
@@ -960,33 +943,33 @@ class _anas:
 
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
-            #np.save(self.Path.simus, data)
-
-        # unwrap data
-        Lx = hix - lox
-        if self.Pe > 50:
-            self.unwrap_x(Lx)  # get real coordinates
-        # data = np.copy(self.data)
-        # for i in range(1, frames):
-        # dx = data[:, i, :, 0] - data[:, i - 1, :, 0]
-        # data[:, i, :, 0] -= np.sign(dx) * Lx * (np.abs(dx) > Lx / 2)
-        timer.count("Read and unwrap data")
+            #np.save(self.Path.dir_simus, data)
+        timer.count("Read data")
         timer.stop()
         return self.data
 
     def set_data(self, str="Com", flag=False):
         self.describe = str
         dict = {}
+        # unwrap data
+        lox, hix = -self.Init.Lbox * 1025, self.Init.Lbox * 1023
+        Lx = hix - lox
         files, frames, atoms, _ = self.data.shape
+
         # data[ifile][iframe][iatom][xu, yu]
+        # unwrap
+        for i in range(1, frames):
+            dx = self.data[:, i, :, 0] - self.data[:, i - 1, :, 0]
+            self.data[:, i, :, 0] -= np.sign(dx) * Lx * (np.abs(dx) > Lx / 2)
+        # center of mass and average of files
         data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
         data = np.mean(data_com, axis=0)
+        #data = np.mean(self.data, axis=0)
 
-        # debug
+        #debug
         #describe(self.data, "self.data", flag=False)
-        # describe(data_com, "data_com", flag=False)
+        #describe(data_com, "data_com", flag=False)
         #describe(data, "data")
-        # center of mass and average of files
 
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
             message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
@@ -1008,31 +991,6 @@ class _anas:
             "r": [modules, modules.flatten(),],  # Magnitude (r coordinate)
         }
         return dict
-
-    def save_data(self):
-        # data[ifile][iframe][iatom][xu, yu]
-        self.read_data()
-        #print(f"data.shape: {self.data.shape}")
-        data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
-        data_Rcom = np.linalg.norm(data_com[ ..., :], axis = -1)
-
-        # Rg2_time[iframe]
-        Rg2_time = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
-        Rg2 = np.mean(Rg2_time) # average over time
-        message = f"saving Rg2_time: {self.Path.fig0}"
-        print(message)
-        logging.info(message)
-        np.save(os.path.join(self.Path.fig0, "Rg2_time.npy"), Rg2_time)
-
-        #MSD
-
-class _plot:
-    def __init__(self, Path, bins = 20):
-        self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
-        self.runfile = "dana_org"
-        self.num_bins = bins
-        self.num_pdf = bins*10
-        self.jump = True
 
     def original(self):
         timer = Timer("Original")
@@ -1331,30 +1289,20 @@ class _plot:
         timer.stop()
         return False
 
-    def distics(self):
+    def distatis(self):
         print("-----------------------------------Done!--------------------------------------------")
     ##################################################################
-    def MSD(self):
+    def MSD():
         print("-----------------------------------Done!--------------------------------------------")
-    def Rg(self):
-        Rg2_time = np.load(os.path.join(self.Path.fig0, "Rg2_time.npy")) #average over atoms and files
-
-
-        # Plotting the Rg2 for the first file across all frames
-        plt.plot(Rg2_time[:])
-        plt.xlabel('time')
-        plt.ylabel(fr'$R_g^2$')
-        plt.title(fr'$R_g^2$ average over files')
-        plt.show()
-
+    def Rg():
         print("-----------------------------------Done!--------------------------------------------")
-    def Cee(self):
+    def Cee():
         print("-----------------------------------Done!--------------------------------------------")
     ##################################################################
     def plot(self):
         timer = Timer("Plot")
         timer.start()
-        if HOST == "Darwin": #MacOS
+        if HOST == "Darwin":
             self.jump = False
         self.read_data()
         self.data_dict, self.simp_dict = self.set_data("Com"), self.set_data("Com", flag=True)
@@ -1447,6 +1395,24 @@ def convert2array(x):
     else:
         raise ValueError("Unsupported type!")
 
+def check_params(params):
+    print("===> Caveats: Please confirm the following parameters:")
+    first_key = True
+    for key, value in params.items():
+        if first_key:
+            first_key = False
+            continue
+
+        user_input = input(f"{key} = {value}    (y/n)?: ")
+        if user_input.lower() == "y":
+            break
+        elif user_input.lower() == '':
+            continue
+        else:
+            new_value = input(f"Please enter the new value for {key}: ")
+            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
+    return params
+
 def statistics(data):
     '''for plot original'''
     unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
@@ -1466,8 +1432,7 @@ def describe(dataset, str="data", flag = True):
           f"var: {np.var(data)}\n"
           f"first: {data[:10]}\n"
           f"middle: {data[len(data) // 2 - 5: len(data) // 2 + 5]}\n"
-          f"last: {data[-10:]}\n"
-          "------------------------------------------Done!----------------------------------------")
+          f"last: {data[-10:]}\n")
     if flag:
         sys.exit()
 
@@ -1489,21 +1454,21 @@ __all__ = [
 def exe_simus(task, path, infile):
     dir_file = os.path.join(path, infile)
     if task == "Run":
-        print(f">>> Running jobs: {infile}......")
-        logging.info(f">>> Running jobs: {infile}......")
+        print(f">>> Running jobs......")
+        logging.info(f">>> Running jobs......")
 
         print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
         subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
         print(f"{dir_file}.in ==> Done! \n")
 
     elif task == "Submit":
-        print(f">>> Running jobs : {infile}......")
-        logging.info(f">>> Running jobs : {infile}......")
+        print(f">>> Running jobs......")
+        logging.info(f">>> Running jobs......")
 
         print(f"bsub < {dir_file}.lsf")
         subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
         print(f"Submitted: {dir_file}")
-        print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+
     else:
         message = f"ERROR: Wrong task => {task} != Run or Submit"
         print(message)
@@ -1517,52 +1482,39 @@ def sub_job(Path):
     if Path.jump:  # jump for repeat: check lammpstrj
         return
 
-    # Create simulation directory and copy Run.py
-    message = f"dir_simus => {Path.simus}"
+    # Create simulation directory and copy run.py
+    message = f"dir_simus => {Path.dir_simus}"
     print(message)
     logging.info(message)
-    os.makedirs(Path.simus, exist_ok=True)
+    os.makedirs(Path.dir_simus, exist_ok=True)
     shutil.copy2(
         os.path.join(Path.host, Path.mydirs[0], Path.filename),
-        os.path.join(Path.simus, Path.filename))
+        os.path.join(Path.dir_simus, Path.filename))
 
     # prepare files
     infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
     Init.data_file(Path)
     Model.in_file(Path)  # return
     Run.sub_file(Path, infiles)
+
     # excute jobs
-    if input_file:
+    if input:
         # running files
         if HOST == "Darwin":  # macOS
-            exe_simus("Run", Path.simus, input_file)
+            Path.exe_simus("Run", Path.dir_simus, input)
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-            exe_simus("Submit", Path.simus, input_file)
-    else:
-        for infile in infiles:
-            # running files
-            if HOST == "Darwin":  # macOS
-                exe_simus("Run", Path.simus, infile)
-            # submitting files
-            elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-                exe_simus("Submit", Path.simus, infile)
+            exe_simus("Submit", Path.dir_simus, input)
 
-# -----------------------------------Act-----------------v--------------------------#
-def check_params(params):
-    print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
-    for key, value in islice(params.items(), 1, None):
-        user_input = input(f"{key} = {value}    (y/n)?: ")
-        if user_input.lower() == "y":
-            break
-        elif user_input.lower() == '':
-            continue
-        else:
-            new_value = input(f"Please enter the new value for {key}: ")
-            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
-    return params
+    for infile in infiles:
+        # running files
+        if HOST == "Darwin":  # macOS
+            exe_simus("Run", Path.dir_simus, infile)
+        # submitting files
+        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+            exe_simus("Submit", Path.dir_simus, infile)
 
-def simus(params):
-    check = True
+# -----------------------------------Act-------------------------------------------#
+def simus(check):
     for iDimend in convert2array(params['Dimend']):
         for iType in convert2array(params['labels']['Types']):
             for iEnv in convert2array(params['labels']['Envs']):
@@ -1570,7 +1522,7 @@ def simus(params):
                 if platform.system() == "Linux":  # params['task'] == "Simus" and
                     mpl.use("agg")
                     if check:
-                        params = check_params(params)
+                        check_params(params)
                         check = False
 
                 for iGamma in convert2array(params['Gamma']):
@@ -1595,18 +1547,19 @@ def simus(params):
 
 if __name__ == "__main__":
     task = params["task"]
-    usage = "Run.py infile or bsub < infile.lsf"
+    input = sys.argv[1] if len(sys.argv) > 1 else None
+    usage = "run.py infile or bsub < infile.lsf"
     print(usage)
     # simulation or analysis
     ###################################################################
     # Simulations
     if task == "Simus":
         if "Codes" in CURRENT_DIR:
-            simus(params)
-        elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+            simus(True)
+        elif "Simus" in CURRENT_DIR: # 计算节点: "run.py infile" == "bsub < infile.lsf"
             try:
-                if input_file:
-                    exe_simus("Run", CURRENT_DIR, input_file)
+                if input:
+                    exe_simus("Run", CURRENT_DIR, input)
                 else:
                     for infile in [f"{i:03}" for i in range(1, params['Trun'] + 1)]:
                         exe_simus("Run", CURRENT_DIR, infile)
@@ -1617,6 +1570,8 @@ if __name__ == "__main__":
 
     # Analysis
     elif task == "Anas":
+        input = sys.argv[1] if len(sys.argv) > 1 else None
+        usage = "run.py infile or bsub < infile.lsf"
         if "Codes" in CURRENT_DIR:
             check = True
             for iDimend in convert2array(params['Dimend']):
@@ -1651,29 +1606,28 @@ if __name__ == "__main__":
                                                     task = params["task"]
                                                     Init, Model, Run = Path.Init, Path.Model, Path.Run
                                                     run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+                                                    print(usage)
 
                                                     if Path.jump:  # according to lammpstrj files
-                                                        Anas = _anas(Path, Model.Pe)
-                                                        Plot = _plot(Anas)
+                                                        Plot = _plot(Path)
 
-                                                        # copy Run.py
+                                                        # copy run.py
                                                         message = f"dir_figs => {Path.fig0}"
-                                                        os.makedirs(Path.fig0, exist_ok=True)
-                                                        shutil.copy2(os.path.join(Path.host, Path.mydirs[0], Path.filename),
-                                                                     os.path.join(Path.fig0, f"{Plot.runfile}.py"))
+                                                        subprocess.run(f"mkdir -p {Path.fig0}", shell=True)
+                                                        shutil.copy2(os.path.join(Path.host, Path.mydirs[0], Path.filename), os.path.join(Path.fig0, Path.filename))
                                                         print(message)
                                                         logging.info(message)
 
                                                         # prepare files
-                                                        #Plot.sub_file()
+                                                        Plot.sub_file()
 
                                                         # running files
                                                         dir_file = os.path.join(f"{Path.fig0}", f"{Plot.runfile}")
                                                         if HOST == "Darwin":  # macOS
                                                             print(">>> Plotting tests......")
                                                             logging.info(">>> Plotting tests......")
-                                                            #Plot.plot()
-                                                            Anas.save_data()
+                                                            print(f"python3 {dir_file}.py")
+                                                            subprocess.run(f"python3 {dir_file}.py", shell=True)
                                                             print(f"==> Done! \n ==> Please check the results and submit the plots!")
 
                                                         # submitting files
@@ -1687,12 +1641,5 @@ if __name__ == "__main__":
                                                         message = f"File doesn't exist in data: {Path.lmp_trj}"
                                                         print(message)
                                                         logging.info(message)
-        elif "Anas" in CURRENT_DIR:
-            print(">>> Plotting tests......")
-            logging.info(">>> Plotting tests......")
-
         elif "Figs" in CURRENT_DIR:
-            print(">>> Plotting tests......")
-            logging.info(">>> Plotting tests......")
             Plot.plot()
-            print(f"==> Done! \n ==> Please check the results and submit the plots!")
