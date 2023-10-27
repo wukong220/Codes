@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#BSUB -J "Anas"
+#BSUB -Jd "active chain"
+#BSUB -r
+#BSUB -q 7k83!
+#BSUB -n 1
+#BSUB -oo Anas.out
+#BSUB -eo Anas.err
+source ~/.bashrc
+echo "python3 Act.py"
+python3 /bbfs/scratch/myq_wusong/Data/Codes/Act.py

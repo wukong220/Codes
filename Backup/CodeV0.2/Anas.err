@@ -1,0 +1,50 @@
+Traceback (most recent call last):
+  File "/bbfs/scratch/myq_wusong/Data/Codes/Act.py", line 80, in <module>
+    Plot.plot()
+  File "/bbfs/scratch/myq_wusong/Data/Codes/paras.py", line 1383, in plot
+    self.distribution(idata)
+  File "/bbfs/scratch/myq_wusong/Data/Codes/paras.py", line 1354, in distribution
+    pdf.savefig(fig1, dpi=1000, transparent=True)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/backends/backend_pdf.py", line 2541, in savefig
+    figure.savefig(self, format="pdf", **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/figure.py", line 2311, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/backend_bases.py", line 2217, in print_figure
+    **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/backend_bases.py", line 1639, in wrapper
+    return func(*args, **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/backends/backend_pdf.py", line 2593, in print_pdf
+    self.figure.draw(renderer)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/artist.py", line 41, in draw_wrapper
+    return draw(artist, renderer, *args, **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/figure.py", line 1864, in draw
+    renderer, self, artists, self.suppressComposite)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/image.py", line 131, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/artist.py", line 41, in draw_wrapper
+    return draw(artist, renderer, *args, **kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/cbook/deprecation.py", line 411, in wrapper
+    return func(*inner_args, **inner_kwargs)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/axes/_base.py", line 2707, in draw
+    self._update_title_position(renderer)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/axes/_base.py", line 2648, in _update_title_position
+    if title.get_window_extent(renderer).ymin < top:
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/text.py", line 902, in get_window_extent
+    bbox, info, descent = self._get_layout(self._renderer)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/text.py", line 289, in _get_layout
+    ismath="TeX" if self.get_usetex() else False)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/backends/_backend_pdf_ps.py", line 87, in get_text_width_height_descent
+    s, fontsize, renderer=self)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/texmanager.py", line 425, in get_text_width_height_descent
+    page, = dvi
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/dviread.py", line 251, in __iter__
+    while self._read():
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/dviread.py", line 325, in _read
+    self._dtable[byte](self, byte)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/dviread.py", line 174, in wrapper
+    return method(self, *[f(self, byte-min) for f in get_args])
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/dviread.py", line 468, in _fnt_def
+    self._fnt_def_real(k, c, s, d, a, l)
+  File "/fsa/home/myq_wusong/Data/Apps/Anas/lib/python3.6/site-packages/matplotlib/dviread.py", line 475, in _fnt_def_real
+    raise FileNotFoundError("missing font metrics file: %s" % fontname)
+FileNotFoundError: missing font metrics file: cmr17
