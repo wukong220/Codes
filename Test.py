@@ -641,16 +641,5 @@ lox, hix = 0, 10  # Replace with your actual boundary values
 Lx = hix - lox
 
 # Make a copy of the original data to store the unwrapped coordinates
-
-def unwrap(data, start_frame, Lx):
-    frames = data.shape[1]
-    for i in range(start_frame, frames):
-        dx = data[:, i, :, 0] - data[:, i - 1, :, 0]
-        crossed = np.abs(dx) > Lx / 2
-        if np.any(crossed):
-            update_values = np.sign(dx) * Lx * crossed
-            data[:, i:, crossed, 0] -= update_values[:, crossed][:, None]
-            unwrap(data, i+1, Lx)
-# Start unwrapping from the second frame (index 1)
-unwrap(data, 1, Lx)
-# Now data_unwrapped should contain the unwrapped x-coordinates.
+import os
+print(os.path.abspath(__file__))
