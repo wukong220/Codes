@@ -370,9 +370,9 @@ class Plot:
             sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(var_values + 1) * 10, cmap='rainbow', alpha=0.7)
 
             # axis settings
-            ax.set_title(fr'$\langle\ {axis_labels[2]}\ \rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
-            ax.set_xlabel(axis_labels[0], fontsize=20)
-            ax.set_ylabel(axis_labels[1], fontsize=20)
+            ax.set_title(fr'$\langle\ {labels[2]}\ \rangle$ in {labels[0]}-{labels[1]} Space', loc='right', fontsize=20)
+            ax.set_xlabel(labels[0], fontsize=20)
+            ax.set_ylabel(labels[1], fontsize=20)
             ax.set_xlim(min(unique_coords[:, 0]), max(unique_coords[:, 0]))
             ax.set_ylim(min(unique_coords[:, 1]), max(unique_coords[:, 1]))
 
@@ -382,7 +382,7 @@ class Plot:
             cax = fig.add_axes(caxpos)
             cbar = plt.colorbar(sc, ax=ax, cax=cax)
             cbar.ax.yaxis.set_ticks_position('right')
-            cbar.ax.set_xlabel(axis_labels[2], fontsize=20)
+            cbar.ax.set_xlabel(labels[2], fontsize=20)
 
             # linewidth and note
             ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
@@ -404,9 +404,9 @@ class Plot:
 
             sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
             # axis settings
-            ax.set_title(fr'${axis_labels[2]}_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
-            ax.set_xlabel(axis_labels[0], fontsize=20)
-            ax.set_ylabel(axis_labels[1], fontsize=20)
+            ax.set_title(fr'${labels[2]}_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
+            ax.set_xlabel(labels[0], fontsize=20)
+            ax.set_ylabel(labels[1], fontsize=20)
 
             # linewidth and note
             ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center",
@@ -573,6 +573,32 @@ class Plot:
         plt.tight_layout()
         plt.show()
 
+def var2str(variable):
+    # transform to latex
+    if variable.lower() == 'msd':
+        return r'\mathrm{MSD}'
+    latex_label = variable[0].upper()
+    subscript, superscript = "", ""
+    for char in variable[1:]:
+        if char.isnumeric():  # If the character is a number, it will be a superscript
+            superscript += char
+        else:  # Otherwise, it will be part of the subscript
+            subscript += char
+    if subscript:
+        latex_label += r'_{\mathrm{' + subscript + '}}'
+    if superscript:
+        latex_label += '^{' + superscript + '}'
+
+    # transform to abbreviation
+    abbreviation = variable[0].upper()
+    trailing_number = ''.join(filter(str.isdigit, variable))
+    base_variable = variable.rstrip(trailing_number)
+    if len(base_variable) > 1 and not all(char.isnumeric() for char in base_variable[1:]):
+        abbreviation += base_variable[1].lower()
+    if trailing_number:
+        abbreviation += trailing_number
+    return fr"${latex_label}$", abbreviation
+
 if __name__ == "__main__":
     # Example usage
     rdf_plotter = RDFPlotter()
@@ -632,14 +658,120 @@ data = np.random.rand(*data_shape)
 Lx = 10.0
 frames = data.shape[1]
 
+class plotGraph:
+    def __init__(self, df):
+        self.df = df
+
+    def set_style(self):
+        '''plotting'''
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='serif')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+
+    def colorbar(self, ax, sc, label, is_3D=False):
+        '''colorbar'''
+        axpos = ax.get_position()
+        caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.05, axpos.y0, axpos.x0 - 0.03, axpos.y1) if is_3D else \
+                 mtransforms.Bbox.from_extents(axpos.x1 + 0.005, axpos.y0, axpos.x1 + 0.015, axpos.y1)
+        cax = self.fig.add_axes(caxpos)
+        cbar = plt.colorbar(sc, ax=ax, cax=cax)
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.set_xlabel(label, fontsize=20)
+
+    def set_axes(self, ax, data, labels, is_3D=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+        title = f"{xlabel}-{ylabel}-{zlabel}-{wlabel} Space" if is_3D else f"({zlabel}, {wlabel}) in {xlabel}-{ylabel} Space"
+        ax.set_title(title, loc='center', fontsize=20)
+        # axis settings
+        ax.tick_params(axis='x', rotation=-45)
+        ax.set_xlabel(xlabel, fontsize=20)
+        ax.set_ylabel(ylabel, fontsize=20)
+        ax.set_xlim(min(x), max(x))
+        ax.set_ylim(min(y), max(y))
+        if is_3D:
+            ax.set_zlabel(zlabel, fontsize=20)
+            ax.set_zlim(min(z), max(z))
+
+    def adding(self, ax, note, is_3D=False):
+        # linewidth and note
+        ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+        if is_3D:
+            ax.tick_params(axis='x', which="both", width=2, labelsize=15, pad=-3.0)
+            ax.tick_params(axis='y', which="both", width=2, labelsize=15, pad=1.0)
+            ax.tick_params(axis='z', which="both", width=2, labelsize=15, pad=2.0)
+        else:
+            ax.tick_params(axis='both', which="both", width=2, labelsize=15, pad=5.0)
+
+        # axes lines
+        ax.spines['bottom'].set_linewidth(2)
+        ax.spines['left'].set_linewidth(2)
+        ax.spines['right'].set_linewidth(2)
+        ax.spines['top'].set_linewidth(2)
+
+    def plot_scatter(self, ax, data, labels, note, is_3D=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+        if is_3D:
+            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", vmin=w.min(), vmax=w.max())
+            self.colorbar(ax, sc, wlabel, is_3D)
+        else:
+            sc = ax.scatter(x, y, c=z, cmap="rainbow", s=w * 10, vmin=z.min(), vmax=z.max())
+            self.colorbar(ax, sc, zlabel, is_3D)
+
+        self.set_axes(ax, data, labels, is_3D)
+        self.adding(ax, note, is_3D)
+
+    def plot_graphs(self, variable="Rg2"):
+        # ----------------------------> plot figures<----------------------------#
+        self.set_style()
+        #Prepare figure and subplots
+        self.fig = plt.figure(figsize=(16, 24))
+        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.6, hspace=0.5)
+        gs = GridSpec(6, 4, figure=self.fig)
+
+        axes_3D = [self.fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [self.fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
+        axes_2D = [self.fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
+
+        # ----------------------------> preparing<----------------------------#
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
+                                                                                                                            ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
+        label_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
+                      ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
+        notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
+
+        # ----------------------------> plotting <----------------------------#
+        for i, (data, labels, note) in enumerate(zip(data_set, labels_set, notes)):
+            x, y, z, w = data
+            xlabel, ylabel, zlabel, wlabel = labels
+            # ----------------------------> plot3D<----------------------------#
+            self.plot_scatter(axes_3D[i], data, labels, note[0], True)
+            if i == 0:
+                continue
+            # ----------------------------> plot2D<----------------------------#
+            self.plot_scatter(axes_2D[2*(i-1)], data, labels, note[1])
+            self.plot_scatter(axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
+        plt.show()
+
+# Generate some example DataFrame; replace this with your actual data
+
+df_Rg2 = pd.DataFrame({
+    'Pe': np.random.rand(100),
+    'N': np.random.rand(100),
+    'W': np.random.rand(100),
+    'Rg2': np.random.rand(100)
+})
+
+plotter = plotGraph(df_Rg2)
+plotter.plot_graphs()
 
 
-# Example setup
-data_shape = (5, 2001, 100, 3)  # Replace with your actual data shape
-data = np.random.rand(*data_shape)  # Replace with your actual data
-lox, hix = 0, 10  # Replace with your actual boundary values
-Lx = hix - lox
 
-# Make a copy of the original data to store the unwrapped coordinates
-import os
-print(os.path.abspath(__file__))
+
+
+
+

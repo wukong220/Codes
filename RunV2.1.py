@@ -47,7 +47,7 @@ check = True
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': types[0:1], 'Envs': envs[2:3]},
     'marks': {'labels': [], 'config': []},
     'task': tasks[2],
     'restart': [False, "equ"],
@@ -93,9 +93,9 @@ class _config:
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'Xi': 0.0, 'N_monos': [100], #'N_monos': [40, 100, 200],
-                              'Fa': [1.0], #'Fa': [0.0, 1.0, 10.0],
-                              'Temp': [0.2],
+                "Chain": {'N_monos': [40, 100, 200], 'Xi': 0.0,
+                              'Fa': [0.0, 1.0, 10.0],
+                              #'Temp': [0.2],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -903,6 +903,7 @@ class _anas:
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
         self.Pe = Pe
         self.chunk = 9
+        self.simp = 10
         self.jump = True
 
     def set_dump(self):
@@ -983,7 +984,7 @@ class _anas:
         self.read_data()
         #print(f"data.shape: {self.data.shape}")
         self.data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
-        self.data_Rcom = np.linalg.norm(self.data_com[ ..., :], axis = -1)
+        self.data_Rcom = np.linalg.norm(data_com[ ..., :], axis = -1)
 
         # debug
         #describe(self.data, "self.data", flag=False)
@@ -992,8 +993,8 @@ class _anas:
         # center of mass and average of files
 
         # Rg2_time[iframe]
-        Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
-        Rg2 = np.mean(Rg2_time) # average over time
+        self.Rg2_time = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
+        self.Rg2 = np.mean(Rg2_time) # average over time
         message = f"saving Rg2_time: {self.Path.fig0}"
         print(message)
         logging.info(message)
@@ -1003,8 +1004,6 @@ class _anas:
 class _plot:
     def __init__(self, Path, bins = 20):
         self.Path = Path
-        self.Init, self.Run = Path.Init, Path.Run
-        self.simp = 10
         self.num_bins = bins
         self.num_pdf = bins*10
         self.jump = True
@@ -1015,8 +1014,8 @@ class _plot:
     def org_data(self, flag=False):
         dict = {}
         _, frames, atoms = self.data.shape
-        # data[ifile][iframe][iatom]
         data = np.mean(self.data, axis=0)
+        # data[ifile][iframe][iatom][xu, yu]
 
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
             message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
@@ -1025,16 +1024,16 @@ class _plot:
         times, ids = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1)
 
         if flag:
-            data = data[::self.simp, ...]
-            frames = data.shape[0]
+            data, frames = data[::self.simp, ...], data.shape[0]
             times = np.arange(frames)*self.Run.dt*self.Run.Tdump * self.simp
+
         dict = {
             #"x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
             #"y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
             #"z": [data, data.flatten(),],  # Magnitude (r coordinate)
-            "t": [times, np.repeat(times, atoms), "t"],  # Frame numbers (t coordinate)
-            "s": [ids, np.tile(ids, frames), "s"],  # Particle IDs (s coordinate)
-            var2str(self.variable)[0]: [data, data.flatten(), var2str(self.variable)[1]],  # Magnitude (r coordinate)
+            "t": [times, np.repeat(times, atoms),],  # Frame numbers (t coordinate)
+            "s": [ids, np.tile(ids, frames),],  # Particle IDs (s coordinate)
+            fr"{self.variable}": [data, data.flatten(),],  # Magnitude (r coordinate)
         }
         return dict
 
@@ -1044,9 +1043,7 @@ class _plot:
         # ----------------------------> prepare data <----------------------------#
         keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
         x_label, y_label, z_label = keys[0], keys[1], keys[2]
-        x_abbre, y_abbre, z_abbre =values[0][2], values[1][2], values[2][2]
-        #x, y, z = self.data_dict[keys[0]][1], self.data_dict[keys[1]][1], self.data_dict[keys[2]][1]
-        x, y, z = self.simp_dict[keys[0]][1], self.simp_dict[keys[1]][1], self.simp_dict[keys[2]][1]
+        x, y, z = self.data_dict[keys[0]][1], self.data_dict[keys[1]][1], self.data_dict[keys[2]][1]
         simp_x, simp_y, simp_z = self.simp_dict[keys[0]][1], self.simp_dict[keys[1]][1], self.simp_dict[keys[2]][1]
 
         # Calculate bin size and mid-bin values
@@ -1066,7 +1063,7 @@ class _plot:
         unique_coords_g, _, _, counts_g = statistics(data_g)
 
         #----------------------------> figure settings <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig0}", fr"{self.variable}.Org.({z_abbre},{x_abbre},{y_abbre})")
+        fig_save = os.path.join(f"{self.Path.fig0}", f"{self.file_name}.Org.({z_label},{x_label},{y_label})")
 
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
@@ -1104,7 +1101,7 @@ class _plot:
         #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
 
         # axis settings
-        ax_a.set_title(fr'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
+        ax_a.set_title(f'({z_label}, {x_label}, {y_label}) in 3D Space', fontsize=20)
         ax_a.set_xlabel(x_label, fontsize=20, labelpad=10)
         ax_a.set_xlim(min(simp_x), max(simp_x))
         ax_a.set_ylabel(y_label, fontsize=20)
@@ -1140,7 +1137,7 @@ class _plot:
             sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
 
             # axis settings
-            ax.set_title(fr'$\langle ${axis_labels[2]} $\rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
+            ax.set_title(fr'$\langle\ {axis_labels[2]}\ \rangle$ in {axis_labels[0]}-{axis_labels[1]} Space', loc='right', fontsize=20)
             ax.tick_params(axis='x', rotation=-45)
             ax.set_xlabel(axis_labels[0], fontsize=20)
             ax.set_ylabel(axis_labels[1], fontsize=20)
@@ -1177,7 +1174,7 @@ class _plot:
 
             sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
             # axis settings
-            ax.set_title(fr'{axis_labels[2]}$_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
+            ax.set_title(fr'${axis_labels[2]}_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
             ax.set_xlabel(axis_labels[0], fontsize=20)
             ax.set_ylabel(axis_labels[1], fontsize=20)
 
@@ -1191,6 +1188,7 @@ class _plot:
             ax.spines['left'].set_linewidth(2)
             ax.spines['right'].set_linewidth(2)
             ax.spines['top'].set_linewidth(2)
+
         # ----------------------------> save fig <----------------------------#
         fig0 = plt.gcf()
         pdf.savefig(fig0, dpi=300, transparent=True)
@@ -1213,7 +1211,6 @@ class _plot:
         keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
         for i, j, k in [(0, 1, 2), (0, 2, 1), (1, 2, 0)]:
             x_label, y_label, z_label = keys[i], keys[j], keys[k]
-            x_abbre, y_abbre, z_abbre = values[i][2], values[j][2], values[k][2]
             x, y, z = values[i][1], values[j][1], values[k][1]
             # Create a 2D histogram and bin centers
             hist_x, x_bins = np.histogram(x, bins=self.num_bins, density=True)
@@ -1227,7 +1224,7 @@ class _plot:
             #hist_x_at_y, hist_y_at_x = np.nan_to_num(hist_x_at_y), np.nan_to_num(hist_y_at_x)
 
             #----------------------------> figure settings <----------------------------#
-            fig_save = os.path.join(f"{self.Path.fig0}", f"{self.variable}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
+            fig_save = os.path.join(f"{self.Path.fig0}", f"{self.file_name}.Dist.f^{z_label}({x_label},{y_label})")
             if os.path.exists(f"{fig_save}.pdf") and self.jump:
                 print(f"==>{fig_save}.pdf is already!")
                 logging.info(f"==>{fig_save}.pdf is already!")
@@ -1280,33 +1277,33 @@ class _plot:
             cax = fig.add_axes(caxpos)
             cbar = plt.colorbar(cmap, cax=cax)
             cbar.ax.yaxis.set_ticks_position('left')
-            cbar.ax.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", fontsize=20)
+            cbar.ax.set_xlabel(fr"$f^{z_label}({x_label},{y_label})$", fontsize=20)
+
             # ----------------------------> axis settings <----------------------------#
-            ax_a.set_title(fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", fontsize=20)
+            ax_a.set_title(fr"$f^{z_label}({x_label},{y_label})$", fontsize=20)
             ax_a.set_xlabel(f"{x_label}", fontsize=20)
             ax_a.set_ylabel(f"{y_label}", fontsize=20)
             ax_a.set_xlim(x_bin_centers[0], x_bin_centers[-1])
             ax_a.set_ylim(y_bin_centers[0], y_bin_centers[-1])
 
-            ax_b.set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+            ax_b.set_title(fr"${y_label}_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
             ax_b.set_xlabel(f"{x_label}", fontsize=20)
             ax_b.tick_params(axis='x', rotation=45)
-            ax_b.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
+            ax_b.set_ylabel(fr"$f^{z_label}({x_label}; {y_label}_0)$", fontsize=20)
             ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
-
             ax_c.set_title("Distribution", loc='right', fontsize=20)
             ax_c.set_xlabel(f"{x_label}", fontsize=20)
             ax_c.tick_params(axis='x', rotation=45)
-            ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
+            ax_c.set_ylabel(fr"$f^{z_label}_{y_label}({x_label})$", fontsize=20)
             ax_c.set_ylim(0, max(hist_x) *1.1)
 
-            ax_d.set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-            ax_d.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
+            ax_d.set_title(fr"${x_label}_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+            ax_d.set_xlabel(fr"$f^{z_label}({y_label}; {x_label}_0)$", fontsize=20)
             ax_d.set_ylabel(f"{y_label}", fontsize=20)
             ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
 
             ax_e.set_title('Distribution', loc='right', fontsize=20)
-            ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
+            ax_e.set_xlabel(fr"$f^{z_label}_{x_label}({y_label})$", fontsize=20)
             ax_e.set_ylabel(f"{y_label}", fontsize=20)
             ax_e.set_xlim(0, max(hist_y)*1.1)
 
@@ -1347,12 +1344,13 @@ class _plot:
     def Cee(self):
         print("-----------------------------------Done!--------------------------------------------")
     ##################################################################
-    def org(self, data, variable):
+    def org(self, data, variable, file_name):
         timer = Timer("Plot")
         timer.start()
 
         self.data = data
         self.variable = variable
+        self.file_name = file_name
         self.data_dict, self.simp_dict = self.org_data(), self.org_data(flag=True)
         #plotting
         self.original()
@@ -1443,32 +1441,6 @@ def convert2array(x):
     else:
         raise ValueError("Unsupported type!")
 
-def var2str(variable):
-    # transform to latex
-    if variable.lower() == 'msd':
-        return r'\mathrm{MSD}'
-    latex_label = variable[0].upper()
-    subscript, superscript = "", ""
-    for char in variable[1:]:
-        if char.isnumeric():  # If the character is a number, it will be a superscript
-            superscript += char
-        else:  # Otherwise, it will be part of the subscript
-            subscript += char
-    if subscript:
-        latex_label += r'_{\mathrm{' + subscript + '}}'
-    if superscript:
-        latex_label += '^{' + superscript + '}'
-
-    # transform to abbreviation
-    abbreviation = variable[0].upper()
-    trailing_number = ''.join(filter(str.isdigit, variable))
-    base_variable = variable.rstrip(trailing_number)
-    if len(base_variable) > 1 and not all(char.isnumeric() for char in base_variable[1:]):
-        abbreviation += base_variable[1].lower()
-    if trailing_number:
-        abbreviation += trailing_number
-    return fr"${latex_label}$", abbreviation
-
 def statistics(data):
     '''for plot original'''
     unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
@@ -1507,7 +1479,7 @@ __all__ = [
     "describe",
 ]
 
-# -----------------------------------Prepare-------------------------------------------#
+# -----------------------------------jobs-------------------------------------------#
 def exe_simus(task, path, infile):
     dir_file = os.path.join(path, infile)
     if task == "Run":
@@ -1531,51 +1503,6 @@ def exe_simus(task, path, infile):
         print(message)
         logging.error(message)
         raise ValueError(message)
-
-def check_params(params):
-    print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
-    for key, value in islice(params.items(), 1, None):
-        user_input = input(f"{key} = {value}    (y/n)?: ")
-        if user_input.lower() == "y":
-            break
-        elif user_input.lower() == '':
-            continue
-        else:
-            new_value = input(f"Please enter the new value for {key}: ")
-            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
-    return params
-
-# -----------------------------------Anas-------------------------------------------#
-def process(params, check, job):
-    for iDimend in convert2array(params['Dimend']):
-        for iType in convert2array(params['labels']['Types']):
-            for iEnv in convert2array(params['labels']['Envs']):
-                Config = _config(iDimend, iType, iEnv, params)
-                if platform.system() == "Linux":  # params['task'] == "Simus" and
-                    mpl.use("agg")
-                    if check:
-                        params = check_params(params)
-                        check = False
-
-                for iGamma in convert2array(params['Gamma']):
-                    for iTemp in convert2array(params['Temp']):
-                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
-                        Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                        for iRin in convert2array(params['Rin']):
-                            for iWid in convert2array(params['Wid']):
-                                for iN in convert2array(params['N_monos']):
-                                    # paras for init config: Rin, Wid, N_monos, L_box
-                                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                                    if Init.jump:  # chains are too long or invalid label
-                                        continue
-                                    queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
-                                    for iFa in convert2array(params['Fa']):
-                                        for iXi in convert2array(params['Xi']):
-                                            # paras for model: Pe(Fa), Xi(Kb)
-                                            Model = _model(Init, Run, iFa, iXi)
-                                            Path = _path(Model)  # for directory
-                                            job(Path, Pe=Model.Pe)
 
 def simus_job(Path, **kwargs):
     # Initialize directories and files
@@ -1641,11 +1568,11 @@ def anas_job(Path, **kwargs):
             # saving data
             Anas.save_data()
 
-            # org(data, variable)
-            Plot.org(Anas.data_Rcom, "Rcom")
-            Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-            #Plot.org(Anas.data_Rg2, "Rg2")
-            #Plot.org(Anas.data_MSD, "MSD")
+            # org(data, variable, file_name)
+            Plot.org(Anas.data_Rcom, fr"$R_{Com}$", "Com")
+            Plot.org(Anas.data_Rcom ** 2, fr"$R_{com}^2$", "Rcom2")
+            # Plot.org(Anas.data_Rg2, fr"$R_{g}^2$", "Rg2")
+            # Plot.org(Anas.data_MSD, fr"$MSD$", "MSD")
             print(f"==> Done! \n ==> Please check the results and submit the plots!")
 
         # submitting files
@@ -1660,7 +1587,104 @@ def anas_job(Path, **kwargs):
         print(message)
         logging.info(message)
 
+# -----------------------------------Act-------------------------------------------#
+def check_params(params):
+    print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
+    for key, value in islice(params.items(), 1, None):
+        user_input = input(f"{key} = {value}    (y/n)?: ")
+        if user_input.lower() == "y":
+            break
+        elif user_input.lower() == '':
+            continue
+        else:
+            new_value = input(f"Please enter the new value for {key}: ")
+            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
+    return params
+
+def process(params, check, job):
+    for iDimend in convert2array(params['Dimend']):
+        for iType in convert2array(params['labels']['Types']):
+            for iEnv in convert2array(params['labels']['Envs']):
+                Config = _config(iDimend, iType, iEnv, params)
+                if platform.system() == "Linux":  # params['task'] == "Simus" and
+                    mpl.use("agg")
+                    if check:
+                        params = check_params(params)
+                        check = False
+
+                for iGamma in convert2array(params['Gamma']):
+                    for iTemp in convert2array(params['Temp']):
+                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
+                        Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
+                        for iRin in convert2array(params['Rin']):
+                            for iWid in convert2array(params['Wid']):
+                                for iN in convert2array(params['N_monos']):
+                                    # paras for init config: Rin, Wid, N_monos, L_box
+                                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                                    if Init.jump:  # chains are too long or invalid label
+                                        continue
+                                    queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
+                                    for iFa in convert2array(params['Fa']):
+                                        for iXi in convert2array(params['Xi']):
+                                            # paras for model: Pe(Fa), Xi(Kb)
+                                            Model = _model(Init, Run, iFa, iXi)
+                                            Path = _path(Model)  # for directory
+                                            job(Path, Pe=Model.Pe)
+
 # -----------------------------------Plot-------------------------------------------#
+
+def Rg2_job(Config, Run, iRin):
+    paras = ['Pe', 'N', 'W']
+    varis = ["Rg2"]
+    df_Rg2 = pd.DataFrame(columns=paras + varis)
+
+    # prepare files: {dir_file}.lsf
+    #sub_file()
+
+    fig_Rg2 = os.path.join(os.path.join(os.path.abspath(os.path.dirname(os.getcwd())), "Figs"),
+                  f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
+    # copy Run.py
+    message = f"dir_figs => {fig_Rg2}"
+    os.makedirs(fig_Rg2, exist_ok=True)
+    shutil.copy2(os.path.abspath(__file__),
+                 os.path.join(fig_Rg2, f"{varis}(Pe,N,W).py"))
+    print(message)
+    logging.info(message)
+    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+
+    if HOST == "Darwin":  # macOS
+        print(">>> Plotting tests......")
+        logging.info(">>> Plotting tests......")
+        for iWid in convert2array(params['Wid']):
+            for iN in convert2array(params['N_monos']):
+                Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                if Init.jump:
+                    continue
+                for iFa in convert2array(params['Fa']):
+                    for iXi in convert2array(params['Xi']):
+                        Path = _path(_model(Init, Run, iFa, iXi))
+                        Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
+                        Rg2.df = Rg2.df.append({'Pe': Pe, 'N': N, 'W': W, 'Rg2': np.mean(Rg2, axis=0)}, ignore_index=True)
+        dir_file = os.path.join(f"{fig_Rg2}", f"{varis}(Pe,N,W)")
+        df_Rg2.to_pickle(os.path.join(f"{Path.fig_Rg2}", 'Pe_N_W_Rg2.pkl'))
+
+        sns.scatterplot(x='Pe', y='Rg2', hue='N', data=df_Rg2)
+
+        # Plotting the Rg2 for the first file across all frames
+        plt.xlabel('time')
+        plt.ylabel(fr'$R_g^2$')
+        plt.title(fr'$R_g^2$ average over files')
+        plt.show()
+        print(f"==> Done! \n ==> Please check the results and submit the plots!")
+
+    elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+        print(">>> Submitting plots......")
+        logging.info(">>> Submitting plots......")
+        print(f"bsub < {dir_file}.lsf")
+        subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+        print(f"Submitted: {dir_file}.py")
+
 def plotter(params, check, job):
     for iDimend in convert2array(params['Dimend']):
         for iType in convert2array(params['labels']['Types']):
@@ -1685,63 +1709,7 @@ def plotter(params, check, job):
                             queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
                             job(Config, Run, iRin)
 
-def Rg2_job(Config, Run, iRin):
-    paras = ['Pe', 'N', 'W']
-    varis = ["Rg2"]
-    label, abbre = var2str(varis[0])
-    df_Rg2 = pd.DataFrame(columns=paras + list(varis[0]))
 
-    # prepare files: {dir_file}.lsf
-    #sub_file()
-
-    fig_Rg2 = os.path.join(os.path.join(os.path.abspath(os.path.dirname(os.getcwd())), "Figs"),
-                  f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
-    # copy Run.py
-    message = f"dir_figs => {fig_Rg2}"
-    os.makedirs(fig_Rg2, exist_ok=True)
-    shutil.copy2(os.path.abspath(__file__),
-                 os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py"))
-    print(message)
-    logging.info(message)
-    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-
-    if HOST == "Darwin":  # macOS
-        for iWid in convert2array(params['Wid']):
-            for iN in convert2array(params['N_monos']):
-                Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                if Init.jump:
-                    continue
-                for iFa in convert2array(params['Fa']):
-                    for iXi in convert2array(params['Xi']):
-                        Path = _path(_model(Init, Run, iFa, iXi))
-                        Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
-                        df_Rg2 = df_Rg2.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg2': np.mean(Rg2, axis=0)}, ignore_index=True)
-        dir_file = os.path.join(f"{fig_Rg2}", f"{abbre}(Pe,N,W)")
-        df_Rg2.to_pickle(f'{dir_file}.pkl')
-
-        # plotting
-        print(">>> Plotting tests......")
-        logging.info(">>> Plotting tests......")
-
-        sns.scatterplot(x='Pe', y='Rg2', hue='N', data=df_Rg2)
-
-        # Plotting the Rg2 for the first file across all frames
-        plt.xlabel('Pe')
-        plt.ylabel(fr'{label}')
-        plt.title(fr'{label} average over files')
-        plt.show()
-        print(f"==> Done! \n ==> Please check the results and submit the plots!")
-
-    elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-        print(">>> Submitting plots......")
-        logging.info(">>> Submitting plots......")
-        print(f"bsub < {dir_file}.lsf")
-        subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-        print(f"Submitted: {dir_file}.py")
-
-
-
-# -----------------------------------Main-------------------------------------------#
 if __name__ == "__main__":
     print(usage)
     task = params["task"]
@@ -1770,7 +1738,7 @@ if __name__ == "__main__":
         elif "Figs" in CURRENT_DIR:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
-            #process(params, check, anas_job)
+            Plot.plot()
             print(f"==> Done! \n ==> Please check the results and submit the plots!")
 
     # plot: Pe, N, W
@@ -1783,3 +1751,4 @@ if __name__ == "__main__":
             logging.info(">>> Plotting tests......")
            # Plot.plot()
             print(f"==> Done! \n ==> Please check the results and submit the plots!")
+
