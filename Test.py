@@ -658,6 +658,143 @@ data = np.random.rand(*data_shape)
 Lx = 10.0
 frames = data.shape[1]
 
+class BasePlot:
+    def __init__(self, df, jump=True):
+        self.df = df
+        self.jump = jump
+    def set_style(self):
+        '''plotting'''
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='serif')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+    def colorbar(self, fig, ax, sc, label, is_3D=False, loc="right"):
+        '''colorbar'''
+        axpos = ax.get_position()
+        if is_3D:
+            caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.05, axpos.y0, axpos.x0 - 0.03, axpos.y1)
+        else:
+            if loc == "right":
+                caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.005, axpos.y0, axpos.x1 + 0.015, axpos.y1)
+            elif loc == "left":
+                caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
+        cax = fig.add_axes(caxpos)
+        cbar = plt.colorbar(sc, ax=ax, cax=cax)
+        cbar.ax.yaxis.set_ticks_position(loc)
+        cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
+    def set_axes(self, ax, data, labels, title, is_3D=False, rotation=-60, loc="right"):
+        x, y, z = data[:3]
+        xlabel, ylabel, zlabel = labels[:3]
+        # axis settings
+        if is_3D:
+            rotation = 0
+            loc = 'center'
+            ax.set_zlabel(zlabel, fontsize=20, labelpad=10)
+            ax.set_zlim(min(z), max(z))
+        ax.tick_params(axis='x', rotation=rotation)
+        ax.set_title(title, loc=loc, fontsize=20)
+        ax.set_xlabel(xlabel, fontsize=20, labelpad=10)
+        ax.set_ylabel(ylabel, fontsize=20, labelpad=10)
+        ax.set_xlim(min(x), max(x))
+        ax.set_ylim(min(y), max(y))
+    def adding(self, ax, note, is_3D=False):
+        # linewidth and note
+        ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+        if is_3D:
+            ax.tick_params(axis='x', which="both", width=2, labelsize=15, pad=-3.0)
+            ax.tick_params(axis='y', which="both", width=2, labelsize=15, pad=1.0)
+            ax.tick_params(axis='z', which="both", width=2, labelsize=15, pad=2.0)
+        else:
+            ax.tick_params(axis='both', which="both", width=2, labelsize=15, pad=5.0)
+
+        # axes lines
+        for spine in ["bottom", "left", "right", "top"]:
+            ax.spines[spine].set_linewidth(2)
+    def save_fig(self, fig, path):
+        pdf = PdfPages(path)
+        pdf.savefig(fig, dpi=500, transparent=True)
+        pdf.close()
+class Plotter(BasePlot):
+    def scatter(self, fig, ax, data, labels, note, is_3D=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+        markers = ['o', 'v', '^', '<', '>', 's', 'p', '*', 'h', 'H']
+        title = f"{xlabel}-{ylabel}-{zlabel}-{wlabel} Space" if is_3D else f"({zlabel}, {wlabel}) in {xlabel}-{ylabel} Space"
+        if is_3D:
+            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", vmin=w.min(), vmax=w.max())
+            self.colorbar(fig, ax, sc, wlabel, is_3D)
+        else:
+            for idx, uw in enumerate(np.unique(w)):
+                mask = (w == uw)
+                marker = markers[idx % len(markers)]
+                sc = ax.scatter(x[mask], y[mask], c=z[mask], cmap="rainbow", s=80, marker=marker, vmin=z.min(), vmax=z.max())
+            self.colorbar(fig, ax, sc, labels[2], is_3D)
+
+            for val, marker in w_marker.items():
+                mask = w == val
+            sc = ax.scatter(x[mask], y[mask], c=z[mask], cmap="rainbow", s=w[mask] * 10, marker=marker,  vmin=z.min(), vmax=z.max())
+            self.colorbar(fig, ax, sc, zlabel, is_3D)
+
+        self.set_axes(ax, data, labels, title, is_3D)
+        self.adding(ax, note, is_3D)
+    def Rg2(self, fig_save, variable="Rg2"):
+        timer = Timer(variable)
+        timer.start()
+
+        #----------------------------> figure settings <----------------------------#
+        if os.path.exists(f"{fig_save}.pdf") and self.jump:
+            print(f"==>{fig_save}.pdf is already!")
+            logging.info(f"==>{fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_save}.pdf")
+            logging.info(f"{fig_save}.pdf")
+
+        # ----------------------------> preparing<----------------------------#
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
+                                                                                                                            ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
+        labels_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
+                            ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
+        notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
+
+        # ----------------------------> plot figures<----------------------------#
+        self.set_style()
+        #Prepare figure and subplots
+        fig = plt.figure(figsize=(18, 25))
+        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.6, hspace=0.5)
+        gs = GridSpec(6, 4, figure=fig)
+
+        axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
+        axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
+
+        # ----------------------------> plotting <----------------------------#
+        for i, (data, labels, note) in enumerate(zip(data_set, labels_set, notes)):
+            x, y, z, w = data
+            xlabel, ylabel, zlabel, wlabel = labels
+            # ----------------------------> plot3D<----------------------------#
+            self.scatter(fig, axes_3D[i], data, labels, note[0], True)
+            if i == 0:
+                continue
+            # ----------------------------> plot2D<----------------------------#
+            self.scatter(fig, axes_2D[2*(i-1)], data, labels, note[1])
+            self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
+
+        # ----------------------------> save fig <----------------------------#
+        fig = plt.gcf()
+        self.save_fig(fig, f"{fig_save}.pdf")
+
+        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+        #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        timer.count("saving figure")
+        plt.show()
+        plt.close()
+        timer.stop()
+        # -------------------------------Done!----------------------------------------#
+        return False
+
 class plotGraph:
     def __init__(self, df):
         self.df = df
@@ -755,28 +892,6 @@ class plotGraph:
             self.plot_scatter(axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
         plt.show()
 
-    def plot_multi(self):
-        x = np.linspace(0, 10, 100)
-
-        for i in range(3):
-            # 在第一层循环中创建第一个画板并绘制图形
-            fig1, ax1 = plt.subplots()
-            ax1.plot(x, np.sin(x + i))
-            ax1.set_title(f'Sine Curve {i} on Figure 1')
-
-            for j in range(3):
-                # 在第二层循环中创建第二个画板并绘制图形
-                fig2, ax2 = plt.subplots()
-                ax2.plot(x, np.cos(x + i + j))
-                ax2.set_title(f'Cosine Curve {i + j} on Figure 2')
-
-                # 在第二层循环中显示第二个画板的图形
-                plt.show()
-
-            # 在第一层循环中显示第一个画板的图形
-            plt.show()
-
-
 # Generate some example DataFrame; replace this with your actual data
 
 df_Rg2 = pd.DataFrame({
@@ -787,8 +902,7 @@ df_Rg2 = pd.DataFrame({
 })
 
 plotter = plotGraph(df_Rg2)
-#plotter.plot_graphs()
-plotter.plot_multi()
+plotter.plot_graphs()
 
 
 

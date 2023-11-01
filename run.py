@@ -28,6 +28,7 @@ from matplotlib.backends.backend_pdf import PdfPages as PdfPages
 from matplotlib.gridspec import GridSpec
 import matplotlib.transforms as mtransforms
 import warnings
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -38,17 +39,15 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 
-#-----------------------------------Parameters-------------------------------------------
+# -----------------------------------Parameters-------------------------------------------
 types = ["Chain", _BACT, "Ring"]
 envs = ["Anlus", "Rand", "Slit"]
-tasks = ["Simus", "Anas", "Plots"]
-check = True
-#-----------------------------------Dictionary-------------------------------------------
-#参数字典
+task, check, jump = ["Simus", "Anas", "Plots"][1], True, False
+# -----------------------------------Dictionary-------------------------------------------
+# 参数字典
 params = {
     'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
     'marks': {'labels': [], 'config': []},
-    'task': tasks[1],
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
@@ -56,72 +55,77 @@ params = {
     'Gamma': 100,
     'Trun': 5,
     'Dimend': 3,
-    #'Dimend': [2,3],
+    # 'Dimend': [2,3],
     'num_chains': 1,
 }
 
+
 class _config:
-    def __init__(self, Dimend, Type, Env, Params = params):
+    def __init__(self, Dimend, Type, Env, Params=params):
         self.config = {
             "Linux": {
-                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [20.0, 100.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
+                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0], },
+                # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [20.0, 100.0],
+                          # 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                          # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100]
                           },
-                "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
+                         'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
                          # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                          },
 
                 "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
-                              #3: {'Rin': [0.0], 'Wid': [0.0]},
-                              #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
-                              3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
-                            },
-                "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
-                            #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
-                            #2: {'Rin': [0.314], 'Wid': [1.0]},
-                            #2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
-                            3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
-                            },
-                "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]},
-                        },
-                },
+                          # 3: {'Rin': [0.0], 'Wid': [0.0]},
+                          # 2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                          3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                          },
+                "Rand": {2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
+                         # 2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
+                         # 2: {'Rin': [0.314], 'Wid': [1.0]},
+                         # 2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
+                         3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
+                         },
+                "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0, 15.0, 20.0]},
+                         },
+            },
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'Xi': 0.0, 'N_monos': [100], #'N_monos': [40, 100, 200],
-                              'Fa': [1.0], #'Fa': [0.0, 1.0, 10.0],
-                              'Temp': [0.2],
+                "Chain": {'Xi': 0.0, 'N_monos': [100],  # 'N_monos': [40, 100, 200],
+                          'Fa': [1.0],  # 'Fa': [0.0, 1.0, 10.0],
+                          'Temp': [0.2],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
-                "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
-                            3: {'Rin': [0.0], 'Wid': [0.0]},
-                            #3: {'Rin': [5.0], 'Wid': [5.0]},
-                            },
-                "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
-                             3: {'Rin': 0.0314, 'Wid': 2.5},
-                            },
+                "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
+                          3: {'Rin': [0.0], 'Wid': [0.0]},
+                          # 3: {'Rin': [5.0], 'Wid': [5.0]},
+                          },
+                "Rand": {2: {'Rin': 0.4, 'Wid': 2.0},
+                         3: {'Rin': 0.0314, 'Wid': 2.5},
+                         },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
                          3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0]},
                          },
             },
         }
         self.Params = Params
-        self.labels = [t+e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
+        self.labels = [t + e for t in self.Params['labels']['Types'] for e in self.Params['labels']['Envs']]
         self.Params['marks']['labels'] = self.labels
         self.Dimend = Dimend
         self.Type = Type
         self.Env = Env
-        self.Label = self.Type+self.Env
+        self.Label = self.Type + self.Env
         self.Params["marks"]["config"] = self.Label
         if self.Type in self.config[HOST]:
             self.Params.update(self.config[HOST][self.Type])
         if self.Env in self.config[HOST]:
             self.Params.update(self.config[HOST][self.Env][self.Dimend])
+
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
         # 定义 dimension 和 dump 的映射
@@ -134,7 +138,7 @@ class _config:
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
-        if HOST == "Darwin" and params['task'] == "Simus":
+        if HOST == "Darwin" and task == "Simus":
             Run.Tdump = Run.Tdump_ref
 
         Run.Tinit = Run.Frames * Run.Tdump_ref // 5
@@ -146,10 +150,11 @@ class _config:
         if self.Type == _BACT:
             Run.Tdump //= 10
             Run.Tequ //= 100
-##########################################END!###############################################################
 
+
+##########################################END!###############################################################
 class _run:
-    def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = 2000):
+    def __init__(self, Dimend, Gamma, Temp, Trun, Params=params, Frames=2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
@@ -164,23 +169,27 @@ class _run:
         self.Seed = self.set_seed()
         self.eSteps = 9 if self.Gamma == 1000 else 8
         self.Damp = 1.0 / self.Gamma
+
     def set_seed(self):
         return np.random.randint(700000000, 800000001)
+
     def set_queue(self):
         queues = {
-            "7k83!": {"Usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
+            "7k83!": {"Usage": 1.0, "hosts": ['g009', 'g008', 'a016']},
             "9654!": {"Usage": 1.0, "hosts": ['a017']}
         }
         if HOST != "Darwin":
             try:
-                bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
+                bqueues = subprocess.check_output(['bqueues']).decode('utf-8')  # Decode the output here
                 bhosts = subprocess.check_output(['bhosts']).decode('utf-8')
             except subprocess.CalledProcessError as e:
                 logging.error(f"Error: {e}")
                 raise ValueError(f"Error: {e}")
 
             myques = list(queues.keys())
-            queue_info = {key: {"NJOBS": 0, "PEND": 0,"RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for key in myques}
+            queue_info = {
+                key: {"NJOBS": 0, "PEND": 0, "RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for
+                key in myques}
             myhosts = {key: value["hosts"] for key, value in queues.items()}
             for line in bqueues.strip().split('\n')[1:]:  # Skip the header line
                 columns = line.split()
@@ -194,34 +203,39 @@ class _run:
                 for iqueue in myques:
                     if columns[0] in myhosts[iqueue]:
                         queue_info[iqueue]["runs"] += int(columns[5])
-                        queue_info[iqueue]["cores"] +=  int(columns[3])
+                        queue_info[iqueue]["cores"] += int(columns[3])
 
             for iqueue in myques:
                 try:
-                    bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q',  f'{iqueue}']).decode('utf-8')
+                    bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q', f'{iqueue}']).decode('utf-8')
                 except subprocess.CalledProcessError as e:
                     logging.error(f"Error: {e}")
                     raise ValueError(f"Error: {e}")
                 for line in bjobs.strip().split('\n')[1:]:
                     columns = line.split()
-                    start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
+                    start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}",
+                                                   "%b %d %Y %H:%M")
                     if datetime.now() - start_time > timedelta(hours=24) and columns[2] == "RUN":
                         cores = int(columns[-1].split('*')[0]) if '*' in columns[-1] else 1
                         queue_info[iqueue]["occupy"] += cores
                 queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"] + 1
-                queue_info[iqueue]["Usage"] = np.around( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
+                queue_info[iqueue]["Usage"] = np.around(
+                    (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"]) /
+                    queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
                 if queue_info[iqueue]["PEND"] == 0:
                     self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
                 elif queue_info[iqueue]["PEND"] > 0:
-                    self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
+                    self.Queue = min(myques, key=lambda x: queue_info[x][
+                        'Usage'])  # print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
+
     def sub_file(self, Path, infiles):
         logging.info(f">>> Preparing sub file: {Path.simus}")
         for infile in infiles:
             print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.simus}", infile)
-            bsub=[
+            bsub = [
                 f'#!/bin/bash',
                 f'',
                 f'#BSUB -J {infile}_{Path.Jobname}',
@@ -235,8 +249,8 @@ class _run:
                 f'cd {Path.simus}',
                 f'echo "python3 Run.py {infile}"',
                 f'python3 Run.py {infile}',
-                #f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
-                #f'mpirun -np 1 lmp_wk -i {infile}.in',
+                # f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
+                # f'mpirun -np 1 lmp_wk -i {infile}.in',
             ]
 
             with open(f"{dir_file}.lsf", "w") as file:
@@ -244,10 +258,10 @@ class _run:
                     file.write(command + "\n")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-##########################################END!###############################################################
+
 
 class _init:
-    def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
+    def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains=params["num_chains"]):
         self.sigma_equ, self.mass, self.sigma = 0.94, 1.0, 1.0
         self.Ks = 300.0
         self.Config, self.Trun = Config, Trun
@@ -257,8 +271,8 @@ class _init:
         self.num_monos = self.N_monos * self.num_chains
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.Rring = self.N_circles()
-        self.jump = False
-        self.set_box()   #set box
+        self.jump = jump
+        self.set_box()  # set box
 
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
@@ -270,9 +284,12 @@ class _init:
             self.R_ring = self.Rin + self.Wid / 2
             self.R_torus = self.Wid / 2
 
-            self.Nobs_Rin, self.Nobs_Rout = self.N_ring(self.particle_density, self.Rin, self.sigma), self.N_ring(self.particle_density, self.Rout, self.sigma)
-            self.Nobs_ring, self.Nobs_torus = self.N_ring(self.particle_density, self.R_ring, self.sigma), self.N_ring(self.particle_density, self.R_torus, self.sigma)
-            self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(self.Nobs_Rin + self.Nobs_Rout)
+            self.Nobs_Rin, self.Nobs_Rout = self.N_ring(self.particle_density, self.Rin, self.sigma), self.N_ring(
+                self.particle_density, self.Rout, self.sigma)
+            self.Nobs_ring, self.Nobs_torus = self.N_ring(self.particle_density, self.R_ring, self.sigma), self.N_ring(
+                self.particle_density, self.R_torus, self.sigma)
+            self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(
+                self.Nobs_Rin + self.Nobs_Rout)
             theta = [np.linspace(0, 2 * np.pi, int(2 * np.pi * R / self.sigma_equ + 1))[:-1] for R in self.Rring]
             if self.Config.Dimend == 2 and (self.num_monos > sum(itheta.size for itheta in theta)):
                 print("N_monos is too Long!")
@@ -284,27 +301,28 @@ class _init:
         else:
             self.num_obs = 0
 
-        #include Free chain
+        # include Free chain
         self.sigma12 = self.sigma + 2 * self.Wid if (self.Env == "Rand") else 2 * self.sigma
         self.total_particles = self.num_obs + self.num_monos
         if self.Config.Type == "Ring":
-            self.bonds = self.num_monos - self.num_chains*0
-            self.angles = self.num_monos - self.num_chains*1
+            self.bonds = self.num_monos - self.num_chains * 0
+            self.angles = self.num_monos - self.num_chains * 1
         else:
-            self.bonds = self.num_monos - self.num_chains*1
-            self.angles = self.num_monos - self.num_chains*2
+            self.bonds = self.num_monos - self.num_chains * 1
+            self.angles = self.num_monos - self.num_chains * 2
         if (self.num_chains != 1):
             logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             raise ValueError(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
+
     def set_box(self):
         """计算盒子大小"""
         if self.Env == "Anlus":
             self.Lbox = self.Rin + self.Wid + 1
         else:
             if self.Config.Type == "Chain":
-                self.Lbox = self.N_monos/4 + 10
+                self.Lbox = self.N_monos / 4 + 10
                 if self.Env == "Slit":
-                    self.Lbox = self.N_monos/2 + 5
+                    self.Lbox = self.N_monos / 2 + 5
             elif self.Config.Type == "Ring":
                 self.Lbox = self.N_monos / 4 + 5
             elif self.Config.Type == _BACT:
@@ -315,8 +333,8 @@ class _init:
         self.v_box = (2 * self.Lbox) ** self.Config.Dimend
 
         if self.Config.Dimend == 2:
-            self.zlo = -self.sigma/2
-            self.zhi = self.sigma/2
+            self.zlo = -self.sigma / 2
+            self.zhi = self.sigma / 2
             self.v_obs = np.pi * self.Wid ** 2
         elif self.Config.Dimend == 3:
             self.zlo = - self.Lbox
@@ -325,29 +343,33 @@ class _init:
         else:
             logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
             raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
+
     def N_ring(self, density, Radius, sigma):
         return np.ceil(density * 2 * np.pi * Radius / sigma)
+
     def N_circles(self):
         inter = self.sigma_equ + 0.2
-        start = self.Rin + inter + 0.5 if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+        start = self.Rin + inter + 0.5 if self.Env == "Anlus" else self.N_monos * self.sigma_equ / (2 * np.pi)
         stop = self.Rin + self.Wid - inter
         circles = int((stop - start) / inter) + 1 if self.Env == "Anlus" else 0
         return np.linspace(start, start + inter * circles, circles + 1)
+
     def set_torus(self, R_torus, Nobs_ring, Nobs_torus=0):
-        theta = np.linspace(0, 2 * np.pi, int(Nobs_ring+1))[:-1]
-        phi = np.linspace(0, 2 * np.pi, int(Nobs_torus+1))[:-1] if self.Config.Dimend == 3 else 0
+        theta = np.linspace(0, 2 * np.pi, int(Nobs_ring + 1))[:-1]
+        phi = np.linspace(0, 2 * np.pi, int(Nobs_torus + 1))[:-1] if self.Config.Dimend == 3 else 0
         theta, phi = np.meshgrid(theta, phi)
 
-        x =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.cos(theta) * self.sigma, 5)
-        y =  np.around((self.R_ring + R_torus * np.cos(phi)) * np.sin(theta) * self.sigma, 5)
-        z =  np.around(R_torus * np.sin(phi) * self.sigma, 5)
+        x = np.around((self.R_ring + R_torus * np.cos(phi)) * np.cos(theta) * self.sigma, 5)
+        y = np.around((self.R_ring + R_torus * np.cos(phi)) * np.sin(theta) * self.sigma, 5)
+        z = np.around(R_torus * np.sin(phi) * self.sigma, 5)
 
         return np.vstack([x.flatten(), y.flatten(), z.flatten()]).T
 
     def write_header(self, file):
         # 写入文件头部信息
-        file.write("{} LAMMPS data file for initial configuration:\n\n".format(datetime.now().strftime("%Y/%m/%d %H:%M:%S")))
-        
+        file.write(
+            "{} LAMMPS data file for initial configuration:\n\n".format(datetime.now().strftime("%Y/%m/%d %H:%M:%S")))
+
         # 写入原子数目和边界信息
         file.write(f"{int(self.total_particles)} atoms\n\n")
         file.write(f"{self.bonds} bonds\n\n")
@@ -364,6 +386,7 @@ class _init:
         file.write(f"3 {self.mass}\n")
         file.write(f"4 {self.mass}\n")
         file.write(f"5 {self.mass}\n\n")
+
     def write_chain(self, file):
         """
         Writes chain data into the file.
@@ -378,13 +401,13 @@ class _init:
         - theta0: initial angle
         - dtheta_chain: change in angle per monomer
         """
-        #inlude Free chain
+        # inlude Free chain
         file.write("Atoms\n\n")
         if self.Config.Dimend == 2:
             chain_coords = []
             theta0 = 0
             for iRring in self.Rring:
-                theta = np.linspace(theta0, 2 * np.pi+theta0, int(2 * np.pi * iRring / self.sigma_equ + 1))[:-1]
+                theta = np.linspace(theta0, 2 * np.pi + theta0, int(2 * np.pi * iRring / self.sigma_equ + 1))[:-1]
                 x = np.around(iRring * np.cos(theta) * self.sigma_equ, 5)
                 y = np.around(iRring * np.sin(theta) * self.sigma_equ, 5)
                 z = np.zeros_like(x)
@@ -401,19 +424,22 @@ class _init:
 
         elif self.Config.Dimend == 3:
             inter = self.sigma_equ + 0.2
-            stop = (self.Wid- self.sigma_equ - 0.2) / 2  if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+            stop = (self.Wid - self.sigma_equ - 0.2) / 2 if self.Env == "Anlus" else self.N_monos * self.sigma_equ / (
+                        2 * np.pi)
             circles = int(stop / inter) + 1 if self.Env == "Anlus" else 0
 
             chain_coords = []
             theta0, phi0 = 0, 0
-            for iRchain in np.linspace(0.5, inter * circles, circles+1)[:-1][::-1]:
+            for iRchain in np.linspace(0.5, inter * circles, circles + 1)[:-1][::-1]:
                 Nchain = self.N_ring(1, iRchain, self.sigma_equ)
                 phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1] if self.Config.Dimend == 3 else [0]
                 for iphi in phi:
                     Nring = self.N_ring(1, self.R_ring + iRchain * np.cos(iphi), self.sigma_equ)
-                    theta = np.linspace(theta0, 2 * np.pi+theta0, int(Nring + 1))[:-1]
-                    x = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
-                    y = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
+                    theta = np.linspace(theta0, 2 * np.pi + theta0, int(Nring + 1))[:-1]
+                    x = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ,
+                                 5)
+                    y = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ,
+                                 5)
                     z = np.full_like(theta, np.around(iRchain * np.sin(iphi) * self.sigma_equ, 5))
                     chain_coords.append(np.column_stack([x, y, z]))
                     theta0 += theta[0] - theta[1]
@@ -428,23 +454,26 @@ class _init:
                 elif i == self.N_monos - 1:
                     atom_type = 3  # Tail
                 file.write(f"{i + 1} 1 {atom_type} {' '.join(map(str, coord))}\n")
+
     def write_anlus(self, file):
         self.particles = None
         if self.Config.Dimend == 2:
             outer_ring = self.set_torus(self.R_torus, self.Nobs_Rout)
             inner_ring = self.set_torus(-self.R_torus, self.Nobs_Rin)
             for i, coord in enumerate(inner_ring):
-                file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
+                file.write(f"{self.N_monos + i + 1} 1 4 {' '.join(map(str, coord))}\n")
             for i, coord in enumerate(outer_ring):
-                file.write(f"{int(self.N_monos+self.Nobs_Rin+i+1)} 1 5 {' '.join(map(str, coord))}\n")
+                file.write(f"{int(self.N_monos + self.Nobs_Rin + i + 1)} 1 5 {' '.join(map(str, coord))}\n")
         elif self.Config.Dimend == 3:
             torus = self.set_torus(self.R_torus, self.Nobs_ring, self.Nobs_torus)
             for i, coord in enumerate(torus):
-                file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
+                file.write(f"{self.N_monos + i + 1} 1 4 {' '.join(map(str, coord))}\n")
+
     def periodic_distance(self, pos1, pos2):
         delta = np.abs(pos1 - pos2)
         delta = np.where(delta > 0.5 * self.Lbox, delta - self.Lbox, delta)
         return np.sqrt((delta ** 2).sum())
+
     def neighbor_keys(self, hash_key):
         """Generate neighbor hash keys for a given hash_key."""
         dim = len(hash_key)
@@ -453,11 +482,12 @@ class _init:
                 neighbor_key = list(hash_key)
                 neighbor_key[i] += d
                 yield tuple(neighbor_key)
+
     def write_rand(self, file):
         # obstacles: harsh grid and size
         self.obs_positions = []
         self.bound = self.Lbox
-        #self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
+        # self.bound = self.Lbox - self.Wid - 0.56 * self.sigma
         self.hash_grid = defaultdict(list)
         self.grid_size = 2 * self.Wid
         for i in range(self.num_obs):
@@ -478,19 +508,20 @@ class _init:
                     file.write(f"{int(self.N_monos + i + 1)} 1 4 {' '.join(map(str, pos))}\n")
                     break
         return self.obs_positions
+
     def write_potential(self, file):
-        #写入bonds and angles
+        # 写入bonds and angles
         file.write("\nBonds\n\n")
         for i in range(self.bonds):
-            i1 = (i + 1) if (i + 1)%self.N_monos == 0 else (i+1) % self.N_monos
-            i2 = (i + 2) if (i + 2)%self.N_monos == 0 else (i+2) % self.N_monos
-            file.write(f"{i+1} 1 {i1} {i2}\n")
+            i1 = (i + 1) if (i + 1) % self.N_monos == 0 else (i + 1) % self.N_monos
+            i2 = (i + 2) if (i + 2) % self.N_monos == 0 else (i + 2) % self.N_monos
+            file.write(f"{i + 1} 1 {i1} {i2}\n")
 
         file.write("\nAngles\n\n")
         for i in range(self.angles):
-            i1 = (i + 1) if (i + 1)%self.N_monos == 0 else (i+1) % self.N_monos
-            i2 = (i + 2) if (i + 2)%self.N_monos == 0 else (i+2) % self.N_monos
-            i3 = (i + 3) if (i + 3)%self.N_monos == 0 else (i+3) % self.N_monos
+            i1 = (i + 1) if (i + 1) % self.N_monos == 0 else (i + 1) % self.N_monos
+            i2 = (i + 2) if (i + 2) % self.N_monos == 0 else (i + 2) % self.N_monos
+            i3 = (i + 3) if (i + 3) % self.N_monos == 0 else (i + 3) % self.N_monos
             if i == 0:
                 file.write(f"{i + 1} 1 {i1} {i2} {i3}\n")
             elif i == self.angles - 1:
@@ -503,19 +534,21 @@ class _init:
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(1, self.Trun + 1)]:
-            data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
+            data_file = os.path.join(f"{Path.simus}",
+                                     f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
                 self.write_chain(file)
                 if self.Env == "Anlus":
-                   self.write_anlus(file)
+                    self.write_anlus(file)
                 elif self.Env == "Rand":
                     self.write_rand(file)
                 self.write_potential(file)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+
+
 #############################################################################################################
-        
 class _model:
     def __init__(self, Init, Run, Fa, Xi):
         self.Init = Init
@@ -524,8 +557,8 @@ class _model:
         self.type = Init.Config.Type.lower()
         self.Fa = Fa
         self.Xi = Xi
-        self.Kb = self.Xi * Init.N_monos/4
-        #for directory
+        self.Kb = self.Xi * Init.N_monos / 4
+        # for directory
         self.Pe = self.Fa / self.Run.Temp
 
         self.dump = {"init": "INIT", "equ": "EQU", "data": "DATA", "refine": "REFINE"}
@@ -535,7 +568,7 @@ class _model:
         self.fix_cmd = {}
         dimension = self.Config.Dimend
         env = self.Init.Env
-        wid = self.Init.Wid+1
+        wid = self.Init.Wid + 1
         axis = "y" if dimension == 2 else "z"
         unfix = '\n'.join([
             '',
@@ -544,25 +577,25 @@ class _model:
             'unfix           FREEZE',
         ])
         fix_wall_init = '\n'.join([
-                f'fix             WALL1 {self.type} wall/lj126 {axis}lo v_lo 1.0 1.0 1.12246',
-                f'fix             WALL2 {self.type} wall/lj126 {axis}hi v_hi 1.0 1.0 1.12246',
-            ])
+            f'fix             WALL1 {self.type} wall/lj126 {axis}lo v_lo 1.0 1.0 1.12246',
+            f'fix             WALL2 {self.type} wall/lj126 {axis}hi v_hi 1.0 1.0 1.12246',
+        ])
         fix_wall = '\n'.join([
-                f'fix             WALL1 {self.type} wall/lj126 {axis}lo {-wid / 2} 1.0 1.0 1.12246',
-                f'fix             WALL2 {self.type} wall/lj126 {axis}hi {wid / 2} 1.0 1.0 1.12246',
-            ])
+            f'fix             WALL1 {self.type} wall/lj126 {axis}lo {-wid / 2} 1.0 1.0 1.12246',
+            f'fix             WALL2 {self.type} wall/lj126 {axis}hi {wid / 2} 1.0 1.0 1.12246',
+        ])
         unfix_wall = '\n'.join([
-                'unfix           WALL1',
-                'unfix           WALL2',
-            ])
+            'unfix           WALL1',
+            'unfix           WALL2',
+        ])
         fix2D = '' if dimension == 3 else '\nfix             2D all enforce2d'
         unfix2D = '' if dimension == 3 else '\nunfix           2D'
         if env == "Slit":
             self.bound = f'boundary        p {"f" if dimension == 2 else "p"} {"f" if dimension == 3 else "p"}'
             self.lh = '\n'.join([
                 '',
-                f'variable        lo equal ramp({-self.Init.Lbox/2},{-wid / 2})',
-                f'variable        hi equal ramp({self.Init.Lbox/2},{wid / 2})',
+                f'variable        lo equal ramp({-self.Init.Lbox / 2},{-wid / 2})',
+                f'variable        hi equal ramp({self.Init.Lbox / 2},{wid / 2})',
                 '',
             ])
             self.fix_cmd.update({"init": fix_wall_init + "\n" + fix2D, "data": fix_wall + "\n" + fix2D})
@@ -571,83 +604,84 @@ class _model:
             self.bound = f'boundary        p p p'
             self.lh = ''
             self.fix_cmd.update({"init": fix2D, "data": fix2D})
-            self.fix_cmd["unfix"]  = unfix + "\n" + unfix2D
+            self.fix_cmd["unfix"] = unfix + "\n" + unfix2D
 
         # pairs, bonds, angles
         self.pair = {
-        "SOFT": '\n'.join([
+            "SOFT": '\n'.join([
                 '# pair potential and  soft potential',
                 f'pair_style      hybrid/overlay lj4422/cut 1.03201 soft {1.03201 * (self.Init.Wid * 2 + self.Init.sigma)}',
                 'pair_coeff      *3 *3 lj4422/cut 1 1.0',
                 'pair_modify     shift yes',
                 f'pair_coeff      *3 4*5 soft 1 {1.03201 * self.Init.sigma12 / 2}',
                 f'pair_coeff      4*5 4*5 soft 1',
-         ]),
-        "INIT": '\n'.join([
+            ]),
+            "INIT": '\n'.join([
                 '# pair potential and  soft potential',
                 f'pair_style      lj/cut 1.12246',
                 'pair_coeff      *3 *3 1 1.0',
                 'pair_modify     shift yes',
                 f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.12246 * self.Init.sigma12 / 2}',
                 f'pair_coeff      4*5 4*5 1 {self.Init.Wid * 2 + self.Init.sigma} {1.12246 * (self.Init.Wid * 2 + self.Init.sigma)}',
-         ]),
-        "INIT4422": '\n'.join([
+            ]),
+            "INIT4422": '\n'.join([
                 '# pair potential and  soft potential',
                 f'pair_style      lj4422/cut 1.03201',
                 'pair_coeff      *3 *3 1 1.0',
                 'pair_modify     shift yes',
                 f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.03201 * self.Init.sigma12 / 2}',
                 f'pair_coeff      4*5 4*5 1 {self.Init.Wid * 2 + self.Init.sigma} {1.03201 * (self.Init.Wid * 2 + self.Init.sigma)}',
-         ]),
-        "LJ": '\n'.join([
-            '#pair potential',
-            f'pair_style      lj/cut 1.12246',
-            'pair_modify	    shift yes',
-            'pair_coeff      *3 *3 1 1.0',
-            f'pair_coeff      *3 4*5 1 {self.Init.sigma12/2} {1.12246 * self.Init.sigma12/2}',
-            'pair_coeff      4*5 4*5  1 1.0 0.0',
-        ]),
-        "LJ4422": '\n'.join([
-            '#pair potential',
-            f'pair_style      lj4422/cut 1.03201',
-            'pair_modify	    shift yes',
-            'pair_coeff      *3 *3 1 1.0',
-            f'pair_coeff      *3 4*5 1 {self.Init.sigma12/2} {1.03201 * self.Init.sigma12/2}',
-            'pair_coeff      4*5 4*5  1 1.0 0.0',
-        ])}
+            ]),
+            "LJ": '\n'.join([
+                '#pair potential',
+                f'pair_style      lj/cut 1.12246',
+                'pair_modify	    shift yes',
+                'pair_coeff      *3 *3 1 1.0',
+                f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.12246 * self.Init.sigma12 / 2}',
+                'pair_coeff      4*5 4*5  1 1.0 0.0',
+            ]),
+            "LJ4422": '\n'.join([
+                '#pair potential',
+                f'pair_style      lj4422/cut 1.03201',
+                'pair_modify	    shift yes',
+                'pair_coeff      *3 *3 1 1.0',
+                f'pair_coeff      *3 4*5 1 {self.Init.sigma12 / 2} {1.03201 * self.Init.sigma12 / 2}',
+                'pair_coeff      4*5 4*5  1 1.0 0.0',
+            ])}
 
         self.bond = {
-        "harmonic": '\n'.join([
-            '# Bond potential',
-            'bond_style      harmonic',
-            'bond_coeff      1 4000 1.0',
-            'special_bonds   lj/coul 1.0 1.0 1.0',
-        ]),
-        "fene4422": '\n'.join([
-            '# Bond potential',
-            'bond_style      fene4422',
-            f'bond_coeff      1 {self.Init.Ks} 1.05 1.0 1.0',
-            'special_bonds   lj/coul 0.0 1.0 1.0',
-        ])}
+            "harmonic": '\n'.join([
+                '# Bond potential',
+                'bond_style      harmonic',
+                'bond_coeff      1 4000 1.0',
+                'special_bonds   lj/coul 1.0 1.0 1.0',
+            ]),
+            "fene4422": '\n'.join([
+                '# Bond potential',
+                'bond_style      fene4422',
+                f'bond_coeff      1 {self.Init.Ks} 1.05 1.0 1.0',
+                'special_bonds   lj/coul 0.0 1.0 1.0',
+            ])}
 
         self.angle = {
-        "harmonic": '\n'.join([
-            '# angle potential',
-            'angle_style     harmonic',
-            f'angle_coeff     * {self.Kb} 180',
-        ]),
-        "hybrid": '\n'.join([
-            '# Angle potential',
-            'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
-            f'angle_coeff     1 actharmonic_h2 {self.Kb} 180 {self.Fa} {self.Fa}',
-            f'angle_coeff     2 actharmonic   {self.Kb} 180 {self.Fa}',
-            f'angle_coeff     3 actharmonic_t {self.Kb} 180 {self.Fa}',
-        ]),
-        "actharmonic": '\n'.join([
-            '# Angle potential',
-            'angle_style      actharmonic',
-            f'angle_coeff     * {self.Kb} 180 {self.Fa}',
-        ])}
+            "harmonic": '\n'.join([
+                '# angle potential',
+                'angle_style     harmonic',
+                f'angle_coeff     * {self.Kb} 180',
+            ]),
+            "hybrid": '\n'.join([
+                '# Angle potential',
+                'angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t',
+                f'angle_coeff     1 actharmonic_h2 {self.Kb} 180 {self.Fa} {self.Fa}',
+                f'angle_coeff     2 actharmonic   {self.Kb} 180 {self.Fa}',
+                f'angle_coeff     3 actharmonic_t {self.Kb} 180 {self.Fa}',
+            ]),
+            "actharmonic": '\n'.join([
+                '# Angle potential',
+                'angle_style      actharmonic',
+                f'angle_coeff     * {self.Kb} 180 {self.Fa}',
+            ])}
+
     def write_section(self, file, cmds):
         """向文件中写入一个命令区块"""
         for command in cmds:
@@ -677,6 +711,7 @@ class _model:
             'velocity		all set 0.0 0.0 0.0',
             '',
         ]
+
     def iofile(self, file, title):
         lmp_rest = '' if title == self.dump["data"] else f".{title.lower()}"
         lmp_trj = '' if title == self.dump["data"] else f".{self.type}_{title.lower()}"
@@ -684,6 +719,7 @@ class _model:
             return f'${{dir_file}}{lmp_rest}.restart'
         elif file == "dump":
             return f'${{dir_file}}{lmp_trj}.lammpstrj'
+
     def configure(self, prompt, temp, damp, run):
         return [
             '# for communication',
@@ -707,6 +743,7 @@ class _model:
             'unfix           NVE',
             '',
         ]
+
     def potential(self, prompt: str, pair: str, bond: str, angle: str, exclude="exclude none") -> list:
         """Define the potential parameters for LAMMPS simulation."""
         return [
@@ -719,6 +756,7 @@ class _model:
             angle,
             '##################################################################',
         ]
+
     def fix(self, prompt: str, temp: float, damp: float, run) -> list:
         """Define the fix parameters for LAMMPS simulation."""
         self.fix_cmd["langevin"] = "\n".join([
@@ -741,10 +779,11 @@ class _model:
             fix_cmd,
             '',
         ]
+
     def run(self, title: str, timestep: int, tdump: int, run) -> list:
         """Define the run parameters for LAMMPS simulation."""
-       #log, unfix, dump
-        log_cmd ='log	            ${dir_file}.log' if title == self.dump["equ"] else ''
+        # log, unfix, dump
+        log_cmd = 'log	            ${dir_file}.log' if title == self.dump["equ"] else ''
         unfix_cmd = '' if title == self.dump["data"] else self.fix_cmd["unfix"]
         type, dt = ('all', "0.001") if title == self.dump["init"] else (self.type, run.dt)
 
@@ -756,7 +795,7 @@ class _model:
             f'timestep        {dt}',
             f'thermo		      {timestep // 200}',
             log_cmd,
-            f'restart         {tdump//10}  ${{dir_file}}.a.restart  ${{dir_file}}.b.restart ',
+            f'restart         {tdump // 10}  ${{dir_file}}.a.restart  ${{dir_file}}.b.restart ',
             f'run	            {timestep}',
             f'write_restart   {self.iofile("restart", title)}',
             unfix_cmd,
@@ -766,15 +805,15 @@ class _model:
 
     def in_file(self, Path):
         """Main function to write the in-file for LAMMPS simulation."""
-        #from LJ + harmonic ==> LJ4422 + FENE4422
+        # from LJ + harmonic ==> LJ4422 + FENE4422
         Config, Init, Run = Path.Config, Path.Init, Path.Run
-#        Run.Trun = 1000
+        #        Run.Trun = 1000
         logging.info(f"==> Writing infile ==> {Path.simus}")
 
         for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
             print(f"==> Writing infile: {infile}......")
             try:
-                #setup
+                # setup
                 dir_file = os.path.join(f"{Path.simus}", infile)
                 if Run.Params["restart"][0]:
                     read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
@@ -782,17 +821,22 @@ class _model:
                     read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Init.Env[0].upper()}.data'
 
                 # potential
-                detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"], self.angle["harmonic"])
+                detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"],
+                                                  self.angle["harmonic"])
                 if Config.Type == "Ring":
-                    initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
+                    initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"],
+                                                       self.bond["fene4422"], self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"],
+                                                   self.angle["actharmonic"])
                 else:
-                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
+                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"],
+                                                       self.angle["harmonic"])
+                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"],
+                                                   self.angle["hybrid"])
 
-                #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
+                # f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
                 detach_configure = self.configure('# for configuration', 0.1, 0.01, Run)
-                initial_fix = self.fix('# for initialization',  1.0, 1.0, Run)
+                initial_fix = self.fix('# for initialization', 1.0, 1.0, Run)
                 equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
                 data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
                 refine_read = [
@@ -802,11 +846,12 @@ class _model:
                     '',
                 ]
                 # run
-                v_init, v_equ, v_data, v_refine = self.dump["init"], self.dump["equ"], self.dump["data"], self.dump["refine"]
-                initial_run = self.run(v_init, Run.Tinit, Run.Tinit//20, Run)
-                equal_run = self.run(v_equ, Run.Tequ, Run.Tequ//200, Run)
-                data_run = self.run(v_data, Run.TSteps, Run.TSteps//Run.Frames, Run)
-                refine_run = self.run(v_refine, Run.Tref, Run.Tref//Run.Frames, Run)
+                v_init, v_equ, v_data, v_refine = self.dump["init"], self.dump["equ"], self.dump["data"], self.dump[
+                    "refine"]
+                initial_run = self.run(v_init, Run.Tinit, Run.Tinit // 20, Run)
+                equal_run = self.run(v_equ, Run.Tequ, Run.Tequ // 200, Run)
+                data_run = self.run(v_data, Run.TSteps, Run.TSteps // Run.Frames, Run)
+                refine_run = self.run(v_refine, Run.Tref, Run.Tref // Run.Frames, Run)
 
                 # Define LAMMPS 参数
                 with open(f"{dir_file}.in", "w") as file:
@@ -829,12 +874,13 @@ class _model:
                 logging.error(f"An error occurred: {e}")
                 raise ValueError(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-#############################################################################################################
+
 
 class _path:
     def __init__(self, Model):
-        #host = os.getcwd()
-        self.host = os.path.abspath(os.path.dirname(os.getcwd()))
+        # host = os.getcwd()
+        # self.host = os.path.abspath(os.path.dirname(os.getcwd()))
+        self.host = re.match(r"(.*?/Data/)", os.getcwd()).group(1)
         self.mydirs = ["Codes", "Simus", "Figs"]
         self.Model = Model
         self.Init = Model.Init
@@ -842,45 +888,49 @@ class _path:
         self.Run = Model.Run
         self.jump = self.build_paths()
         self.filename = os.path.basename(os.path.abspath(__file__))
+
     def build_paths(self):
         self.simus = os.path.join(self.host, self.mydirs[1])
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
             os.makedirs(self.host_dir, exist_ok=True)
-        #2D_100G_1.0Pe_Chain
-        self.dir1= f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Model.Pe}Pe_{self.Config.Type}"
-        #5.0R5.0_100N1_Anulus
+        # 2D_100G_1.0Pe_Chain
+        self.dir1 = f"{self.Config.Dimend}D_{self.Run.Gamma:.1f}G_{self.Model.Pe}Pe_{self.Config.Type}"
+        # 5.0R5.0_100N1_Anulus
         if self.Init.Env == "Free":
             self.dir2 = f"{self.Init.N_monos}N{self.Init.num_chains}_{self.Init.Env}"
         else:
             self.dir2 = f"{self.Init.Rin}R{self.Init.Wid}_{self.Init.N_monos}N{self.Init.num_chains}_{self.Init.Env}"
 
-        #1.0T_0.0Xi_8T5
+        # 1.0T_0.0Xi_8T5
         self.dir3 = f"{self.Run.Temp}T_{self.Model.Xi}Xi_{self.Run.eSteps}T{self.Run.Trun}"
         if self.Config.Type == _BACT:
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
-        #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
+        # /Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
         self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', self.dir3)
-        #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
+        # /Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
 
-        #Anas and Figures
+        # Anas and Figures
         self.fig0 = self.simus.replace(self.mydirs[1], self.mydirs[2])
         self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun:03}.lammpstrj")
         return os.path.exists(self.lmp_trj)
+
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
               f"Path.simus: {self.simus}\nPath.fig0: {self.fig0}")
-#############################################################################################################
 
+
+#############################################################################################################
 class _anas:
     def __init__(self, Path, Pe):
         self.Path, self.Init, self.Run, self.Config = Path, Path.Init, Path.Run, Path.Config
         self.Pe = Pe
         self.chunk = 9
-        self.jump = True
+        self.jump = jump
+
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
         dump = {
@@ -892,6 +942,7 @@ class _anas:
         except KeyError:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
+
     def unwrap_x(self, Lx):
         frames = self.data.shape[1]
         for i in range(1, frames):
@@ -912,7 +963,7 @@ class _anas:
         dump = self.set_dump()
         lox, hix = -self.Init.Lbox * 1025, self.Init.Lbox * 1023
 
-        self.data = np.zeros((self.Run.Trun, self.Run.Frames+1, self.Init.num_monos, len(dump)))
+        self.data = np.zeros((self.Run.Trun, self.Run.Frames + 1, self.Init.num_monos, len(dump)))
         # read the lammpstrj files with 2001 frames
         print(f"{self.Path.simus}")
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun + 1)]):
@@ -922,24 +973,28 @@ class _anas:
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
             natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
-            dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
-            lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+            dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True,
+                                header=None).iloc[0][0]
+            lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1,
+                                   delim_whitespace=True, header=None).iloc[0][0]
             if natoms != self.Init.num_monos:
                 logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
                 raise ValueError(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
                 logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
                 raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
-            skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
+            skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x,
+                                         np.arange(self.Run.Frames + 1)))).ravel()
             try:
-                df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
+                df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names,
+                                 usecols=dump)
             except Exception as e:
                 logging.error(f"ERROR: Could not read the file due to {e}")
                 raise ValueError(f"ERROR: Could not read the file due to {e}")
 
             # data[ifile][iframe][iatom][id, xu, yu]
-            self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
-            #np.save(self.Path.simus, data)
+            self.data[index] = df.to_numpy().reshape((self.Run.Frames + 1, self.Init.num_monos, len(dump)))
+            # np.save(self.Path.simus, data)
 
         # unwrap data
         Lx = hix - lox
@@ -952,32 +1007,35 @@ class _anas:
         timer.count("Read and unwrap data")
         timer.stop()
         return self.data
+
     def save_data(self):
         # data[ifile][iframe][iatom][xu, yu]
         self.read_data()
-        #print(f"data.shape: {self.data.shape}")
+        # print(f"data.shape: {self.data.shape}")
         self.data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
-        self.data_Rcom = np.linalg.norm(self.data_com[ ..., :], axis = -1)
+        self.data_Rcom = np.linalg.norm(self.data_com[..., :], axis=-1)
 
         # debug
-        #describe(self.data, "self.data", flag=False)
+        # describe(self.data, "self.data", flag=False)
         # describe(data_com, "data_com", flag=False)
-        #describe(data, "data")
+        # describe(data, "data")
         # center of mass and average of files
 
         # Rg2_time[iframe]
-        Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
-        Rg2 = np.mean(Rg2_time) # average over time
+        Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0)  # average over atoms and files
+        Rg2 = np.mean(Rg2_time)  # average over time
         message = f"saving Rg2_time: {self.Path.fig0}"
         print(message)
         logging.info(message)
         np.save(os.path.join(self.Path.fig0, "Rg2_time.npy"), Rg2_time)
-        #MSD
+        # MSD
+
 
 class BasePlot:
-    def __init__(self, df, jump=True):
+    def __init__(self, df):
         self.df = df
         self.jump = jump
+
     def set_style(self):
         '''plotting'''
         plt.clf()
@@ -987,6 +1045,7 @@ class BasePlot:
         plt.rcParams['ytick.direction'] = 'in'
         plt.rcParams['xtick.labelsize'] = 15
         plt.rcParams['ytick.labelsize'] = 15
+
     def colorbar(self, fig, ax, sc, label, is_3D=False, loc="right"):
         '''colorbar'''
         axpos = ax.get_position()
@@ -1001,6 +1060,7 @@ class BasePlot:
         cbar = plt.colorbar(sc, ax=ax, cax=cax)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
+
     def set_axes(self, ax, data, labels, title, is_3D=False, rotation=-60, loc="right"):
         x, y, z = data[:3]
         xlabel, ylabel, zlabel = labels[:3]
@@ -1016,9 +1076,11 @@ class BasePlot:
         ax.set_ylabel(ylabel, fontsize=20, labelpad=10)
         ax.set_xlim(min(x), max(x))
         ax.set_ylim(min(y), max(y))
+
     def adding(self, ax, note, is_3D=False):
         # linewidth and note
-        ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
+        ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center",
+                    fontsize=20)
         if is_3D:
             ax.tick_params(axis='x', which="both", width=2, labelsize=15, pad=-3.0)
             ax.tick_params(axis='y', which="both", width=2, labelsize=15, pad=1.0)
@@ -1029,44 +1091,48 @@ class BasePlot:
         # axes lines
         for spine in ["bottom", "left", "right", "top"]:
             ax.spines[spine].set_linewidth(2)
+
     def save_fig(self, fig, path):
         pdf = PdfPages(path)
         pdf.savefig(fig, dpi=500, transparent=True)
         pdf.close()
 
+
 class _plot(BasePlot):
-    def __init__(self, Path, jump=True, bins=20):
+    def __init__(self, Path, bins=20):
         self.Path = Path
         self.Init, self.Run = Path.Init, Path.Run
         self.simp = 10
         self.num_bins = bins
-        self.num_pdf = bins*10
+        self.num_pdf = bins * 10
         self.jump = jump
+
     def data2dict(self, flag=False):
         dict = {}
         _, frames, atoms = self.data.shape
         # data[ifile][iframe][iatom]
         data = np.mean(self.data, axis=0)
 
-        if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
-            message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
+        if atoms != self.Init.num_monos or frames != (self.Run.Frames + 1):
+            message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames + 1}"
             print(message)
             logging.info(message)
-        times, ids = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1)
+        times, ids = np.arange(frames) * self.Run.dt * self.Run.Tdump, np.arange(1, atoms + 1, 1)
 
         if flag:
             data = data[::self.simp, ...]
             frames = data.shape[0]
-            times = np.arange(frames)*self.Run.dt*self.Run.Tdump * self.simp
+            times = np.arange(frames) * self.Run.dt * self.Run.Tdump * self.simp
         dict = {
-            #"x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
-            #"y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
-            #"z": [data, data.flatten(),],  # Magnitude (r coordinate)
+            # "x": [np.random.normal(0, 1, frames), np.random.normal(0, 1, frames * atoms), ],  # Frame numbers (t coordinate)
+            # "y": [np.random.random(atoms), np.random.random(frames * atoms),],  # Particle IDs (s coordinate)
+            # "z": [data, data.flatten(),],  # Magnitude (r coordinate)
             "t": [times, np.repeat(times, atoms), "t"],  # Frame numbers (t coordinate)
             "s": [ids, np.tile(ids, frames), "s"],  # Particle IDs (s coordinate)
             var2str(self.variable)[0]: [data, data.flatten(), var2str(self.variable)[1]],  # Magnitude (r coordinate)
         }
         return dict
+
     def dist_data(self, x):
         bin_id, pdf_id = self.num_bins // 2, self.num_pdf // 2
         # Create a 2D histogram and bin centers
@@ -1075,6 +1141,7 @@ class _plot(BasePlot):
         x_range = np.linspace(min(x), max(x), self.num_pdf)
         pdf_x = gaussian_kde(x).evaluate(x_range)
         return hist_x, x_bins, x_bin_centers, x_range, pdf_x
+
     def adding(self, ax, note, loc=(-0.25, 0.9)):
         # linewidth and note
         ax.annotate(note, loc, textcoords="axes fraction", xycoords="axes fraction", va="center",
@@ -1084,13 +1151,14 @@ class _plot(BasePlot):
         # axes lines
         for spine in ["bottom", "left", "right", "top"]:
             ax.spines[spine].set_linewidth(2)
+
     ##################################################################
     def original(self):
         timer = Timer("Original")
         timer.start()
         # ----------------------------> prepare data <----------------------------#
         keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
-        #x, y, z = [self.data_dict[key][1] for key in keys]
+        # x, y, z = [self.data_dict[key][1] for key in keys]
         x, y, z = [self.simp_dict[key][1] for key in keys]
         simp_x, simp_y, simp_z = [self.simp_dict[key][1] for key in keys]
         x_label, y_label, z_label = [keys[i] for i in range(3)]
@@ -1110,7 +1178,7 @@ class _plot(BasePlot):
         unique_coords_f, _, _, counts_f = statistics(data_f)
         unique_coords_g, _, _, counts_g = statistics(data_g)
 
-        #----------------------------> figure path <----------------------------#
+        # ----------------------------> figure path <----------------------------#
         fig_save = os.path.join(f"{self.Path.fig0}", fr"{self.variable}.Org.({z_abbre},{x_abbre},{y_abbre})")
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
@@ -1133,21 +1201,27 @@ class _plot(BasePlot):
         ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
 
         # ----------------------------> ax_a <----------------------------#
-        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
-        #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z,
+                            cmap='rainbow')  # , vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+        # ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+        # ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
         title = fr'({z_label}, {x_label}, {y_label}) in 3D Space'
         self.colorbar(fig, ax_a, sc_a, z_label, True)
-        self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, True, rotation=0, loc="center")
+        self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, True, rotation=0,
+                      loc="center")
         self.adding(ax_a, "(a)")
 
         ## ----------------------------> ax_bcd <----------------------------#
         for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
-                                         [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
-                                         [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
-                                         ['(b)', '(c)', '(d)']):
+                                               [np.column_stack([simp_x, simp_y, simp_z]),
+                                                np.column_stack([simp_x, simp_z, simp_y]),
+                                                np.column_stack([simp_y, simp_z, simp_x])],
+                                               [(x_label, y_label, z_label), (x_label, z_label, y_label),
+                                                (y_label, z_label, x_label)],
+                                               ['(b)', '(c)', '(d)']):
             unique_coords, mean_values, std_values = statistics(data)[:3]
-            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
+            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10,
+                            cmap='rainbow', alpha=0.7)
             title = fr'$\langle$ {axis_labels[2]} $\rangle$ in {axis_labels[0]}-{axis_labels[1]} Space'
             self.colorbar(fig, ax, sc, axis_labels[2])
             self.set_axes(ax, (unique_coords[:, 0], unique_coords[:, 1], None), axis_labels, title)
@@ -1155,15 +1229,16 @@ class _plot(BasePlot):
 
         # ----------------------------> ax_efg <----------------------------#
         bin_set = [(np.around(mid_z - bin_size_z / 2, 2), np.around(mid_z + bin_size_z / 2, 2)),
-                        (np.around(mid_y - bin_size_y / 2, 2), np.around(mid_y + bin_size_y / 2, 2)),
-                        (np.around(mid_x - bin_size_x / 2, 2), np.around(mid_x + bin_size_x / 2, 2))]
+                   (np.around(mid_y - bin_size_y / 2, 2), np.around(mid_y + bin_size_y / 2, 2)),
+                   (np.around(mid_x - bin_size_x / 2, 2), np.around(mid_x + bin_size_x / 2, 2))]
         unique_coords = [unique_coords_e, unique_coords_f, unique_coords_g]
         counts_set = [counts_e, counts_f, counts_g]
         for ax, data, bin, counts, axis_labels, note in zip([ax_e, ax_f, ax_g],
-                                                      unique_coords, bin_set, counts_set,
-                                                      [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
-                                                      ['(e)', '(f)', '(g)']):
-            sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
+                                                            unique_coords, bin_set, counts_set,
+                                                            [(x_label, y_label, z_label), (x_label, z_label, y_label),
+                                                             (y_label, z_label, x_label)],
+                                                            ['(e)', '(f)', '(g)']):
+            sc = ax.scatter(data[:, 0], data[:, 1], s=counts * 50, color="blue", alpha=0.6)
             # axis settings
             ax.set_title(fr'{axis_labels[2]}$_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
             ax.set_xlabel(axis_labels[0], fontsize=20)
@@ -1174,13 +1249,14 @@ class _plot(BasePlot):
         fig = plt.gcf()
         self.save_fig(fig, f"{fig_save}.pdf")
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        # fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
         timer.count("saving figure")
         plt.show()
         plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+
     def distribution(self):
         timer = Timer("Distribution")
         timer.start()
@@ -1195,10 +1271,11 @@ class _plot(BasePlot):
             hist_x, x_bins, x_bin_centers, x_range, pdf_x = self.dist_data(x)
             hist_y, y_bins, y_bin_centers, y_range, pdf_y = self.dist_data(y)
             hist_2D = np.histogram2d(x, y, bins=[x_bins, y_bins], density=True)[0]
-            hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id]/np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :]/np.sum(hist_2D[bin_id, :])
-            #hist_x_at_y, hist_y_at_x = np.nan_to_num(hist_x_at_y), np.nan_to_num(hist_y_at_x)
+            hist_x_at_y, hist_y_at_x = hist_2D[:, bin_id] / np.sum(hist_2D[:, bin_id]), hist_2D[bin_id, :] / np.sum(
+                hist_2D[bin_id, :])
+            # hist_x_at_y, hist_y_at_x = np.nan_to_num(hist_x_at_y), np.nan_to_num(hist_y_at_x)
 
-            #----------------------------> figure settings <----------------------------#
+            # ----------------------------> figure settings <----------------------------#
             fig_save = os.path.join(f"{self.Path.fig0}", f"{self.variable}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
             if os.path.exists(f"{fig_save}.pdf") and self.jump:
                 print(f"==>{fig_save}.pdf is already!")
@@ -1222,14 +1299,15 @@ class _plot(BasePlot):
 
             # Plot fz(x,y)
             cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
-            ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
-            ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
+            ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+            ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw=1.5, color='black')  # Selected Time frame
             title = fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})"
             self.colorbar(fig, ax_a, cmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
-            self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
+            self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0,
+                          loc="center")
 
             # Plot Fz(x;y0)
-            ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+            ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha=0.7, label="histogram")
             ax_b.set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
             ax_b.tick_params(axis='x', rotation=45)
             ax_b.set_xlabel(f"{x_label}", fontsize=20)
@@ -1237,31 +1315,33 @@ class _plot(BasePlot):
             ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
 
             # Plot Fzy(x)
-            ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+            ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha=0.7, label="histogram")
             ax_c.plot(x_range, pdf_x, 'r', label='PDF')
             ax_c.set_title("Distribution", loc='right', fontsize=20)
             ax_c.tick_params(axis='x', rotation=45)
             ax_c.set_xlabel(f"{x_label}", fontsize=20)
-            ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
-            ax_c.set_ylim(0, max(hist_x) *1.1)
+            ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})",
+                            fontsize=20)
+            ax_c.set_ylim(0, max(hist_x) * 1.1)
 
             # Plot Fz(y;x0)
-            ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+            ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha=0.7, label="histogram")
             ax_d.set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
             ax_d.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
             ax_d.set_ylabel(f"{y_label}", fontsize=20)
-            ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
+            ax_d.set_xlim(0, max(hist_y_at_x) * 1.1)
 
             # Plot Fzx(y)
-            ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+            ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha=0.7, label="histogram")
             ax_e.plot(pdf_y, y_range, 'r', label='PDF')
             ax_e.set_title('Distribution', loc='right', fontsize=20)
-            ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
+            ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})",
+                            fontsize=20)
             ax_e.set_ylabel(f"{y_label}", fontsize=20)
-            ax_e.set_xlim(0, max(hist_y)*1.1)
+            ax_e.set_xlim(0, max(hist_y) * 1.1)
 
             # ----------------------------> linewidth <----------------------------#
-            for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
+            for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)', ]):
                 self.adding(ax, note, (-0.3, 0.9))
 
             timer.count("saving figure")
@@ -1269,16 +1349,21 @@ class _plot(BasePlot):
             fig = plt.gcf()
             self.save_fig(fig, f"{fig_save}.pdf")
 
-            #print("saving png......")
+            # print("saving png......")
             # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-            #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+            # fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
             plt.show()
             plt.close()
             # -------------------------------Done!----------------------------------------#
         timer.stop()
         return False
+
     def distics(self):
         print("-----------------------------------Done!--------------------------------------------")
+
+    def relation(self):
+        print("Done!")
+
     ##################################################################
     def org(self, data, variable):
         timer = Timer("Plot")
@@ -1287,10 +1372,10 @@ class _plot(BasePlot):
         self.data = data
         self.variable = variable
         self.data_dict, self.simp_dict = self.data2dict(), self.data2dict(flag=True)
-        #plotting
+        # plotting
         self.original()
         self.distribution()
-        #self.distics()
+        # self.distics()
         timer.count("plot")
         timer.stop()
 
@@ -1318,66 +1403,33 @@ class _plot(BasePlot):
             for command in bsub:
                 file.write(command + "\n")
         print("-----------------------------------Done!--------------------------------------------")
-#############################################################################################################
-class Timer:
-    def __init__(self, tip = "start", func=time.perf_counter):
-            self.tip = tip
-            self.elapsed = 0.0
-            self._func = func
-            self._start = None
-            self.time_dict = {}
-    def start(self):
-            self.elapsed = 0.0
-            if self._start is not None:
-                    raise RuntimeError('Already started')
-            self._start = self._func()
-            print(f"=============={self.tip}==============")
-    def stop(self):
-            if self._start is None:
-                    raise RuntimeError('Not started')
-            end = self._func()
-            self.elapsed += end - self._start
-            print(f"-------------------------------{self.tip}: Done!----------------------------------------")
-            #logging.info(str, ":", self.elapsed)
-            self._start = None
-    def count(self, str="Time"):
-            end = self._func()
-            self.elapsed += end - self._start
-            self.time_dict[str] = self.elapsed
-            print(f"{str}: {self.elapsed}")
-            self.elapsed = 0.0
-            self._start = self._func()
-    def reset(self):
-            self.elapsed = 0.0
-            
-    @property
-    def running(self):
-            return self._start is not None    
-    def __enter__(self):
-            self.start()
-            return self
-    def __exit__(self, *args):
-            self.stop()
 
+
+#############################################################################################################
 class Plotter(BasePlot):
     def scatter(self, fig, ax, data, labels, note, is_3D=False):
         x, y, z, w = data
         xlabel, ylabel, zlabel, wlabel = labels
+        markers = ['o', '^', 's', '<', 'p', 'h', '*', 'v', 'H', '>']
         title = f"{xlabel}-{ylabel}-{zlabel}-{wlabel} Space" if is_3D else f"({zlabel}, {wlabel}) in {xlabel}-{ylabel} Space"
         if is_3D:
             sc = ax.scatter(x, y, z, c=w, cmap="rainbow", vmin=w.min(), vmax=w.max())
             self.colorbar(fig, ax, sc, wlabel, is_3D)
         else:
-            sc = ax.scatter(x, y, c=z, cmap="rainbow", s=w * 10, vmin=z.min(), vmax=z.max())
-            self.colorbar(fig, ax, sc, zlabel, is_3D)
-
+            for idx, uw in enumerate(np.unique(w)):
+                mask = (w == uw)
+                marker = markers[idx % len(markers)]
+                sc = ax.scatter(x[mask], y[mask], c=z[mask], cmap="rainbow", s=80, marker=marker, vmin=z.min(),
+                                vmax=z.max())
+            self.colorbar(fig, ax, sc, labels[2], is_3D)
         self.set_axes(ax, data, labels, title, is_3D)
         self.adding(ax, note, is_3D)
+
     def Rg2(self, fig_save, variable="Rg2"):
         timer = Timer(variable)
         timer.start()
 
-        #----------------------------> figure settings <----------------------------#
+        # ----------------------------> figure settings <----------------------------#
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
             logging.info(f"==>{fig_save}.pdf is already!")
@@ -1387,20 +1439,22 @@ class Plotter(BasePlot):
             logging.info(f"{fig_save}.pdf")
 
         # ----------------------------> preparing<----------------------------#
-        data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
-                                                                                                                            ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in
+                    [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
+                     ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
         labels_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
-                            ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
-        notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
+                      ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
+        notes = (["(A)"], ["(B)", "(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
 
         # ----------------------------> plot figures<----------------------------#
         self.set_style()
-        #Prepare figure and subplots
+        # Prepare figure and subplots
         fig = plt.figure(figsize=(18, 25))
         plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.6, hspace=0.5)
         gs = GridSpec(6, 4, figure=fig)
 
-        axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
+        axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [
+            fig.add_subplot(gs[i:i + 2, j:j + 2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
         axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
 
         # ----------------------------> plotting <----------------------------#
@@ -1412,21 +1466,69 @@ class Plotter(BasePlot):
             if i == 0:
                 continue
             # ----------------------------> plot2D<----------------------------#
-            self.scatter(fig, axes_2D[2*(i-1)], data, labels, note[1])
-            self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
+            self.scatter(fig, axes_2D[2 * (i - 1)], data, labels, note[1])
+            self.scatter(fig, axes_2D[2 * (i - 1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
 
         # ----------------------------> save fig <----------------------------#
         fig = plt.gcf()
         self.save_fig(fig, f"{fig_save}.pdf")
 
         # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+        # fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
         timer.count("saving figure")
         plt.show()
         plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+
+
+class Timer:
+    def __init__(self, tip="start", func=time.perf_counter):
+        self.tip = tip
+        self.elapsed = 0.0
+        self._func = func
+        self._start = None
+        self.time_dict = {}
+
+    def start(self):
+        self.elapsed = 0.0
+        if self._start is not None:
+            raise RuntimeError('Already started')
+        self._start = self._func()
+        print(f"=============={self.tip}==============")
+
+    def stop(self):
+        if self._start is None:
+            raise RuntimeError('Not started')
+        end = self._func()
+        self.elapsed += end - self._start
+        print(f"-------------------------------{self.tip}: Done!----------------------------------------")
+        # logging.info(str, ":", self.elapsed)
+        self._start = None
+
+    def count(self, str="Time"):
+        end = self._func()
+        self.elapsed += end - self._start
+        self.time_dict[str] = self.elapsed
+        print(f"{str}: {self.elapsed}")
+        self.elapsed = 0.0
+        self._start = self._func()
+
+    def reset(self):
+        self.elapsed = 0.0
+
+    @property
+    def running(self):
+        return self._start is not None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop()
+
 
 #############################################################################################################
 def convert2array(x):
@@ -1438,6 +1540,8 @@ def convert2array(x):
         return np.array([x])
     else:
         raise ValueError("Unsupported type!")
+
+
 def var2str(variable):
     # transform to latex
     if variable.lower() == 'msd':
@@ -1463,15 +1567,19 @@ def var2str(variable):
     if trailing_number:
         abbreviation += trailing_number
     return fr"${latex_label}$", abbreviation
+
+
 def statistics(data):
     '''for plot original'''
     unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
     sum_values = np.bincount(indices, weights=data[:, 2])
     mean_values = sum_values / counts
     sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
-    std_values = np.sqrt( (sum_values_squared / counts) - (mean_values ** 2))
+    std_values = np.sqrt((sum_values_squared / counts) - (mean_values ** 2))
     return unique_coords, mean_values, std_values, counts
-def describe(dataset, str="data", flag = True):
+
+
+def describe(dataset, str="data", flag=True):
     '''for debug'''
     data = dataset.flatten()
     print(f"==>{str}\n"
@@ -1487,16 +1595,19 @@ def describe(dataset, str="data", flag = True):
     if flag:
         sys.exit()
 
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
         self.params = params
         self.check = check
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
         self.Init, self.Model, self.Run = Path.Init, Path.Model, Path.Run
+
     def check_params(self):
         print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
         for key, value in islice(self.params.items(), 1, None):
@@ -1509,6 +1620,7 @@ class JobProcessor:
                 new_value = input(f"Please enter the new value for {key}: ")
                 self.params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
         return self.params
+
     # -----------------------------------Data-------------------------------------------#
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
@@ -1533,6 +1645,7 @@ class JobProcessor:
             print(message)
             logging.error(message)
             raise ValueError(message)
+
     def simus_job(self, Path, **kwargs):
         # Initialize directories and files
         self._initialize(Path)
@@ -1544,9 +1657,8 @@ class JobProcessor:
         print(message)
         logging.info(message)
         os.makedirs(Path.simus, exist_ok=True)
-        shutil.copy2(
-            os.path.join(os.path.abspath(__file__)),
-            os.path.join(Path.simus, Path.filename))
+        if not os.path.exists(os.path.join(Path.simus, Path.filename)):
+            shutil.copy2(os.path.join(os.path.abspath(__file__)), os.path.join(Path.simus, Path.filename))
 
         # prepare files
         infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
@@ -1568,6 +1680,7 @@ class JobProcessor:
                 # submitting files
                 elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
                     self.exe_simus("Submit", Path.simus, infile)
+
     def anas_job(self, Path, **kwargs):
         self._initialize(Path)
         Pe = kwargs.get("Pe", None)
@@ -1578,8 +1691,8 @@ class JobProcessor:
             # copy Run.py
             message = f"dir_figs => {Path.fig0}"
             os.makedirs(Path.fig0, exist_ok=True)
-            shutil.copy2(os.path.abspath(__file__),
-                         os.path.join(Path.fig0, Path.filename))
+            if not os.path.exists(os.path.join(Path.simus, os.path.join(Path.fig0, Path.filename))):
+                shutil.copy2(os.path.abspath(__file__), os.path.join(Path.fig0, Path.filename))
             print(message)
             logging.info(message)
             # prepare files
@@ -1592,12 +1705,12 @@ class JobProcessor:
                 print(">>> Plotting tests......")
                 logging.info(">>> Plotting tests......")
 
-                Anas.save_data() # saving data
+                Anas.save_data()  # saving data
                 # org(data, variable)
                 Plot.org(Anas.data_Rcom, "Rcom")
-                #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-                #Plot.org(Anas.data_Rg2, "Rg2")
-                #Plot.org(Anas.data_MSD, "MSD")
+                # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                # Plot.org(Anas.data_Rg2, "Rg2")
+                # Plot.org(Anas.data_MSD, "MSD")
                 print(f"==> Done! \n ==> Please check the results and submit the plots!")
 
             # submitting files
@@ -1611,6 +1724,7 @@ class JobProcessor:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
             logging.info(message)
+
     # -----------------------------------Plot-------------------------------------------#
     def Rg2_job(self, Config, Run, iRin):
         paras = ['Pe', 'N', 'W']
@@ -1618,15 +1732,15 @@ class JobProcessor:
         label, abbre = var2str(varis[0])
         df_Rg2 = pd.DataFrame(columns=paras + varis)
         # prepare files: {dir_file}.lsf
-        #sub_file()
+        # sub_file()
 
         fig_Rg2 = os.path.join(os.path.join(os.path.abspath(os.path.dirname(os.getcwd())), "Figs"),
-                      f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
+                               f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
         # copy Run.py
         message = f"dir_figs => {fig_Rg2}"
         os.makedirs(fig_Rg2, exist_ok=True)
-        shutil.copy2(os.path.abspath(__file__),
-                     os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py"))
+        if not os.path.exists(os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py")):
+            shutil.copy2(os.path.abspath(__file__), os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py"))
         print(message)
         logging.info(message)
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
@@ -1641,7 +1755,9 @@ class JobProcessor:
                         for iXi in convert2array(params['Xi']):
                             Path = _path(_model(Init, Run, iFa, iXi))
                             Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
-                            df_Rg2 = df_Rg2.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg2': np.mean(Rg2, axis=0)}, ignore_index=True)
+                            df_Rg2 = df_Rg2.append(
+                                {'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg2': np.mean(Rg2, axis=0)},
+                                ignore_index=True)
             dir_file = os.path.join(f"{fig_Rg2}", f"{abbre}(Pe,N,W)")
             df_Rg2.to_pickle(f'{dir_file}.pkl')
 
@@ -1649,7 +1765,7 @@ class JobProcessor:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
 
-            plotter = Plotter(df_Rg2, jump=True)
+            plotter = Plotter(df_Rg2)
             plotter.Rg2(dir_file)
 
             print(f"==> Done! \n ==> Please check the results and submit the plots!")
@@ -1658,17 +1774,18 @@ class JobProcessor:
             print(">>> Submitting plots......")
             logging.info(">>> Submitting plots......")
             print(f"bsub < {dir_file}.lsf")
-            #subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+            # subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
             print(f"Submitted: {dir_file}.py")
+
     # -----------------------------------Process-------------------------------------------#
-    def process(self, data_job = None, plot_job = None):
+    def process(self, data_job=None, plot_job=None):
         params = self.params
         for iDimend in convert2array(params['Dimend']):
             for iType in convert2array(params['labels']['Types']):
                 for iEnv in convert2array(params['labels']['Envs']):
                     Config = _config(iDimend, iType, iEnv, params)
 
-                    if platform.system() == "Linux":  # params['task'] == "Simus" and
+                    if platform.system() == "Linux":
                         mpl.use("agg")
                         if self.check:
                             params = self.check_params()
@@ -1697,16 +1814,18 @@ class JobProcessor:
                                                     Model = _model(Init, Run, iFa, iXi)
                                                     Path = _path(Model)  # for directory
                                                     getattr(self, data_job)(Path, Pe=Model.Pe)
+
+
 # -----------------------------------Main-------------------------------------------#
 if __name__ == "__main__":
-    print(f"{usage}\n=====>task: {params['task']}......\n###################################################################")
+    print(f"{usage}\n=====>task: {task}......\n###################################################################")
 
     # Simulations
     run = JobProcessor(params)
-    if params['task'] == "Simus":
+    if task == "Simus":
         if "Codes" in CURRENT_DIR:
             run.process(data_job="simus_job")
-        elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+        elif "Simus" in CURRENT_DIR:  # 计算节点: "Run.py infile" == "bsub < infile.lsf"
             try:
                 if input_file:
                     run.exe_simus("Run", CURRENT_DIR, input_file)
@@ -1719,21 +1838,21 @@ if __name__ == "__main__":
                 raise ValueError(f"An error occurred: {e}")
 
     # Analysis: single
-    elif params['task'] == "Anas":
+    elif task == "Anas":
         if "Codes" in CURRENT_DIR:
             run.process(data_job="anas_job")
         elif "Figs" in CURRENT_DIR:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
-            #process(params, check, anas_job)
-            print(f"==> Done! \n ==> Please check the results and submit the plots!")
+            run.process(data_job="anas_job")
+            print(f"==> Done!")
 
     # plot: Pe, N, W
-    elif params['task'] == "Plots":
+    elif task == "Plots":
         if "Codes" in CURRENT_DIR:
             run.process(plot_job="Rg2_job")
         elif "Figs" in CURRENT_DIR:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
-           # Plot.plot()
-            print(f"==> Done! \n ==> Please check the results and submit the plots!")
+            run.process(data_job="anas_job")
+            print(f"==> Done!")
