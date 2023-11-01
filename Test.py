@@ -755,6 +755,28 @@ class plotGraph:
             self.plot_scatter(axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
         plt.show()
 
+    def plot_multi(self):
+        x = np.linspace(0, 10, 100)
+
+        for i in range(3):
+            # 在第一层循环中创建第一个画板并绘制图形
+            fig1, ax1 = plt.subplots()
+            ax1.plot(x, np.sin(x + i))
+            ax1.set_title(f'Sine Curve {i} on Figure 1')
+
+            for j in range(3):
+                # 在第二层循环中创建第二个画板并绘制图形
+                fig2, ax2 = plt.subplots()
+                ax2.plot(x, np.cos(x + i + j))
+                ax2.set_title(f'Cosine Curve {i + j} on Figure 2')
+
+                # 在第二层循环中显示第二个画板的图形
+                plt.show()
+
+            # 在第一层循环中显示第一个画板的图形
+            plt.show()
+
+
 # Generate some example DataFrame; replace this with your actual data
 
 df_Rg2 = pd.DataFrame({
@@ -765,7 +787,8 @@ df_Rg2 = pd.DataFrame({
 })
 
 plotter = plotGraph(df_Rg2)
-plotter.plot_graphs()
+#plotter.plot_graphs()
+plotter.plot_multi()
 
 
 

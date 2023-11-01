@@ -1525,264 +1525,240 @@ def describe(dataset, str="data", flag = True):
     if flag:
         sys.exit()
 
-__all__ = [
-    "params",
-    "_config",
-    "_run",
-    "_init",
-    "_model",
-    "_path",
-    "_plot",
-    "Timer",
-    "convert2array",
-    "check_params",
-    "describe",
-]
+# -----------------------------------Jobs-------------------------------------------#
+class JobProcessor:
+    def __init__(self, params):
+        self.params = params
+        self.check = check
+        self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
 
-# -----------------------------------Prepare-------------------------------------------#
-def exe_simus(task, path, infile):
-    dir_file = os.path.join(path, infile)
-    if task == "Run":
-        print(f">>> Running jobs: {infile}......")
-        logging.info(f">>> Running jobs: {infile}......")
+    # -----------------------------------Prepare-------------------------------------------#
+    def _initialize(self, Path):
+        self.Path = Path
+        self.Init, self.Model, self.Run = Path.Init, Path.Model, Path.Run
 
-        print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
-        subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-        print(f"{dir_file}.in ==> Done! \n")
+    def check_params(self):
+        print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
+        for key, value in islice(self.params.items(), 1, None):
+            user_input = input(f"{key} = {value}    (y/n)?: ")
+            if user_input.lower() == "y":
+                break
+            elif user_input.lower() == '':
+                continue
+            else:
+                new_value = input(f"Please enter the new value for {key}: ")
+                self.params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
+        return self.params
 
-    elif task == "Submit":
-        print(f">>> Running jobs : {infile}......")
-        logging.info(f">>> Running jobs : {infile}......")
+    # -----------------------------------Data-------------------------------------------#
+    def exe_simus(self, task, path, infile):
+        dir_file = os.path.join(path, infile)
+        if task == "Run":
+            print(f">>> Running jobs: {infile}......")
+            logging.info(f">>> Running jobs: {infile}......")
 
-        print(f"bsub < {dir_file}.lsf")
-        subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-        print(f"Submitted: {dir_file}")
-        print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-    else:
-        message = f"ERROR: Wrong task => {task} != Run or Submit"
-        print(message)
-        logging.error(message)
-        raise ValueError(message)
+            print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
+            subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
+            print(f"{dir_file}.in ==> Done! \n")
 
-def check_params(params):
-    print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
-    for key, value in islice(params.items(), 1, None):
-        user_input = input(f"{key} = {value}    (y/n)?: ")
-        if user_input.lower() == "y":
-            break
-        elif user_input.lower() == '':
-            continue
+        elif task == "Submit":
+            print(f">>> Running jobs : {infile}......")
+            logging.info(f">>> Running jobs : {infile}......")
+
+            print(f"bsub < {dir_file}.lsf")
+            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+            print(f"Submitted: {dir_file}")
+            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         else:
-            new_value = input(f"Please enter the new value for {key}: ")
-            params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
-    return params
+            message = f"ERROR: Wrong task => {task} != Run or Submit"
+            print(message)
+            logging.error(message)
+            raise ValueError(message)
 
-# -----------------------------------Anas-------------------------------------------#
-def process(params, check, job):
-    for iDimend in convert2array(params['Dimend']):
-        for iType in convert2array(params['labels']['Types']):
-            for iEnv in convert2array(params['labels']['Envs']):
-                Config = _config(iDimend, iType, iEnv, params)
-                if platform.system() == "Linux":  # params['task'] == "Simus" and
-                    mpl.use("agg")
-                    if check:
-                        params = check_params(params)
-                        check = False
+    def simus_job(self, Path, **kwargs):
+        # Initialize directories and files
+        self._initialize(Path)
+        if Path.jump:  # jump for repeat: check lammpstrj
+            return
 
-                for iGamma in convert2array(params['Gamma']):
-                    for iTemp in convert2array(params['Temp']):
-                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
-                        Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                        for iRin in convert2array(params['Rin']):
-                            for iWid in convert2array(params['Wid']):
-                                for iN in convert2array(params['N_monos']):
-                                    # paras for init config: Rin, Wid, N_monos, L_box
-                                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                                    if Init.jump:  # chains are too long or invalid label
-                                        continue
-                                    queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
-                                    for iFa in convert2array(params['Fa']):
-                                        for iXi in convert2array(params['Xi']):
-                                            # paras for model: Pe(Fa), Xi(Kb)
-                                            Model = _model(Init, Run, iFa, iXi)
-                                            Path = _path(Model)  # for directory
-                                            job(Path, Pe=Model.Pe)
-
-def simus_job(Path, **kwargs):
-    # Initialize directories and files
-    Init, Model, Run = Path.Init, Path.Model, Path.Run
-    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-    if Path.jump:  # jump for repeat: check lammpstrj
-        return
-
-    # Create simulation directory and copy Run.py
-    message = f"dir_simus => {Path.simus}"
-    print(message)
-    logging.info(message)
-    os.makedirs(Path.simus, exist_ok=True)
-    shutil.copy2(
-        os.path.join(os.path.abspath(__file__)),
-        os.path.join(Path.simus, Path.filename))
-
-    # prepare files
-    infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
-    Init.data_file(Path)
-    Model.in_file(Path)  # return
-    Run.sub_file(Path, infiles)
-    # excute jobs
-    if input_file:
-        # running files
-        if HOST == "Darwin":  # macOS
-            exe_simus("Run", Path.simus, input_file)
-        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-            exe_simus("Submit", Path.simus, input_file)
-    else:
-        for infile in infiles:
-            # running files
-            if HOST == "Darwin":  # macOS
-                exe_simus("Run", Path.simus, infile)
-            # submitting files
-            elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-                exe_simus("Submit", Path.simus, infile)
-
-def anas_job(Path, **kwargs):
-    Pe = kwargs.get("Pe", None)
-    ###################################################################
-    # Initialize directories and files
-    Init, Model, Run = Path.Init, Path.Model, Path.Run
-    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-    if Path.jump:  # jump for repeat: check lammpstrj
-        Anas, Plot = _anas(Path, Pe), _plot(Path)
-        # copy Run.py
-        message = f"dir_figs => {Path.fig0}"
-        os.makedirs(Path.fig0, exist_ok=True)
-        shutil.copy2(os.path.abspath(__file__),
-                     os.path.join(Path.fig0, Path.filename))
+        # Create simulation directory and copy Run.py
+        message = f"dir_simus => {Path.simus}"
         print(message)
         logging.info(message)
-        # prepare files
-        # Plot.sub_file()
+        os.makedirs(Path.simus, exist_ok=True)
+        shutil.copy2(
+            os.path.join(os.path.abspath(__file__)),
+            os.path.join(Path.simus, Path.filename))
 
-        # plot orginal data; saving data and update dataframe
-        dir_file = os.path.join(f"{Path.fig0}", Path.filename)
+        # prepare files
+        infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
+        Init.data_file(Path)
+        Model.in_file(Path)  # return
+        Run.sub_file(Path, infiles)
+        # excute jobs
+        if input_file:
+            # running files
+            if HOST == "Darwin":  # macOS
+                self.exe_simus("Run", Path.simus, input_file)
+            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                self.exe_simus("Submit", Path.simus, input_file)
+        else:
+            for infile in infiles:
+                # running files
+                if HOST == "Darwin":  # macOS
+                    self.exe_simus("Run", Path.simus, infile)
+                # submitting files
+                elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                    self.exe_simus("Submit", Path.simus, infile)
+
+    def anas_job(self, Path, **kwargs):
+        self._initialize(Path)
+        Pe = kwargs.get("Pe", None)
+        ###################################################################
+        # Initialize directories and files
+        if Path.jump:  # jump for repeat: check lammpstrj
+            Anas, Plot = _anas(Path, Pe), _plot(Path)
+            # copy Run.py
+            message = f"dir_figs => {Path.fig0}"
+            os.makedirs(Path.fig0, exist_ok=True)
+            shutil.copy2(os.path.abspath(__file__),
+                         os.path.join(Path.fig0, Path.filename))
+            print(message)
+            logging.info(message)
+            # prepare files
+            # Plot.sub_file()
+
+            # plot orginal data; saving data and update dataframe
+            dir_file = os.path.join(f"{Path.fig0}", Path.filename)
+            if HOST == "Darwin":  # macOS
+                Path.jump = False  # according to pdf file
+                print(">>> Plotting tests......")
+                logging.info(">>> Plotting tests......")
+
+                Anas.save_data() # saving data
+                # org(data, variable)
+                Plot.org(Anas.data_Rcom, "Rcom")
+                Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                #Plot.org(Anas.data_Rg2, "Rg2")
+                #Plot.org(Anas.data_MSD, "MSD")
+                print(f"==> Done! \n ==> Please check the results and submit the plots!")
+
+            # submitting files
+            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                print(">>> Submitting plots......")
+                logging.info(">>> Submitting plots......")
+                print(f"bsub < {dir_file}.lsf")
+                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                print(f"Submitted: {dir_file}.py")
+        else:
+            message = f"File doesn't exist in data: {Path.lmp_trj}"
+            print(message)
+            logging.info(message)
+
+    # -----------------------------------Plot-------------------------------------------#
+    def Rg2_job(self, Config, Run, iRin):
+        paras = ['Pe', 'N', 'W']
+        varis = ["Rg2"]
+        label, abbre = var2str(varis[0])
+        df_Rg2 = pd.DataFrame(columns=paras + varis)
+        # prepare files: {dir_file}.lsf
+        #sub_file()
+
+        fig_Rg2 = os.path.join(os.path.join(os.path.abspath(os.path.dirname(os.getcwd())), "Figs"),
+                      f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
+        # copy Run.py
+        message = f"dir_figs => {fig_Rg2}"
+        os.makedirs(fig_Rg2, exist_ok=True)
+        shutil.copy2(os.path.abspath(__file__),
+                     os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py"))
+        print(message)
+        logging.info(message)
+        run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+
         if HOST == "Darwin":  # macOS
-            Path.jump = False  # according to pdf file
+            for iWid in convert2array(params['Wid']):
+                for iN in convert2array(params['N_monos']):
+                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                    if Init.jump:
+                        continue
+                    for iFa in convert2array(params['Fa']):
+                        for iXi in convert2array(params['Xi']):
+                            Path = _path(_model(Init, Run, iFa, iXi))
+                            Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
+                            df_Rg2 = df_Rg2.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg2': np.mean(Rg2, axis=0)}, ignore_index=True)
+            dir_file = os.path.join(f"{fig_Rg2}", f"{abbre}(Pe,N,W)")
+            df_Rg2.to_pickle(f'{dir_file}.pkl')
+
+            # plotting
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
 
-            Anas.save_data() # saving data
-            # org(data, variable)
-            Plot.org(Anas.data_Rcom, "Rcom")
-            Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-            #Plot.org(Anas.data_Rg2, "Rg2")
-            #Plot.org(Anas.data_MSD, "MSD")
+            plotter = Plotter(df_Rg2, jump=True)
+            plotter.Rg2(dir_file)
+
             print(f"==> Done! \n ==> Please check the results and submit the plots!")
 
-        # submitting files
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
             print(">>> Submitting plots......")
             logging.info(">>> Submitting plots......")
             print(f"bsub < {dir_file}.lsf")
-            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+            #subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
             print(f"Submitted: {dir_file}.py")
-    else:
-        message = f"File doesn't exist in data: {Path.lmp_trj}"
-        print(message)
-        logging.info(message)
 
-# -----------------------------------Plot-------------------------------------------#
-def plotGraphs(params, check, job):
-    for iDimend in convert2array(params['Dimend']):
-        for iType in convert2array(params['labels']['Types']):
-            for iEnv in convert2array(params['labels']['Envs']):
-                Config = _config(iDimend, iType, iEnv, params)
-                if platform.system() == "Linux":  # params['task'] == "Simus" and
-                    mpl.use("agg")
-                    if check:
-                        check_params(params)
-                        check = False
+    # -----------------------------------Process-------------------------------------------#
+    def process(self, data_job = None, plot_job = None):
+        params = self.params
+        for iDimend in convert2array(params['Dimend']):
+            for iType in convert2array(params['labels']['Types']):
+                for iEnv in convert2array(params['labels']['Envs']):
+                    Config = _config(iDimend, iType, iEnv, params)
 
-                for iGamma in convert2array(params['Gamma']):
-                    for iTemp in convert2array(params['Temp']):
-                        # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                        Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
-                        Config.set_dump(Run)  # print(f"{params['marks']['config']}, {Run.Dump}, {Run.Tdump}")
-                        for iRin in convert2array(params['Rin']):
-                            Config = _config(iDimend, iType, iEnv, params)
-                            # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
-                            Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])  # print(Run.__dict__)
-                            Config.set_dump(Run)
-                            queue = Run.set_queue()  # print(f"{queue}\n", params["Queues"])
-                            job(Config, Run, iRin)
+                    if platform.system() == "Linux":  # params['task'] == "Simus" and
+                        mpl.use("agg")
+                        if self.check:
+                            params = self.check_params()
+                            self.check = False
 
-def Rg2_job(Config, Run, iRin):
-    paras = ['Pe', 'N', 'W']
-    varis = ["Rg2"]
-    label, abbre = var2str(varis[0])
-    df_Rg2 = pd.DataFrame(columns=paras + varis)
-    # prepare files: {dir_file}.lsf
-    #sub_file()
-
-    fig_Rg2 = os.path.join(os.path.join(os.path.abspath(os.path.dirname(os.getcwd())), "Figs"),
-                  f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
-    # copy Run.py
-    message = f"dir_figs => {fig_Rg2}"
-    os.makedirs(fig_Rg2, exist_ok=True)
-    shutil.copy2(os.path.abspath(__file__),
-                 os.path.join(fig_Rg2, f"{abbre}(Pe,N,W).py"))
-    print(message)
-    logging.info(message)
-    run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-
-    if HOST == "Darwin":  # macOS
-        for iWid in convert2array(params['Wid']):
-            for iN in convert2array(params['N_monos']):
-                Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                if Init.jump:
-                    continue
-                for iFa in convert2array(params['Fa']):
-                    for iXi in convert2array(params['Xi']):
-                        Path = _path(_model(Init, Run, iFa, iXi))
-                        Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
-                        df_Rg2 = df_Rg2.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg2': np.mean(Rg2, axis=0)}, ignore_index=True)
-        dir_file = os.path.join(f"{fig_Rg2}", f"{abbre}(Pe,N,W)")
-        df_Rg2.to_pickle(f'{dir_file}.pkl')
-
-        # plotting
-        print(">>> Plotting tests......")
-        logging.info(">>> Plotting tests......")
-
-        plotter = Plotter(df_Rg2, jump=True)
-        plotter.Rg2(dir_file)
-
-        print(f"==> Done! \n ==> Please check the results and submit the plots!")
-
-    elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-        print(">>> Submitting plots......")
-        logging.info(">>> Submitting plots......")
-        print(f"bsub < {dir_file}.lsf")
-        #subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-        print(f"Submitted: {dir_file}.py")
+                    for iGamma in convert2array(params['Gamma']):
+                        for iTemp in convert2array(params['Temp']):
+                            for iRin in convert2array(params['Rin']):
+                                # paras for run: Gamma, Temp, Queue, Frames, Trun, Dimend, Temp, Dump
+                                Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])
+                                Config.set_dump(Run)
+                                if plot_job:
+                                    queue = Run.set_queue()
+                                    getattr(self, plot_job)(Config, Run, iRin)
+                                elif data_job:
+                                    for iWid in convert2array(params['Wid']):
+                                        for iN in convert2array(params['N_monos']):
+                                            # paras for init config: Rin, Wid, N_monos, L_box
+                                            Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                                            queue = Run.set_queue()
+                                            if Init.jump:  # chains are too long or invalid label
+                                                continue
+                                            for iFa in convert2array(params['Fa']):
+                                                for iXi in convert2array(params['Xi']):
+                                                    # paras for model: Pe(Fa), Xi(Kb)
+                                                    Model = _model(Init, Run, iFa, iXi)
+                                                    Path = _path(Model)  # for directory
+                                                    getattr(self, data_job)(Path, Pe=Model.Pe)
 
 # -----------------------------------Main-------------------------------------------#
 if __name__ == "__main__":
-    print(usage)
-    print(f"=====>task: {params['task']}......\n"
-          f"###################################################################")
-    # simulation or analysis
-    ###################################################################
+    print(f"{usage}\n=====>task: {params['task']}......\n###################################################################")
+
     # Simulations
+    run = JobProcessor(params)
     if params['task'] == "Simus":
         if "Codes" in CURRENT_DIR:
-            process(params, check, simus_job)
+            run.process(data_job="simus_job")
         elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
             try:
                 if input_file:
-                    exe_simus("Run", CURRENT_DIR, input_file)
+                    run.exe_simus("Run", CURRENT_DIR, input_file)
                 else:
                     for infile in [f"{i:03}" for i in range(1, params['Trun'] + 1)]:
-                        exe_simus("Run", CURRENT_DIR, infile)
+                        run.exe_simus("Run", CURRENT_DIR, infile)
             except Exception as e:
                 print(usage)
                 logging.error(f"An error occurred: {e}")
@@ -1791,7 +1767,7 @@ if __name__ == "__main__":
     # Analysis: single
     elif params['task'] == "Anas":
         if "Codes" in CURRENT_DIR:
-            process(params, check, anas_job)
+            run.process(data_job="anas_job")
         elif "Figs" in CURRENT_DIR:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
@@ -1801,8 +1777,7 @@ if __name__ == "__main__":
     # plot: Pe, N, W
     elif params['task'] == "Plots":
         if "Codes" in CURRENT_DIR:
-            plotGraphs(params, check, Rg2_job)
-
+            run.process(plot_job="Rg2_job")
         elif "Figs" in CURRENT_DIR:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
