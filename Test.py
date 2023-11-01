@@ -708,10 +708,8 @@ class plotGraph:
             ax.tick_params(axis='both', which="both", width=2, labelsize=15, pad=5.0)
 
         # axes lines
-        ax.spines['bottom'].set_linewidth(2)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['right'].set_linewidth(2)
-        ax.spines['top'].set_linewidth(2)
+        for spine in ["bottom", "left", "right", "top"]:
+            ax.spines[spine].set_linewidth(2)
 
     def plot_scatter(self, ax, data, labels, note, is_3D=False):
         x, y, z, w = data
@@ -740,8 +738,8 @@ class plotGraph:
         # ----------------------------> preparing<----------------------------#
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
                                                                                                                             ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
-        label_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
-                      ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
+        labels_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
+                            ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
         notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
 
         # ----------------------------> plotting <----------------------------#
