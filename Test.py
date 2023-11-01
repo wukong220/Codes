@@ -902,8 +902,33 @@ df_Rg2 = pd.DataFrame({
 })
 
 plotter = plotGraph(df_Rg2)
-plotter.plot_graphs()
+#plotter.plot_graphs()
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.random.rand(50)
+y = np.random.rand(50)
+z = np.random.rand(50)
+w = np.random.randint(0, 10, 50)
+
+markers = ['o', '^', 's', '<', 'p', 'h', '*', 'v', 'H', '>']
+
+fig, ax = plt.subplots()
+
+for idx, uw in enumerate(np.unique(w)):
+    mask = (w == uw)
+    marker = markers[idx % len(markers)]
+
+    # 创建一个 scatter plot
+    sc = ax.scatter(x[mask], y[mask], c=z[mask], cmap="rainbow", s=100, marker=marker, vmin=z.min(), vmax=z.max())
+
+    # 获取 PathCollection 对象并设置 facecolors 为 'none'
+    sc.set_facecolor("none")
+
+# 添加 colorbar
+plt.colorbar(sc)
+plt.show()
 
 
 
