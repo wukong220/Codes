@@ -122,7 +122,6 @@ class _config:
             self.Params.update(self.config[HOST][self.Type])
         if self.Env in self.config[HOST]:
             self.Params.update(self.config[HOST][self.Env][self.Dimend])
-
     def set_dump(self, Run):
         """计算 Tdump 的值: xu yu"""
         # 定义 dimension 和 dump 的映射
@@ -165,10 +164,8 @@ class _run:
         self.Seed = self.set_seed()
         self.eSteps = 9 if self.Gamma == 1000 else 8
         self.Damp = 1.0 / self.Gamma
-
     def set_seed(self):
         return np.random.randint(700000000, 800000001)
-
     def set_queue(self):
         queues = {
             "7k83!": {"Usage": 1.0,  "hosts": ['g009', 'g008', 'a016']},
@@ -219,7 +216,6 @@ class _run:
                 elif queue_info[iqueue]["PEND"] > 0:
                     self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
-    
     def sub_file(self, Path, infiles):
         logging.info(f">>> Preparing sub file: {Path.simus}")
         for infile in infiles:
@@ -300,7 +296,6 @@ class _init:
         if (self.num_chains != 1):
             logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
             raise ValueError(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
-
     def set_box(self):
         """计算盒子大小"""
         if self.Env == "Anlus":
@@ -330,17 +325,14 @@ class _init:
         else:
             logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
             raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
-
     def N_ring(self, density, Radius, sigma):
         return np.ceil(density * 2 * np.pi * Radius / sigma)
-
     def N_circles(self):
         inter = self.sigma_equ + 0.2
         start = self.Rin + inter + 0.5 if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
         stop = self.Rin + self.Wid - inter
         circles = int((stop - start) / inter) + 1 if self.Env == "Anlus" else 0
         return np.linspace(start, start + inter * circles, circles + 1)
-
     def set_torus(self, R_torus, Nobs_ring, Nobs_torus=0):
         theta = np.linspace(0, 2 * np.pi, int(Nobs_ring+1))[:-1]
         phi = np.linspace(0, 2 * np.pi, int(Nobs_torus+1))[:-1] if self.Config.Dimend == 3 else 0
@@ -372,7 +364,6 @@ class _init:
         file.write(f"3 {self.mass}\n")
         file.write(f"4 {self.mass}\n")
         file.write(f"5 {self.mass}\n\n")
-
     def write_chain(self, file):
         """
         Writes chain data into the file.
@@ -437,7 +428,6 @@ class _init:
                 elif i == self.N_monos - 1:
                     atom_type = 3  # Tail
                 file.write(f"{i + 1} 1 {atom_type} {' '.join(map(str, coord))}\n")
-
     def write_anlus(self, file):
         self.particles = None
         if self.Config.Dimend == 2:
@@ -451,12 +441,10 @@ class _init:
             torus = self.set_torus(self.R_torus, self.Nobs_ring, self.Nobs_torus)
             for i, coord in enumerate(torus):
                 file.write(f"{self.N_monos+i+1} 1 4 {' '.join(map(str, coord))}\n")
-
     def periodic_distance(self, pos1, pos2):
         delta = np.abs(pos1 - pos2)
         delta = np.where(delta > 0.5 * self.Lbox, delta - self.Lbox, delta)
         return np.sqrt((delta ** 2).sum())
-
     def neighbor_keys(self, hash_key):
         """Generate neighbor hash keys for a given hash_key."""
         dim = len(hash_key)
@@ -465,7 +453,6 @@ class _init:
                 neighbor_key = list(hash_key)
                 neighbor_key[i] += d
                 yield tuple(neighbor_key)
-
     def write_rand(self, file):
         # obstacles: harsh grid and size
         self.obs_positions = []
@@ -491,7 +478,6 @@ class _init:
                     file.write(f"{int(self.N_monos + i + 1)} 1 4 {' '.join(map(str, pos))}\n")
                     break
         return self.obs_positions
-
     def write_potential(self, file):
         #写入bonds and angles
         file.write("\nBonds\n\n")
@@ -662,7 +648,6 @@ class _model:
             'angle_style      actharmonic',
             f'angle_coeff     * {self.Kb} 180 {self.Fa}',
         ])}
-
     def write_section(self, file, cmds):
         """向文件中写入一个命令区块"""
         for command in cmds:
@@ -692,7 +677,6 @@ class _model:
             'velocity		all set 0.0 0.0 0.0',
             '',
         ]
-
     def iofile(self, file, title):
         lmp_rest = '' if title == self.dump["data"] else f".{title.lower()}"
         lmp_trj = '' if title == self.dump["data"] else f".{self.type}_{title.lower()}"
@@ -700,7 +684,6 @@ class _model:
             return f'${{dir_file}}{lmp_rest}.restart'
         elif file == "dump":
             return f'${{dir_file}}{lmp_trj}.lammpstrj'
-
     def configure(self, prompt, temp, damp, run):
         return [
             '# for communication',
@@ -724,7 +707,6 @@ class _model:
             'unfix           NVE',
             '',
         ]
-
     def potential(self, prompt: str, pair: str, bond: str, angle: str, exclude="exclude none") -> list:
         """Define the potential parameters for LAMMPS simulation."""
         return [
@@ -737,7 +719,6 @@ class _model:
             angle,
             '##################################################################',
         ]
-
     def fix(self, prompt: str, temp: float, damp: float, run) -> list:
         """Define the fix parameters for LAMMPS simulation."""
         self.fix_cmd["langevin"] = "\n".join([
@@ -760,7 +741,6 @@ class _model:
             fix_cmd,
             '',
         ]
-
     def run(self, title: str, timestep: int, tdump: int, run) -> list:
         """Define the run parameters for LAMMPS simulation."""
        #log, unfix, dump
@@ -862,7 +842,6 @@ class _path:
         self.Run = Model.Run
         self.jump = self.build_paths()
         self.filename = os.path.basename(os.path.abspath(__file__))
-
     def build_paths(self):
         self.simus = os.path.join(self.host, self.mydirs[1])
         for dir in self.mydirs:
@@ -890,7 +869,6 @@ class _path:
         self.fig0 = self.simus.replace(self.mydirs[1], self.mydirs[2])
         self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun:03}.lammpstrj")
         return os.path.exists(self.lmp_trj)
-
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
@@ -903,7 +881,6 @@ class _anas:
         self.Pe = Pe
         self.chunk = 9
         self.jump = True
-
     def set_dump(self):
         is_bacteria = (self.Config.Type == _BACT)
         dump = {
@@ -915,7 +892,6 @@ class _anas:
         except KeyError:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
-
     def unwrap_x(self, Lx):
         frames = self.data.shape[1]
         for i in range(1, frames):
@@ -976,7 +952,6 @@ class _anas:
         timer.count("Read and unwrap data")
         timer.stop()
         return self.data
-
     def save_data(self):
         # data[ifile][iframe][iatom][xu, yu]
         self.read_data()
@@ -1003,7 +978,6 @@ class BasePlot:
     def __init__(self, df, jump=True):
         self.df = df
         self.jump = jump
-
     def set_style(self):
         '''plotting'''
         plt.clf()
@@ -1042,7 +1016,6 @@ class BasePlot:
         ax.set_ylabel(ylabel, fontsize=20, labelpad=10)
         ax.set_xlim(min(x), max(x))
         ax.set_ylim(min(y), max(y))
-
     def adding(self, ax, note, is_3D=False):
         # linewidth and note
         ax.annotate(note, (-0.2, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
@@ -1208,7 +1181,6 @@ class _plot(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
-
     def distribution(self):
         timer = Timer("Distribution")
         timer.start()
@@ -1305,7 +1277,6 @@ class _plot(BasePlot):
             # -------------------------------Done!----------------------------------------#
         timer.stop()
         return False
-
     def distics(self):
         print("-----------------------------------Done!--------------------------------------------")
     ##################################################################
@@ -1355,14 +1326,12 @@ class Timer:
             self._func = func
             self._start = None
             self.time_dict = {}
-
     def start(self):
             self.elapsed = 0.0
             if self._start is not None:
                     raise RuntimeError('Already started')
             self._start = self._func()
             print(f"=============={self.tip}==============")
-
     def stop(self):
             if self._start is None:
                     raise RuntimeError('Not started')
@@ -1371,7 +1340,6 @@ class Timer:
             print(f"-------------------------------{self.tip}: Done!----------------------------------------")
             #logging.info(str, ":", self.elapsed)
             self._start = None
-
     def count(self, str="Time"):
             end = self._func()
             self.elapsed += end - self._start
@@ -1379,7 +1347,6 @@ class Timer:
             print(f"{str}: {self.elapsed}")
             self.elapsed = 0.0
             self._start = self._func()
-
     def reset(self):
             self.elapsed = 0.0
             
@@ -1389,7 +1356,6 @@ class Timer:
     def __enter__(self):
             self.start()
             return self
-    
     def __exit__(self, *args):
             self.stop()
 
@@ -1407,7 +1373,6 @@ class Plotter(BasePlot):
 
         self.set_axes(ax, data, labels, title, is_3D)
         self.adding(ax, note, is_3D)
-
     def Rg2(self, fig_save, variable="Rg2"):
         timer = Timer(variable)
         timer.start()
@@ -1473,7 +1438,6 @@ def convert2array(x):
         return np.array([x])
     else:
         raise ValueError("Unsupported type!")
-
 def var2str(variable):
     # transform to latex
     if variable.lower() == 'msd':
@@ -1499,7 +1463,6 @@ def var2str(variable):
     if trailing_number:
         abbreviation += trailing_number
     return fr"${latex_label}$", abbreviation
-
 def statistics(data):
     '''for plot original'''
     unique_coords, indices, counts = np.unique(data[:, :2], axis=0, return_inverse=True, return_counts=True)
@@ -1508,7 +1471,6 @@ def statistics(data):
     sum_values_squared = np.bincount(indices, weights=data[:, 2] ** 2)
     std_values = np.sqrt( (sum_values_squared / counts) - (mean_values ** 2))
     return unique_coords, mean_values, std_values, counts
-
 def describe(dataset, str="data", flag = True):
     '''for debug'''
     data = dataset.flatten()
@@ -1531,12 +1493,10 @@ class JobProcessor:
         self.params = params
         self.check = check
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
         self.Init, self.Model, self.Run = Path.Init, Path.Model, Path.Run
-
     def check_params(self):
         print("===> Caveats: Please confirm the following parameters(with Dimend, Type, Env fixed):")
         for key, value in islice(self.params.items(), 1, None):
@@ -1549,7 +1509,6 @@ class JobProcessor:
                 new_value = input(f"Please enter the new value for {key}: ")
                 self.params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
         return self.params
-
     # -----------------------------------Data-------------------------------------------#
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
@@ -1574,7 +1533,6 @@ class JobProcessor:
             print(message)
             logging.error(message)
             raise ValueError(message)
-
     def simus_job(self, Path, **kwargs):
         # Initialize directories and files
         self._initialize(Path)
@@ -1610,7 +1568,6 @@ class JobProcessor:
                 # submitting files
                 elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
                     self.exe_simus("Submit", Path.simus, infile)
-
     def anas_job(self, Path, **kwargs):
         self._initialize(Path)
         Pe = kwargs.get("Pe", None)
@@ -1638,7 +1595,7 @@ class JobProcessor:
                 Anas.save_data() # saving data
                 # org(data, variable)
                 Plot.org(Anas.data_Rcom, "Rcom")
-                Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
                 #Plot.org(Anas.data_Rg2, "Rg2")
                 #Plot.org(Anas.data_MSD, "MSD")
                 print(f"==> Done! \n ==> Please check the results and submit the plots!")
@@ -1654,7 +1611,6 @@ class JobProcessor:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
             logging.info(message)
-
     # -----------------------------------Plot-------------------------------------------#
     def Rg2_job(self, Config, Run, iRin):
         paras = ['Pe', 'N', 'W']
@@ -1704,7 +1660,6 @@ class JobProcessor:
             print(f"bsub < {dir_file}.lsf")
             #subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
             print(f"Submitted: {dir_file}.py")
-
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
         params = self.params
@@ -1742,7 +1697,6 @@ class JobProcessor:
                                                     Model = _model(Init, Run, iFa, iXi)
                                                     Path = _path(Model)  # for directory
                                                     getattr(self, data_job)(Path, Pe=Model.Pe)
-
 # -----------------------------------Main-------------------------------------------#
 if __name__ == "__main__":
     print(f"{usage}\n=====>task: {params['task']}......\n###################################################################")
