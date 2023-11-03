@@ -91,7 +91,9 @@ class _config:
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'Xi': 0.0, 'N_monos': [20, 40, 80, 100, 150, 200], #40, 100,200
+                "Chain": {'Xi': 0.0,
+                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'N_monos': [20, 40, 80, 100, 150, 200], #40, 100,200
                               'Fa': [1.0], #'Fa': [0.0, 1.0, 10.0],
                               'Temp': [0.2],
                           },
@@ -105,7 +107,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -1406,6 +1408,14 @@ class Plotter(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+
+    def func_xyz(self, fig_save, variable="Rg2"):
+        '''(r,s,t)Rg(Pe,N,W).PDF'''
+        column_cycle = permutate([variable, "Pe", "N", "W"])
+        labels_set = permutate([var2str(variable)[0], "Pe", "N", "W"])
+        
+        print(f"df:{self.df}\ncycle:{column_cycle}\nset:{labels_set}")
+        sys.exit()
 class Timer:
     def __init__(self, tip="start", func=time.perf_counter):
         self.tip = tip
@@ -1503,7 +1513,8 @@ def describe(dataset, str="data", flag = True):
           "------------------------------------------Done!----------------------------------------")
     if flag:
         sys.exit()
-
+def permutate(array):
+    return [array] + [array[:1] + array[i:] + array[1:i] for i in range(2, len(array))]
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -1690,7 +1701,8 @@ class JobProcessor:
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
             plotter = Plotter(df_Rg2)
-            plotter.Rg2(dir_file)
+            #plotter.Rg2(dir_file)
+            plotter.func_xyz(dir_file)
             print(f"==> Done! \n==>Please check the results and submit the plots!")
 
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
