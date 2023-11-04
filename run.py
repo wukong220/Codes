@@ -1014,13 +1014,14 @@ class BasePlot:
                 ax.set_zscale('log')
         else:
             xlim, ylim = 0.1, 1.2
+            ax.grid(True)
 
         # Set axis limits and rotation
         for i, (axis_data, axis_name) in enumerate(zip(data[:2 + is_3D], "xyz"[:2 + is_3D])):
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=7 if axis_name == 'z' else 10)
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3 if axis_name == 'z' else 5)
             min_val, max_val = min(axis_data), max(axis_data)
             if scatter:
-                getattr(ax, f'set_{axis_name}lim')(min_val * xlim, max_val * ylim)
+                getattr(ax, f'set_{axis_name}lim')((min_val-1) * xlim, max_val * ylim)
             else:
                 getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
             if axis_name == 'x':
@@ -1038,13 +1039,6 @@ class BasePlot:
         # axes lines
         for spine in ["bottom", "left", "right", "top"]:
             ax.spines[spine].set_linewidth(2)
-
-        plt.grid(True)
-        plt.tight_layout()
-    def save_fig(self, fig, path):
-        pdf = PdfPages(path)
-        pdf.savefig(fig, dpi=500, transparent=True)
-        pdf.close()
 class _plot(BasePlot):
     def __init__(self, Path, bins=20):
         self.Path = Path
@@ -1130,65 +1124,64 @@ class _plot(BasePlot):
         else:
             print(f"{fig_save}.pdf")
             logging.info(f"{fig_save}.pdf")
+        with PdfPages(f"{fig_save}.pdf") as pdf:
+            # ----------------------------> plot figure<----------------------------#
+            self.set_style()
+            # Prepare figure and subplots
+            fig = plt.figure(figsize=(20, 9))
+            plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.6, hspace=0.5)
+            gs = GridSpec(2, 5, figure=fig)
+            ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
+            ax_b, ax_c, ax_d = [fig.add_subplot(gs[0, i]) for i in [2, 3, 4]]
+            ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
+            ax_f = fig.add_subplot(gs[1, 3], sharex=ax_c, sharey=ax_c)
+            ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
 
-        # ----------------------------> plot figure<----------------------------#
-        self.set_style()
-        # Prepare figure and subplots
-        fig = plt.figure(figsize=(20, 9))
-        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.6, hspace=0.5)
-        gs = GridSpec(2, 5, figure=fig)
-        ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
-        ax_b, ax_c, ax_d = [fig.add_subplot(gs[0, i]) for i in [2, 3, 4]]
-        ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
-        ax_f = fig.add_subplot(gs[1, 3], sharex=ax_c, sharey=ax_c)
-        ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
+            # ----------------------------> ax_a <----------------------------#
+            sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
+            #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
+            #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
+            title = fr'({z_label}, {x_label}, {y_label}) in 3D Space'
+            self.colorbar(fig, ax_a, sc_a, z_label, True)
+            self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, True, rotation=0, loc="center")
+            self.adding(ax_a, "(a)")
 
-        # ----------------------------> ax_a <----------------------------#
-        sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
-        #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
-        #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
-        title = fr'({z_label}, {x_label}, {y_label}) in 3D Space'
-        self.colorbar(fig, ax_a, sc_a, z_label, True)
-        self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, True, rotation=0, loc="center")
-        self.adding(ax_a, "(a)")
+            ## ----------------------------> ax_bcd <----------------------------#
+            for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
+                                             [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
+                                             [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                             ['(b)', '(c)', '(d)']):
+                unique_coords, mean_values, std_values = statistics(data)[:3]
+                sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
+                title = fr'$\langle$ {axis_labels[2]} $\rangle$ in {axis_labels[0]}-{axis_labels[1]} Space'
+                self.colorbar(fig, ax, sc, axis_labels[2])
+                self.set_axes(ax, (unique_coords[:, 0], unique_coords[:, 1], None), axis_labels, title)
+                self.adding(ax, note)
 
-        ## ----------------------------> ax_bcd <----------------------------#
-        for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
-                                         [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
-                                         [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
-                                         ['(b)', '(c)', '(d)']):
-            unique_coords, mean_values, std_values = statistics(data)[:3]
-            sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
-            title = fr'$\langle$ {axis_labels[2]} $\rangle$ in {axis_labels[0]}-{axis_labels[1]} Space'
-            self.colorbar(fig, ax, sc, axis_labels[2])
-            self.set_axes(ax, (unique_coords[:, 0], unique_coords[:, 1], None), axis_labels, title)
-            self.adding(ax, note)
+            # ----------------------------> ax_efg <----------------------------#
+            bin_set = [(np.around(mid_z - bin_size_z / 2, 2), np.around(mid_z + bin_size_z / 2, 2)),
+                            (np.around(mid_y - bin_size_y / 2, 2), np.around(mid_y + bin_size_y / 2, 2)),
+                            (np.around(mid_x - bin_size_x / 2, 2), np.around(mid_x + bin_size_x / 2, 2))]
+            unique_coords = [unique_coords_e, unique_coords_f, unique_coords_g]
+            counts_set = [counts_e, counts_f, counts_g]
+            for ax, data, bin, counts, axis_labels, note in zip([ax_e, ax_f, ax_g],
+                                                          unique_coords, bin_set, counts_set,
+                                                          [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
+                                                          ['(e)', '(f)', '(g)']):
+                sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
+                # axis settings
+                ax.set_title(fr'{axis_labels[2]}$_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
+                ax.set_xlabel(axis_labels[0], fontsize=20)
+                ax.set_ylabel(axis_labels[1], fontsize=20)
+                self.adding(ax, note)
 
-        # ----------------------------> ax_efg <----------------------------#
-        bin_set = [(np.around(mid_z - bin_size_z / 2, 2), np.around(mid_z + bin_size_z / 2, 2)),
-                        (np.around(mid_y - bin_size_y / 2, 2), np.around(mid_y + bin_size_y / 2, 2)),
-                        (np.around(mid_x - bin_size_x / 2, 2), np.around(mid_x + bin_size_x / 2, 2))]
-        unique_coords = [unique_coords_e, unique_coords_f, unique_coords_g]
-        counts_set = [counts_e, counts_f, counts_g]
-        for ax, data, bin, counts, axis_labels, note in zip([ax_e, ax_f, ax_g],
-                                                      unique_coords, bin_set, counts_set,
-                                                      [(x_label, y_label, z_label), (x_label, z_label, y_label), (y_label, z_label, x_label)],
-                                                      ['(e)', '(f)', '(g)']):
-            sc = ax.scatter(data[:, 0], data[:, 1], s=counts*50, color="blue", alpha=0.6)
-            # axis settings
-            ax.set_title(fr'{axis_labels[2]}$_0\ \in$ [{bin[0]}, {bin[1]}]', loc='right', fontsize=20)
-            ax.set_xlabel(axis_labels[0], fontsize=20)
-            ax.set_ylabel(axis_labels[1], fontsize=20)
-            self.adding(ax, note)
-
-        # ----------------------------> save fig <----------------------------#
-        fig = plt.gcf()
-        self.save_fig(fig, f"{fig_save}.pdf")
-        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        timer.count("saving figure")
-        plt.show()
-        plt.close()
+            # ----------------------------> save fig <----------------------------#
+            pdf.savefig(plt.gcf(), dpi=500, transparent=True)
+            # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+            #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+            timer.count("saving figure")
+            plt.show()
+            plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
@@ -1218,73 +1211,72 @@ class _plot(BasePlot):
             else:
                 print(f"{fig_save}.pdf")
                 logging.info(f"{fig_save}.pdf")
+            with PdfPages(f"{fig_save}.pdf") as pdf:
+                self.set_style()
+                # ----------------------------> plot figure<----------------------------#
+                # Create the layout
+                fig = plt.figure(figsize=(18, 9))
+                fig.subplots_adjust(wspace=0.5, hspace=0.5)
+                gs = GridSpec(2, 4, figure=fig)
+                ax_a = fig.add_subplot(gs[0:2, 0:2])
+                ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
+                ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
+                ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
+                ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
 
-            self.set_style()
-            # ----------------------------> plot figure<----------------------------#
-            # Create the layout
-            fig = plt.figure(figsize=(18, 9))
-            fig.subplots_adjust(wspace=0.5, hspace=0.5)
-            gs = GridSpec(2, 4, figure=fig)
-            ax_a = fig.add_subplot(gs[0:2, 0:2])
-            ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
-            ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
-            ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
-            ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
+                # Plot fz(x,y)
+                cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
+                ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
+                ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
+                title = fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})"
+                self.colorbar(fig, ax_a, cmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
+                self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
 
-            # Plot fz(x,y)
-            cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
-            ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
-            ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
-            title = fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})"
-            self.colorbar(fig, ax_a, cmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
-            self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
+                # Plot Fz(x;y0)
+                ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                ax_b.set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                ax_b.tick_params(axis='x', rotation=45)
+                ax_b.set_xlabel(f"{x_label}", fontsize=20)
+                ax_b.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
+                ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
 
-            # Plot Fz(x;y0)
-            ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-            ax_b.set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-            ax_b.tick_params(axis='x', rotation=45)
-            ax_b.set_xlabel(f"{x_label}", fontsize=20)
-            ax_b.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
-            ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
+                # Plot Fzy(x)
+                ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                ax_c.plot(x_range, pdf_x, 'r', label='PDF')
+                ax_c.set_title("Distribution", loc='right', fontsize=20)
+                ax_c.tick_params(axis='x', rotation=45)
+                ax_c.set_xlabel(f"{x_label}", fontsize=20)
+                ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
+                ax_c.set_ylim(0, max(hist_x) *1.1)
 
-            # Plot Fzy(x)
-            ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-            ax_c.plot(x_range, pdf_x, 'r', label='PDF')
-            ax_c.set_title("Distribution", loc='right', fontsize=20)
-            ax_c.tick_params(axis='x', rotation=45)
-            ax_c.set_xlabel(f"{x_label}", fontsize=20)
-            ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
-            ax_c.set_ylim(0, max(hist_x) *1.1)
+                # Plot Fz(y;x0)
+                ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                ax_d.set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                ax_d.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
+                ax_d.set_ylabel(f"{y_label}", fontsize=20)
+                ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
 
-            # Plot Fz(y;x0)
-            ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-            ax_d.set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-            ax_d.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
-            ax_d.set_ylabel(f"{y_label}", fontsize=20)
-            ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
+                # Plot Fzx(y)
+                ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                ax_e.plot(pdf_y, y_range, 'r', label='PDF')
+                ax_e.set_title('Distribution', loc='right', fontsize=20)
+                ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
+                ax_e.set_ylabel(f"{y_label}", fontsize=20)
+                ax_e.set_xlim(0, max(hist_y)*1.1)
 
-            # Plot Fzx(y)
-            ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-            ax_e.plot(pdf_y, y_range, 'r', label='PDF')
-            ax_e.set_title('Distribution', loc='right', fontsize=20)
-            ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
-            ax_e.set_ylabel(f"{y_label}", fontsize=20)
-            ax_e.set_xlim(0, max(hist_y)*1.1)
+                # ----------------------------> linewidth <----------------------------#
+                for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
+                    self.adding(ax, note, (-0.3, 0.9))
 
-            # ----------------------------> linewidth <----------------------------#
-            for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
-                self.adding(ax, note, (-0.3, 0.9))
+                timer.count("saving figure")
+                # ----------------------------> save fig <----------------------------#
+                pdf.savefig(plt.gcf(), dpi=500, transparent=True)
 
-            timer.count("saving figure")
-            # ----------------------------> save fig <----------------------------#
-            fig = plt.gcf()
-            self.save_fig(fig, f"{fig_save}.pdf")
-
-            #print("saving png......")
-            # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-            #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-            plt.show()
-            plt.close()
+                #print("saving png......")
+                # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+                #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+                plt.show()
+                plt.close()
             # -------------------------------Done!----------------------------------------#
         timer.stop()
         return False
@@ -1365,7 +1357,7 @@ class Plotter(BasePlot):
             # colorbar
             self.colorbar(ax, cmap, norm, zlabel, is_3D)
             self.set_axes(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
-            self.adding(ax, note, is_3D, -0.1)
+            self.adding(ax, note, is_3D, -0.2)
     def Rg(self, fig_save, variable="Rg"):
         timer = Timer(variable)
         timer.start()
@@ -1385,40 +1377,39 @@ class Plotter(BasePlot):
         labels_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
                             ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
         notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
+        with PdfPages(f"{fig_save}.pdf") as pdf:
+            # ----------------------------> plot figures<----------------------------#
+            self.set_style()
+            #Prepare figure and subplots
+            fig = plt.figure(figsize=(18, 25))
+            plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.35, hspace=0.5)
+            gs = GridSpec(6, 4, figure=fig)
+            cmap = plt.get_cmap("rainbow")
+            axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
+            axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
 
-        # ----------------------------> plot figures<----------------------------#
-        self.set_style()
-        #Prepare figure and subplots
-        fig = plt.figure(figsize=(18, 25))
-        plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.35, hspace=0.5)
-        gs = GridSpec(6, 4, figure=fig)
-        cmap = plt.get_cmap("rainbow")
-        axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
-        axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
+            # ----------------------------> plotting <----------------------------#
+            for i, (data, labels, note) in enumerate(zip(data_set, labels_set, notes)):
+                x, y, z, w = data
+                xlabel, ylabel, zlabel, wlabel = labels
+                # ----------------------------> plot3D<----------------------------#
+                self.scatter(fig, axes_3D[i], data, labels, note[0], True)
+                if i == 0:
+                    continue
+                # ----------------------------> plot2D<----------------------------#
+                self.scatter(fig, axes_2D[2*(i-1)], data, labels, note[1])
+                if i == 2:
+                    self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, y, x), (wlabel, zlabel, ylabel, xlabel), note[2])
+                else:
+                    self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
+            # ----------------------------> save fig <----------------------------#
+            pdf.savefig(plt.gcf(), dpi=500, transparent=True)
 
-        # ----------------------------> plotting <----------------------------#
-        for i, (data, labels, note) in enumerate(zip(data_set, labels_set, notes)):
-            x, y, z, w = data
-            xlabel, ylabel, zlabel, wlabel = labels
-            # ----------------------------> plot3D<----------------------------#
-            self.scatter(fig, axes_3D[i], data, labels, note[0], True)
-            if i == 0:
-                continue
-            # ----------------------------> plot2D<----------------------------#
-            self.scatter(fig, axes_2D[2*(i-1)], data, labels, note[1])
-            if i == 2:
-                self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, y, x), (wlabel, zlabel, ylabel, xlabel), note[2])
-            else:
-                self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
-        # ----------------------------> save fig <----------------------------#
-        fig = plt.gcf()
-        self.save_fig(fig, f"{fig_save}.pdf")
-
-        # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-        #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
-        timer.count("saving figure")
-        plt.show()
-        plt.close()
+            # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
+            #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+            timer.count("saving figure")
+            plt.show()
+            plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
@@ -1429,28 +1420,29 @@ class Plotter(BasePlot):
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
         labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in labels_set]
         notes = ("(a)", "(b)", "(c)")
-        with PdfPages(fig_save) as pdf:
+        with PdfPages(f"{fig_save}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
+                # ----------------------------> data and labels <----------------------------#
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
-                # ----------------------------> plot figures<----------------------------#
+                # ----------------------------> set up<----------------------------#
                 self.set_style()
-                # Prepare figure and subplots
-                fig = plt.figure(figsize=(6.4*3, 4.8))
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.1, hspace=0.5)
-                gs = GridSpec(1, 3, figure=fig)
                 cmap = plt.get_cmap("rainbow")
+                # ----------------------------> figures and axies<----------------------------#
+                fig = plt.figure(figsize=(6.4*3, 4.8))
+                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
+                gs = GridSpec(1, 3, figure=fig)
                 axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
                 axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,3)]
-
+                # ----------------------------> plotting <----------------------------#
                 self.scatter(fig, axes_3D[0], (x, y, z, f), (xlabel, ylabel, zlabel, flabel), notes[0], True)
-                self.scatter(fig, axes_2D[0], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), notes[1], log=True)
-                self.scatter(fig, axes_2D[1], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), notes[2])
+                self.scatter(fig, axes_2D[0], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), notes[1])
+                self.scatter(fig, axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), notes[2], log=True)
+                # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
-                plt.show()
+                #plt.show()
                 plt.close()
-        sys.exit()
 class Timer:
     def __init__(self, tip="start", func=time.perf_counter):
         self.tip = tip
@@ -1724,13 +1716,14 @@ class JobProcessor:
                             df_Rg = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
 
             # saving, subfile, plotting
-            #dir_file = os.path.join(fig_Rg, f"{abbre}(Pe,N,W)")
+            save_file = os.path.join(fig_Rg, f"{abbre}(Pe,N,W)")
+            if not os.path.exists(f'{save_file}.pkl'):
+                df_Rg.to_pickle(f'{save_file}.pkl')
             dir_file = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
             if not os.path.exists(f"{dir_file}.py"):
                 shutil.copy2(os.path.abspath(__file__), f"{dir_file}.py")
             print(message)
             logging.info(message)
-            df_Rg.to_pickle(f'{dir_file}.pkl')
             self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dir_file)
 
             print(">>> Plotting tests......")
