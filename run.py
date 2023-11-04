@@ -1361,7 +1361,6 @@ class Plotter(BasePlot):
     def Rg(self, fig_save, variable="Rg"):
         timer = Timer(variable)
         timer.start()
-
         #----------------------------> figure settings <----------------------------#
         if os.path.exists(f"{fig_save}.pdf") and self.jump:
             print(f"==>{fig_save}.pdf is already!")
@@ -1370,7 +1369,6 @@ class Plotter(BasePlot):
         else:
             print(f"{fig_save}.pdf")
             logging.info(f"{fig_save}.pdf")
-
         # ----------------------------> preparing<----------------------------#
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
                                                                                                                             ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
@@ -1413,13 +1411,25 @@ class Plotter(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
-
-    def plot_xyz(self, fig_save, variable="Rg"):
+    ##################################################################
+    def xyz_project(self, fig_save, variable="Rg"):
         '''[Rg, Pe, N, W], [Rg, N, W, Pe], [Rg, W, Pe, N]'''
+        timer = Timer(f"{variable}: Project")
+        timer.start()
+        fig_save = fig_save+".Proj"
         labels_set = permutate([variable, "Pe", "N", "W"])
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
         labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in labels_set]
         notes = ("(a)", "(b)", "(c)")
+        #----------------------------> figure.pdf and jump<----------------------------#
+        if os.path.exists(f"{fig_save}.pdf") and self.jump:
+            print(f"==>{fig_save}.pdf is already!")
+            logging.info(f"==>{fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_save}.pdf")
+            logging.info(f"{fig_save}.pdf")
+        # -------------------------------------------------------------------------#
         with PdfPages(f"{fig_save}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 # ----------------------------> data and labels <----------------------------#
@@ -1443,6 +1453,98 @@ class Plotter(BasePlot):
                 pdf.savefig(fig, dpi=500, transparent=True)
                 #plt.show()
                 plt.close()
+        timer.stop()
+        # -------------------------------Done!----------------------------------------#
+        return False
+    def xyz_expand1(self, fig_save, variable="Rg"):
+        timer = Timer(f"{variable}: Expand")
+        timer.start()
+
+        dir_file = os.path.dirname(fig_save)
+        columns_set = permutate([variable, "Pe", "N", "W"])
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
+        labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
+        notes = ("(a)", "(b)")
+        for i, (data, columns, labels) in enumerate(zip(data_set, columns_set, labels_set)):
+            f, x, y, z = data
+            flabel, xlabel, ylabel, zlabel = labels
+            fcolumn, xcolumn, ycolumn, zcolumn = columns
+            fig_save = os.path.join(f"{dir_file}", f"(r,s,t){fcolumn}({xcolumn},{ycolumn};{zcolumn}).Exp")
+            # ----------------------------> figure.pdf and jump<----------------------------#
+            if os.path.exists(f"{fig_save}.pdf") and self.jump:
+                print(f"==>{fig_save}.pdf is already!")
+                logging.info(f"==>{fig_save}.pdf is already!")
+                continue
+            else:
+                print(f"{fig_save}.pdf")
+                logging.info(f"{fig_save}.pdf")
+            # -----------------------------------------------------------------------------#
+            with PdfPages(f"{fig_save}.pdf") as pdf:
+                for iz in z:
+                    # ----------------------------> set up<----------------------------#
+                    self.set_style()
+                    cmap = plt.get_cmap("rainbow")
+                    # ----------------------------> figures and axies<----------------------------#
+                    fig = plt.figure(figsize=(6.4 * 2, 4.8))
+                    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
+                    gs = GridSpec(1, 2, figure=fig)
+                    axes_2D = [fig.add_subplot(gs[0, j]) for j in range(0, 2)]
+                    # ----------------------------> plotting <----------------------------#
+                    self.scatter(fig, axes_2D[0], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
+                    self.scatter(fig, axes_2D[1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                # ----------------------------> save fig <----------------------------#
+                fig = plt.gcf()
+                pdf.savefig(fig, dpi=500, transparent=True)
+                #plt.show()
+                plt.close()
+        timer.stop()
+        # -------------------------------Done!----------------------------------------#
+    def xyz_expand(self, fig_save, variable="Rg"):
+        timer = Timer(f"{variable}: Expand")
+        timer.start()
+        fig_save = fig_save+".Exp"
+        dir_file = os.path.dirname(fig_save)
+        columns_set = permutate([variable, "Pe", "N", "W"])
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
+        labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
+        notes = ("(a)", "(b)")
+        # ----------------------------> figure.pdf and jump<----------------------------#
+        if os.path.exists(f"{fig_save}.pdf") and self.jump:
+            print(f"==>{fig_save}.pdf is already!")
+            logging.info(f"==>{fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_save}.pdf")
+            logging.info(f"{fig_save}.pdf")
+        # -----------------------------------------------------------------------------#
+        with PdfPages(f"{fig_save}.pdf") as pdf:
+            for i, (data, labels) in enumerate(zip(data_set, labels_set)):
+                #if i != 2:
+                    #continue
+                f, x, y, z = data
+                flabel, xlabel, ylabel, zlabel = labels
+                uz = np.unique(z)
+                # ----------------------------> set up<----------------------------#
+                self.set_style()
+                cmap = plt.get_cmap("rainbow")
+                # ----------------------------> figures and axies<----------------------------#
+                fig = plt.figure(figsize=(6.4 * 2, 5.8 * len(uz)))
+                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
+                gs = GridSpec(len(uz), 2, figure=fig)
+                axes_2D = [fig.add_subplot(gs[i, j]) for i in range(len(uz)) for j in range(2)]
+                for i, iz in enumerate(uz):
+                    # ----------------------------> plotting <----------------------------#
+                    self.scatter(fig, axes_2D[2*i], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
+                    self.scatter(fig, axes_2D[2*i+1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                # ----------------------------> save fig <----------------------------#
+                fig = plt.gcf()
+                pdf.savefig(fig, dpi=500, transparent=True)
+                plt.show()
+            plt.close()
+        timer.stop()
+        # -------------------------------Done!----------------------------------------#
+        return False
+#############################################################################################################
 class Timer:
     def __init__(self, tip="start", func=time.perf_counter):
         self.tip = tip
@@ -1482,7 +1584,7 @@ class Timer:
         return self
     def __exit__(self, *args):
         self.stop()
-#############################################################################################################
+
 def convert2array(x):
     # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
     if isinstance(x, (list, np.ndarray, tuple)):
@@ -1690,11 +1792,10 @@ class JobProcessor:
             print(message)
             logging.info(message)
     # -----------------------------------Plot-------------------------------------------#
-    def Rg_job(self, Config, Run, iRin):
+    def Rg_job(self, Config, Run, iRin, variable="Rg"):
         paras = ['Pe', 'N', 'W']
-        varis = ["Rg"]
-        label, abbre = var2str(varis[0])
-        df_Rg = pd.DataFrame(columns=paras + varis)
+        label, abbre = var2str(variable)
+        df_Rg = pd.DataFrame(columns=paras + list(variable))
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
 
         fig_Rg = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
@@ -1730,7 +1831,8 @@ class JobProcessor:
             logging.info(">>> Plotting tests......")
             plotter = Plotter(df_Rg)
             #plotter.Rg(dir_file)
-            plotter.plot_xyz(dir_file)
+            #plotter.xyz_project(dir_file, "Rg")
+            plotter.xyz_expand(dir_file)
             print(f"==> Done! \n==>Please check the results and submit the plots!")
 
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
