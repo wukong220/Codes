@@ -40,13 +40,13 @@ input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
-types = ["Chain", _BACT, "Ring"]
-envs = ["Anlus", "Rand", "Slit"]
+#mpl.use("agg")
 task, check, jump = ["Simus", "Anas", "Plots"][2], True, False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
-    'labels': {'Types': types[0:1], 'Envs': envs[0:1]},
+    'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
+                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
@@ -93,9 +93,8 @@ class _config:
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
                               #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'N_monos': [20, 40, 80, 100, 150, 200], #40, 100,200
-                              'Fa': [1.0], #'Fa': [0.0, 1.0, 10.0],
-                              'Temp': [0.2],
+                              'N_monos': [20, 40, 80, 100, 150, 200],
+                              'Fa': [1.0], 'Temp': [0.2], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -1456,7 +1455,7 @@ class Plotter(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
-    def xyz_expand1(self, fig_save, variable="Rg"):
+    def xyz_exp_seprate(self, fig_save, variable="Rg"):
         timer = Timer(f"{variable}: Expand")
         timer.start()
 
@@ -1520,7 +1519,7 @@ class Plotter(BasePlot):
         with PdfPages(f"{fig_save}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 #if i != 2:
-                    #continue
+                  #  continue
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
                 uz = np.unique(z)
@@ -1528,19 +1527,23 @@ class Plotter(BasePlot):
                 self.set_style()
                 cmap = plt.get_cmap("rainbow")
                 # ----------------------------> figures and axies<----------------------------#
-                fig = plt.figure(figsize=(6.4 * 2, 5.8 * len(uz)))
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
+                bot, top = (0.15, 0.80) if len(uz) <= 2 else (0.05, 0.95)
+                fig = plt.figure(figsize=(6.4 * 2, 4.8 * len(uz)))
+                plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.5)
                 gs = GridSpec(len(uz), 2, figure=fig)
                 axes_2D = [fig.add_subplot(gs[i, j]) for i in range(len(uz)) for j in range(2)]
+                fig.suptitle(f"{flabel} with {zlabel} fixed", fontsize=25)
                 for i, iz in enumerate(uz):
+                    mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
-                    self.scatter(fig, axes_2D[2*i], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
-                    self.scatter(fig, axes_2D[2*i+1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                    self.scatter(fig, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
+                    self.scatter(fig, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
-                plt.show()
-            plt.close()
+                #plt.show()
+                plt.close()
+                timer.count(f"{zlabel}")
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
@@ -1831,8 +1834,8 @@ class JobProcessor:
             logging.info(">>> Plotting tests......")
             plotter = Plotter(df_Rg)
             #plotter.Rg(dir_file)
-            #plotter.xyz_project(dir_file, "Rg")
-            plotter.xyz_expand(dir_file)
+            plotter.xyz_project(dir_file, "Rg")
+            plotter.xyz_expand(dir_file, "Rg")
             print(f"==> Done! \n==>Please check the results and submit the plots!")
 
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
