@@ -948,25 +948,33 @@ class _anas:
         return self.data
     def save_data(self):
         # data[ifile][iframe][iatom][xu, yu]
-        self.read_data()
-        #print(f"data.shape: {self.data.shape}")
-        self.data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
-        self.data_Rcom = np.linalg.norm(self.data_com[ ..., :], axis = -1)
+        Rg_save = os.path.join(self.Path.fig0, "Rg2_time.npy")
+        if os.path.exists(Rg_save):
+            print(f"JUMP==>{Rg_save} is already!")
+            logging.info(f"JUMP==>{Rg_save} is already!")
+            return False
+        else:
+            self.read_data()
+            #print(f"data.shape: {self.data.shape}")
+            self.data_com = self.data - np.expand_dims(np.mean(self.data, axis=2), axis=2)
+            self.data_Rcom = np.linalg.norm(self.data_com[ ..., :], axis = -1)
 
-        # debug
-        #describe(self.data, "self.data", flag=False)
-        # describe(data_com, "data_com", flag=False)
-        #describe(data, "data")
-        # center of mass and average of files
+            # debug
+            #describe(self.data, "self.data", flag=False)
+            # describe(data_com, "data_com", flag=False)
+            #describe(data, "data")
+            # center of mass and average of files
 
-        # Rg2_time[iframe]
-        Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
-        Rg2 = np.mean(Rg2_time) # average over time
-        message = f"saving Rg2_time: {self.Path.fig0}"
-        print(message)
-        logging.info(message)
-        np.save(os.path.join(self.Path.fig0, "Rg2_time.npy"), Rg2_time)
+            # Rg2_time[iframe]
+            Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
+            Rg2 = np.mean(Rg2_time) # average over time
+            message = f"saving Rg2_time: {self.Path.fig0}"
+            print(message)
+            logging.info(message)
+            np.save(Rg_save, Rg2_time)
         #MSD
+
+        return True
 class BasePlot:
     def __init__(self, df):
         self.df = df
@@ -1776,11 +1784,10 @@ class JobProcessor:
                 print(">>> Plotting tests......")
                 logging.info(">>> Plotting tests......")
 
-                Anas.save_data() # saving data
-                # org(data, variable)
-                Plot.org(Anas.data_Rcom, "Rcom")
-                #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-                #Plot.org(Anas.data_MSD, "MSD")
+                if Anas.save_data(): # saving data
+                    Plot.org(Anas.data_Rcom, "Rcom") # org(data, variable)
+                    #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                    #Plot.org(Anas.data_MSD, "MSD")
                 print(f"==> Done! \n==>Please check the results and submit the plots!")
 
             # submitting files
