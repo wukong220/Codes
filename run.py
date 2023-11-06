@@ -41,19 +41,20 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump = ["Simus", "Anas", "Plots"][2], True, False
+task, check, jump = ["Simus", "Anas", "Plots"][0], True, True
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': 5,
+    'Trun_start': 5,
+    'Trun': 20,
     'Dimend': 3,
     #'Dimend': [2,3],
     'num_chains': 1,
@@ -64,9 +65,9 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [20.0, 100.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0], #, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
-                          # 'Gamma': [0.1, 1, 10, 100]
+                          # 'Gamma': [0.1, 1, 10, 100],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -92,9 +93,9 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'N_monos': [20, 40, 80, 100, 150, 200],
-                              'Fa': [1.0], 'Temp': [0.2], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                              'N_monos': [20], #40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [1.0], #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                              #'Temp': [0.2]
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -148,12 +149,12 @@ class _config:
             Run.Tequ //= 100
 ##########################################END!###############################################################
 class _run:
-    def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = 2000):
+    def __init__(self, Dimend, Gamma, Temp, Trun, Trun_start=params["Trun_start"], Params = params, Frames = 2000):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
         self.Gamma = Gamma
-        self.Trun = Trun
+        self.Trun, self.Trun_start = Trun, Trun_start
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
@@ -244,16 +245,17 @@ class _run:
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _init:
-    def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
+    def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"], Trun_tart=params["Trun_start"]):
         self.sigma_equ, self.mass, self.sigma = 0.94, 1.0, 1.0
         self.Ks = 300.0
-        self.Config, self.Trun = Config, Trun
+        self.Config, self.Trun, self.Trun_start = Config, Trun, Trun_tart
         self.Rin, self.Wid = Rin, Wid
         self.particle_density = 2
         self.N_monos, self.num_chains = int(N_monos), num_chains
         self.num_monos = self.N_monos * self.num_chains
         self.Env = "Free" if (self.Rin < 1e-6 and self.Wid < 1e-6) else self.Config.Env
         self.Rring = self.N_circles()
+        self.R_ring = 0
         self.jump = False
         self.set_box()   #set box
 
@@ -326,7 +328,7 @@ class _init:
         return np.ceil(density * 2 * np.pi * Radius / sigma)
     def N_circles(self):
         inter = self.sigma_equ + 0.2
-        start = self.Rin + inter + 0.5 if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+        start = self.Rin + inter + 0.5 if self.Env == "Anlus" else (self.N_monos+0.5) * self.sigma_equ/(2 * np.pi)
         stop = self.Rin + self.Wid - inter
         circles = int((stop - start) / inter) + 1 if self.Env == "Anlus" else 0
         return np.linspace(start, start + inter * circles, circles + 1)
@@ -398,19 +400,18 @@ class _init:
 
         elif self.Config.Dimend == 3:
             inter = self.sigma_equ + 0.2
-            stop = (self.Wid- self.sigma_equ - 0.2) / 2  if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
-            circles = int(stop / inter) + 1 if self.Env == "Anlus" else 0
-
+            stop = (self.Wid - self.sigma_equ - 0.2) / 2  if self.Env == "Anlus" else self.N_monos * self.sigma_equ/(2 * np.pi)
+            (circles, flag) = (int(stop / inter) + 1, 1) if self.Env == "Anlus" else (0, 0)
             chain_coords = []
             theta0, phi0 = 0, 0
-            for iRchain in np.linspace(0.5, inter * circles, circles+1)[:-1][::-1]:
+            for iRchain in [stop] if circles == 0 else np.linspace(0.5, inter * circles, circles+1)[:-1][::-1]:
                 Nchain = self.N_ring(1, iRchain, self.sigma_equ)
-                phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1] if self.Config.Dimend == 3 else [0]
+                phi = np.linspace(phi0, 2 * np.pi + phi0, int(Nchain + 1))[:-1] if self.Config.Dimend == 3 and self.Env == "Anlus" else [0, 0]
                 for iphi in phi:
                     Nring = self.N_ring(1, self.R_ring + iRchain * np.cos(iphi), self.sigma_equ)
                     theta = np.linspace(theta0, 2 * np.pi+theta0, int(Nring + 1))[:-1]
-                    x = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
-                    y = np.round((self.R_ring + self.sigma + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
+                    x = np.round((self.R_ring + self.sigma * flag + iRchain * np.cos(iphi)) * np.cos(theta) * self.sigma_equ, 5)
+                    y = np.round((self.R_ring + self.sigma * flag + iRchain * np.cos(iphi)) * np.sin(theta) * self.sigma_equ, 5)
                     z = np.full_like(theta, np.around(iRchain * np.sin(iphi) * self.sigma_equ, 5))
                     chain_coords.append(np.column_stack([x, y, z]))
                     theta0 += theta[0] - theta[1]
@@ -499,7 +500,7 @@ class _init:
         # 初始构型的原子信息: theta, x, y, z
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
-        for infile in [f"{i:03}" for i in range(1, self.Trun + 1)]:
+        for infile in [f"{i:03}" for i in range(self.Trun_start, self.Trun + 1)]:
             data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
@@ -546,6 +547,7 @@ class _model:
         fix_wall = '\n'.join([
                 f'fix             WALL1 {self.type} wall/lj126 {axis}lo {-wid / 2} 1.0 1.0 1.12246',
                 f'fix             WALL2 {self.type} wall/lj126 {axis}hi {wid / 2} 1.0 1.0 1.12246',
+                f'change_box             all {axis} final {-wid / 2} {wid / 2}',
             ])
         unfix_wall = '\n'.join([
                 'unfix           WALL1',
@@ -767,7 +769,7 @@ class _model:
 #        Run.Trun = 1000
         logging.info(f"==> Writing infile ==> {Path.simus}")
 
-        for infile in [f"{i:03}" for i in range(1, Run.Trun + 1)]:
+        for infile in [f"{i:03}" for i in range(Run.Trun_start, Run.Trun + 1)]:
             print(f"==> Writing infile: {infile}......")
             try:
                 #setup
@@ -1421,7 +1423,7 @@ class Plotter(BasePlot):
     ##################################################################
     def xyz_project(self, fig_save, variable="Rg"):
         '''[Rg, Pe, N, W], [Rg, N, W, Pe], [Rg, W, Pe, N]'''
-        timer = Timer(f"{variable}: Project")
+        timer = Timer(f"{variable}: xyzProject")
         timer.start()
         fig_save = fig_save+".Proj"
         labels_set = permutate([variable, "Pe", "N", "W"])
@@ -1464,7 +1466,7 @@ class Plotter(BasePlot):
         # -------------------------------Done!----------------------------------------#
         return False
     def xyz_exp_seprate(self, fig_save, variable="Rg"):
-        timer = Timer(f"{variable}: Expand")
+        timer = Timer(f"{variable}: xyzExpand")
         timer.start()
 
         dir_file = os.path.dirname(fig_save)
@@ -1507,7 +1509,7 @@ class Plotter(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
     def xyz_expand(self, fig_save, variable="Rg"):
-        timer = Timer(f"{variable}: Expand")
+        timer = Timer(f"{variable}: xyzExpand")
         timer.start()
         fig_save = fig_save+".Exp"
         dir_file = os.path.dirname(fig_save)
@@ -1555,6 +1557,17 @@ class Plotter(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+    def xyzw_expand(self, variable="Rg"):
+        timer = Timer(f"{variable}: xyzwExpand")
+        timer.start()
+
+        timer.stop()
+    ##################################################################
+    def Rg_N(self, variable="Rg"):
+        timer = Timer(f"{variable}: Rg_N")
+        timer.start()
+
+        timer.stop()
 #############################################################################################################
 class Timer:
     def __init__(self, tip="start", func=time.perf_counter):
@@ -1655,6 +1668,12 @@ def describe(dataset, str="data", flag = True):
         sys.exit()
 def permutate(array):
     return [array] + [array[:1] + array[i:] + array[1:i] for i in range(2, len(array))]
+def prep_files(file_path, data_frame):
+    if not os.path.exists(f'{file_path}.pkl'):
+        df_Rg.to_pickle(f'{file_path}.pkl')
+    if not os.path.exists(f"{file_path}.py"):
+        shutil.copy2(os.path.abspath(__file__), f"{file_path}.py")
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -1740,10 +1759,10 @@ class JobProcessor:
             shutil.copy2(os.path.join(os.path.abspath(__file__)), os.path.join(Path.simus, Path.filename))
 
         # prepare files
-        infiles = [f"{i:03}" for i in range(1, Run.Trun + 1)]
-        Init.data_file(Path)
-        Model.in_file(Path)  # return
-        Run.sub_file(Path, infiles)
+        infiles = [f"{i:03}" for i in range(self.Run.Trun_start, self.Run.Trun + 1)]
+        self.Init.data_file(Path)
+        self.Model.in_file(Path)  # return
+        self.Run.sub_file(Path, infiles)
         # excute jobs
         if input_file:
             # running files
@@ -1803,9 +1822,9 @@ class JobProcessor:
             logging.info(message)
     # -----------------------------------Plot-------------------------------------------#
     def Rg_job(self, Config, Run, iRin, variable="Rg"):
-        paras = ['Pe', 'N', 'W']
+        paras = ['t', 'Pe', 'N', 'W']
         label, abbre = var2str(variable)
-        df_Rg = pd.DataFrame(columns=paras + list(variable))
+        df_Rg_t = pd.DataFrame(columns=paras + list(variable))
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
 
         fig_Rg = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
@@ -1825,24 +1844,26 @@ class JobProcessor:
                             Path = _path(_model(Init, Run, iFa, iXi))
                             Rg = np.sqrt(np.mean(np.load(os.path.join(Path.fig0, "Rg2_time.npy")), axis=0))
                             df_Rg = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
+                            df_Rg_t = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
 
             # saving, subfile, plotting
-            save_file = os.path.join(fig_Rg, f"{abbre}(Pe,N,W)")
-            if not os.path.exists(f'{save_file}.pkl'):
-                df_Rg.to_pickle(f'{save_file}.pkl')
-            dir_file = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
-            if not os.path.exists(f"{dir_file}.py"):
-                shutil.copy2(os.path.abspath(__file__), f"{dir_file}.py")
+            xyz_dirfile = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
+            xyzw_dirfile= os.path.join(fig_Rg, f"(r,s){abbre}(t,Pe,N,W)")
+            prep_files(xyz_file, df_Rg)
+            prep_files(xyzw_file, df_Rg_t)
             print(message)
             logging.info(message)
-            self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dir_file)
+            self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", xyz_dirfile)
+            self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", xyzw_dirfile)
 
             print(">>> Plotting tests......")
             logging.info(">>> Plotting tests......")
-            plotter = Plotter(df_Rg)
-            #plotter.Rg(dir_file)
-            plotter.xyz_project(dir_file, "Rg")
-            plotter.xyz_expand(dir_file, "Rg")
+            #xyz_plotter = Plotter(df_Rg)
+            #plotter.Rg(xyz_dirfile)
+            #plotter.xyz_project(xyz_dirfile, "Rg")
+            #plotter.xyz_expand(xyz_dirfile, "Rg")
+            xyzw_plotter = Plotter(df_Rg_t)
+            plotter.xyzw_expand(xyzw_dirfile, "Rg")
             print(f"==> Done! \n==>Please check the results and submit the plots!")
 
         elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
@@ -1900,7 +1921,7 @@ if __name__ == "__main__":
                 if input_file:
                     run.exe_simus("Run", CURRENT_DIR, input_file)
                 else:
-                    for infile in [f"{i:03}" for i in range(1, params['Trun'] + 1)]:
+                    for infile in [f"{i:03}" for i in range(params['Trun_start'], params['Trun'] + 1)]:
                         run.exe_simus("Run", CURRENT_DIR, infile)
             except Exception as e:
                 print(usage)
