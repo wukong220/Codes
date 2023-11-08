@@ -1,0 +1,10 @@
++ **/                         # 包含所有目录，以便进一步搜索
++ *Chain/*/                   # 包含所有以Chain结尾的目录下的任何子目录
++ *Chain/*Slit/               # 包含以Chain结尾的目录下的以Slit结尾的子目录
++ *Chain/*Free/               # 包含以Chain结尾的目录下的以Free结尾的子目录
++ *Chain/*Slit/**             # 包含以Chain结尾的目录下的以Slit结尾的子目录及其所有内容
++ *Chain/*Free/**             # 包含以Chain结尾的目录下的以Free结尾的子目录及其所有内容
+- *Ring/                      # 排除所有以Ring结尾的目录
+- *Ring/**                    # 排除以Ring结尾的目录及其所有内容
+- *                           # 排除所有其他文件和目录
+
