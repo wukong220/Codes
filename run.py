@@ -92,9 +92,10 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              #'Fa': [0.0, 0.1, 1.0],
-                              'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                              'N_monos': [300],
+                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [0.0], #'Fa': [0.0, 0.1, 1.0],
+                              #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                               #'Temp': [0.2]
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -107,7 +108,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0, 15.0]},
+                         3: {"Rin": [0.0], "Wid": [1.0]}, #5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -1402,10 +1403,12 @@ class Plotter3D(BasePlot):
 
             for zi, (marker, color) in zip(uz, color_map):
                 mask = (z==zi)
+                coef, x_range, y_range = scale(x[mask], y[mask])
+                ax.plot(x_range, y_range, color=color, linestyle='dashed')
                 for xi, yi in zip(x[mask], y[mask]):
                     ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{zi}'))
-            ax.legend(title=zlabel, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/3))
+                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{zi}, {coef}'))
+            ax.legend(title=fr'{zlabel}, $\nu$', frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/3))
             # colorbar
             #self.colorbar(ax, z, zlabel, is_3D)
             self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
@@ -1885,10 +1888,21 @@ def permutate(array, insert=None):
         return list
 def prep_files(file_path, data_frame):
     if not os.path.exists(f'{file_path}.pkl'):
-        data_frame.to_pickle(f'{file_path}.pkl')
+        data_frame.to_pickle(f'{file_path}.pkl', protocol=4)
     if not os.path.exists(f"{file_path}.py"):
         shutil.copy2(os.path.abspath(__file__), f"{file_path}.py")
-
+def scale(x, y):
+    if x[0] == 0:
+        log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
+    else:
+        log_x, log_y = np.log10(x), np.log10(y)
+    slop, intercept = np.polyfit(log_x, log_y, 1)
+    coef = '{:.2f}'.format(slop)
+    poly_fit = np.poly1d((slop, intercept))
+    x_range = np.linspace(np.min(log_x) - np.log10(1.41), np.max(log_x) + np.log10(1.41), 100)
+    y_range = poly_fit(x_range)
+    x_range, y_range = np.power(10, x_range), np.power(10, y_range)
+    return coef, x_range, y_range
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
