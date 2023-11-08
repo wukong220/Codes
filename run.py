@@ -53,7 +53,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (8, 5), #(5, 20)
+    'Trun': (1, 5), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'num_chains': 1,
@@ -155,8 +155,6 @@ class _run:
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
-        if self.Trun[0] > self.Trun[1]:
-            self.Trun[0] = 1
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
@@ -861,9 +859,11 @@ class _path:
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
-        self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[1]}")
-        self.simus5 = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T5")
-        self.simus0 = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}:{self.Run.Trun[1]}")
+        if Trun[0] == 1:
+            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[1]}")
+        else:
+            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}:{self.Run.Trun[1]}")
+            self.simus0 = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]-1}")
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
 
         #Anas and Figures
@@ -915,9 +915,9 @@ class _anas:
         self.data = np.zeros((self.Run.Trun[1], self.Run.Frames+1, self.Init.num_monos, len(dump)))
         # read the lammpstrj files with 2001 frames
         print(f"{self.Path.simus}")
-        for index, ifile in enumerate([f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1] + 1)]):
+        for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun[1] + 1)]):
             if int(ifile) < self.Run.Trun[0]:
-                dir_file = os.path.join(f"{self.Path.simus5}", f"{ifile}.lammpstrj")
+                dir_file = os.path.join(f"{self.Path.simus0}", f"{ifile}.lammpstrj")
             elif int(ifile) >= self.Run.Trun[0] and int(ifile) <= self.Run.Trun[1]:
                 dir_file = os.path.join(f"{self.Path.simus}", f"{ifile}.lammpstrj")
             else:
@@ -2131,8 +2131,6 @@ if __name__ == "__main__":
     # Simulations
     run = JobProcessor(params)
     Trun = params['Trun']
-    if Trun[0] > Trun[1]:
-        Trun[0] = 1
     if task == "Simus":
         if "Codes" in CURRENT_DIR:
             run.process(data_job="simus_job")
