@@ -1899,7 +1899,8 @@ class JobProcessor:
     def __init__(self, params):
         self.params = params
         self.check = check
-        self.queue = "7k83!"
+        #self.queue = "7k83!"
+        self.queue = "9654!"
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
         self.submitted = False
     # -----------------------------------Prepare-------------------------------------------#
@@ -2065,7 +2066,7 @@ class JobProcessor:
         print(message)
         logging.info(message)
         # prepare files
-        self.queue, dir_file = Path.Run.Queue, os.path.join(CURRENT_DIR, "Run")
+        self.queue, dir_file = Path.Run.Queue, os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{Path.Jobname}_Anas", "Analysis: original data", dir_file)
         if Path.jump and (not self.submit):  # jump for repeat: check lammpstrj
             # submitting files
@@ -2107,6 +2108,14 @@ class JobProcessor:
         # copy Run.py
         message = f"dir_figs => {fig_Rg}"
         os.makedirs(fig_Rg, exist_ok=True)
+        py_file = os.path.join(f"{Path.fig0}", f"{variable}.py")
+        if os.path.abspath(__file__) != f"{py_file}":
+            shutil.copy2(os.path.abspath(__file__), f"{py_file}")
+        print(message)
+        logging.info(message)
+        # prepare files
+        dir_file = os.path.splitext(os.path.abspath(__file__))[0]
+        self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
