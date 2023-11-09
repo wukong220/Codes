@@ -39,8 +39,8 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, BSUB = ["Simus", "Anas", "Plots"][1], True
-check, jump = True, False
+task, BSUB = ["Simus", "Anas", "Plots"][2], True
+check, jump = True, True
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
@@ -52,7 +52,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 2), #(5, 20)
+    'Trun': (1, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -1901,6 +1901,7 @@ class JobProcessor:
         self.check = check
         self.queue = "7k83!"
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+        self.submitted = False
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
@@ -2066,15 +2067,15 @@ class JobProcessor:
         # prepare files
         self.queue, dir_file = Path.Run.Queue, os.path.join(CURRENT_DIR, "Run")
         self.subfile(f"{Path.Jobname}_Anas", "Analysis: original data", dir_file)
-        if Path.jump:  # jump for repeat: check lammpstrj
+        if Path.jump and (not self.submit):  # jump for repeat: check lammpstrj
             # submitting files
-            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # if HOST == "Darwin":  # macOS
+            if HOST == "Linux" and self.run_on_cluster == "false" and BSUB:  # if HOST == "Darwin":  # macOS
                 print(">>> Submitting plots......")
                 logging.info(">>> Submitting plots......")
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}.py")
-                sys.exit()
+                self.submitted = True
             elif "Codes" in CURRENT_DIR:
                 print(">>> Plotting ......")
                 logging.info(">>> Plotting ......")
@@ -2107,47 +2108,48 @@ class JobProcessor:
         message = f"dir_figs => {fig_Rg}"
         os.makedirs(fig_Rg, exist_ok=True)
         # submitting files
-        if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
-            print(">>> Submitting plots......")
-            logging.info(">>> Submitting plots......")
-            print(f"bsub < {dir_file}.lsf")
-            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            print(f"Submitted: {dir_file}.py")
+        if not self.submitted:
+            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
+                print(">>> Submitting plots......")
+                logging.info(">>> Submitting plots......")
+                print(f"bsub < {dir_file}.lsf")
+                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                print(f"Submitted: {dir_file}.py")
+                self.submitted = True
+            else: # HOST == "Darwin":  # macOS
+                for iWid in convert2array(params['Wid']):
+                    for iN in convert2array(params['N_monos']):
+                        Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                        if Init.jump:
+                            continue
+                        for iFa in convert2array(params['Fa']):
+                            for iXi in convert2array(params['Xi']):
+                                Path = _path(_model(Init, Run, iFa, iXi))
+                                Rgt = np.sqrt(np.load(os.path.join(Path.fig0, "Rg2_time.npy")))
+                                Rg = np.sqrt(np.mean(Rgt))
+                                df_Rg = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
+                                df_Rgt = df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
+                df_Rgt['dt']=Run.Tdump * 0.001
+                # saving, subfile, plotting
+                dirfile3D = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
+                dirfile4D = os.path.join(fig_Rg, f"(r,s){abbre}(t,Pe,N,W)")
+                prep_files(dirfile3D, df_Rg)
+                prep_files(dirfile4D, df_Rgt)
+                print(message)
+                logging.info(message)
+                self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
+                self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
 
-        else: # HOST == "Darwin":  # macOS
-            for iWid in convert2array(params['Wid']):
-                for iN in convert2array(params['N_monos']):
-                    Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                    if Init.jump:
-                        continue
-                    for iFa in convert2array(params['Fa']):
-                        for iXi in convert2array(params['Xi']):
-                            Path = _path(_model(Init, Run, iFa, iXi))
-                            Rgt = np.sqrt(np.load(os.path.join(Path.fig0, "Rg2_time.npy")))
-                            Rg = np.sqrt(np.mean(Rgt))
-                            df_Rg = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
-                            df_Rgt = df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
-            df_Rgt['dt']=Run.Tdump * 0.001
-            # saving, subfile, plotting
-            dirfile3D = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
-            dirfile4D = os.path.join(fig_Rg, f"(r,s){abbre}(t,Pe,N,W)")
-            prep_files(dirfile3D, df_Rg)
-            prep_files(dirfile4D, df_Rgt)
-            print(message)
-            logging.info(message)
-            self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
-            self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
-
-            print(">>> Plotting tests......")
-            logging.info(">>> Plotting tests......")
-            plotter3 = Plotter3D(df_Rg, dirfile3D)
-            plotter4 = Plotter4D(df_Rgt, dirfile4D)
-            #plotter3.Rg()
-            #plotter3.project("Rg")
-            plotter3.expand("Rg")
-            #plotter4.expand("Rg")
-            #plotter4.expand2D("Rg")
-            print(f"==> Done! \n==>Please check the results and submit the plots!")
+                print(">>> Plotting tests......")
+                logging.info(">>> Plotting tests......")
+                plotter3 = Plotter3D(df_Rg, dirfile3D)
+                plotter4 = Plotter4D(df_Rgt, dirfile4D)
+                #plotter3.Rg()
+                #plotter3.project("Rg")
+                plotter3.expand("Rg")
+                #plotter4.expand("Rg")
+                #plotter4.expand2D("Rg")
+                print(f"==> Done! \n==>Please check the results and submit the plots!")
 
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
