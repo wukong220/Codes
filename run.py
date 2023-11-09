@@ -39,12 +39,12 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump = ["Simus", "Anas", "Plots"][2], True, False
+task, check, jump  = ["Simus", "Anas", "Plots"][1], True, False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
+                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
@@ -62,9 +62,10 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0], #, 10.0, 20.0, 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
+                          'Gamma': [1, 10],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -72,9 +73,9 @@ class _config:
                          },
 
                 "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
-                              #3: {'Rin': [0.0], 'Wid': [0.0]},
+                              3: {'Rin': [0.0], 'Wid': [0.0]},
                               #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
-                              3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
+                              #3: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
                             },
                 "Rand":{2: {'Rin': [0.1256, 0.314, 0.4], 'Wid': [1.5, 2.0, 2.5]},
                             #2: {'Rin': [0.1256], 'Wid': [0.5, 1.0]},
@@ -83,7 +84,7 @@ class _config:
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]},
+                        3: {"Rin":[0.0],"Wid":[1.0]}, #3.0, 5.0, 10.0, 15.0, 20.0]},
                         },
                 },
 
@@ -92,9 +93,9 @@ class _config:
                 "Chain": {'Xi': 0.0,
                               #'N_monos': [300],
                               'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [0.0, 0.1, 1.0],
+                              'Fa': [1.0],
                               #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              #'Temp': [0.2]
+                              'Temp': [0.2]
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -960,7 +961,7 @@ class _anas:
     def save_data(self):
         # data[ifile][iframe][iatom][xu, yu]
         Rg_save = os.path.join(self.Path.fig0, "Rg2_time.npy")
-        if os.path.exists(Rg_save):
+        if os.path.exists(Rg_save) and jump:
             print(f"JUMP==>{Rg_save} is already!")
             logging.info(f"JUMP==>{Rg_save} is already!")
             return False
@@ -1117,8 +1118,7 @@ class _plot(BasePlot):
         x, y, z = [self.simp_dict[key][1] for key in keys]
         simp_x, simp_y, simp_z = [self.simp_dict[key][1] for key in keys]
         x_label, y_label, z_label = [keys[i] for i in range(3)]
-        x_abbre, y_abbre, z_abbre = [valu[2] for i in range(3)]
-
+        x_abbre, y_abbre, z_abbre = [values[i][2] for i in range(3)]
         # Calculate bin size and mid-bin values
         sorted_x, sorted_y, sorted_z = np.sort(x), np.sort(y), np.sort(z)
         bin_size_x, mid_x = (x.max() - x.min()) / 200, sorted_x[np.argmin(np.abs(sorted_x - (x.max() - x.min()) / 2))]
@@ -1211,8 +1211,8 @@ class _plot(BasePlot):
         keys, values = list(self.data_dict.keys()), list(self.data_dict.values())
         for indices in [(0, 1, 2), (0, 2, 1), (1, 2, 0)]:
             x_label, y_label, z_label = [keys[i] for i in indices]
-            x_abbre, y_abbre, z_abbre = [valu[2] for i in indices]
-            x, y, z = [valu[1] for i in indices]
+            x_abbre, y_abbre, z_abbre = [values[i][2] for i in indices]
+            x, y, z = [values[i][1] for i in indices]
 
             hist_x, x_bins, x_bin_centers, x_range, pdf_x = self.dist_data(x)
             hist_y, y_bins, y_bin_centers, y_range, pdf_y = self.dist_data(y)
@@ -1316,31 +1316,6 @@ class _plot(BasePlot):
         #self.distics()
         timer.count("plot")
         timer.stop()
-
-    def sub_file(self):
-        Path = self.Path
-        print(f">>> Preparing sub file......")
-        logging.info(f">>> Preparing sub file......")
-        dir_file = os.path.join(f"{Path.fig0}", f"{self.runfile}")
-        bsub = [
-            f'#!/bin/bash',
-            f'',
-            f'#BSUB -J {Path.Jobname}_Anas',
-            f'#BSUB -Jd "Analysis: original data"',
-            f'#BSUB -r',
-            f'#BSUB -q {self.Run.Queue}',
-            f'#BSUB -n 1',
-            f'#BSUB -oo {dir_file}.out',
-            f'#BSUB -eo {dir_file}.err',
-            f'source ~/.bashrc',
-            f'cd {Path.fig0}',
-            f'echo "python3 {dir_file}.py"',
-            f'python3 {dir_file}.py',
-        ]
-        with open(f"{dir_file}.lsf", "w") as file:
-            for command in bsub:
-                file.write(command + "\n")
-        print("-----------------------------------Done!--------------------------------------------")
 #############################################################################################################
 class Plotter3D(BasePlot):
     def set_axes(self, ax, data, labels, title, is_3D=False, scatter=False, rotation=-60, loc="right", log=False):
@@ -1630,9 +1605,9 @@ class Plotter3D(BasePlot):
                     # ----------------------------> plotting <----------------------------#
                     self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
                     self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
-                    print(self.df_nu)
-                    plt.show()
-                    sys.exit()
+                    #print(self.df_nu)
+                    #plt.show()
+                    #sys.exit()
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1901,9 +1876,8 @@ def permutate(array, insert=None):
     else:
         return list
 def prep_files(file_path, data_frame):
-    if not os.path.exists(f'{file_path}.pkl'):
-        data_frame.to_pickle(f'{file_path}.pkl')
-    if not os.path.exists(f"{file_path}.py"):
+    data_frame.to_pickle(f'{file_path}.pkl')
+    if os.path.abspath(__file__) != f"{file_path}.py":
         shutil.copy2(os.path.abspath(__file__), f"{file_path}.py")
 def scale(x, y):
     if x[0] < 1e-6:
@@ -1944,17 +1918,17 @@ class JobProcessor:
     def subfile(self, jobname, descript, dir_file):
         print(f">>> Preparing subfile for {jobname}......")
         logging.info(f">>> Preparing subfile for {jobname}......")
-
         bsub = [
             f'#!/bin/bash',
             f'',
             f'#BSUB -J {jobname}',
-            f'#BSUB -Jd {descript}',
+            f'#BSUB -Jd "{descript}"',
             f'#BSUB -r',
             f'#BSUB -q {self.queue}',
             f'#BSUB -n 1',
             f'#BSUB -oo {dir_file}.out',
             f'#BSUB -eo {dir_file}.err',
+            f'export RUN_ON_CLUSTER=true',
             f'source ~/.bashrc',
             f'cd {os.path.dirname(dir_file)}',
             f'echo "python3 {dir_file}.py"',
@@ -2000,8 +1974,8 @@ class JobProcessor:
         print(message)
         logging.info(message)
         os.makedirs(Path.simus, exist_ok=True)
-        if not os.path.exists(os.path.join(Path.simus, Path.filename)):
-            shutil.copy2(os.path.join(os.path.abspath(__file__)), os.path.join(Path.simus, Path.filename))
+        if os.path.abspath(__file__) != os.path.join(Path.simus, Path.filename):
+            shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.filename))
 
         # prepare files
         infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+1)]
@@ -2034,37 +2008,39 @@ class JobProcessor:
         message = f"dir_figs => {Path.fig0}"
         os.makedirs(Path.fig0, exist_ok=True)
         dir_file = os.path.join(f"{Path.fig0}", f"dana_org")
-        if not os.path.exists(f"{dir_file}.py"):
+        if os.path.abspath(__file__) != f"{dir_file}.py":
             shutil.copy2(os.path.abspath(__file__), f"{dir_file}.py")
         print(message)
         logging.info(message)
         # prepare files
-        self.queue = Path.Run.Queue,
+        self.queue = Path.Run.Queue
         self.subfile(f"{Path.Jobname}_Anas", "Analysis: original data", dir_file)
-
         if Path.jump:  # jump for repeat: check lammpstrj
-            if HOST == "Darwin":  # macOS
+            # submitting files
+            if self.run_on_cluster == "true":
+                if "Codes" in CURRENT_DIR:
+            if HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                print(">>> Submitting plots......")
+                logging.info(">>> Submitting plots......")
+                print(f"bsub < {dir_file}.lsf")
+                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                print(f"Submitted: {dir_file}.py")
+                sys.exit()
+            else: #if HOST == "Darwin":  # macOS
                 Path.jump = False  # according to pdf file
-                print(">>> Plotting tests......")
-                logging.info(">>> Plotting tests......")
+                print(">>> Plotting ......")
+                logging.info(">>> Plotting ......")
 
                 if Anas.save_data(): # saving data
                     Plot.org(Anas.data_Rcom, "Rcom") # org(data, variable)
                     #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
                     #Plot.org(Anas.data_MSD, "MSD")
                 print(f"==> Done! \n==>Please check the results and submit the plots!")
-
-            # submitting files
-            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
-                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
         else:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
             logging.info(message)
+
     # -----------------------------------Plot-------------------------------------------#
     def Rg_job(self, Config, Run, iRin, variable="Rg"):
         paras = ['Pe', 'N', 'W']
@@ -2078,7 +2054,14 @@ class JobProcessor:
         message = f"dir_figs => {fig_Rg}"
         os.makedirs(fig_Rg, exist_ok=True)
 
-        if HOST == "Darwin":  # macOS
+        if HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+            print(">>> Submitting plots......")
+            logging.info(">>> Submitting plots......")
+            print(f"bsub < {dir_file}.lsf")
+            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+            print(f"Submitted: {dir_file}.py")
+
+        else: # HOST == "Darwin":  # macOS
             for iWid in convert2array(params['Wid']):
                 for iN in convert2array(params['N_monos']):
                     Init = _init(Config, Run.Trun, iRin, iWid, iN)
@@ -2113,12 +2096,6 @@ class JobProcessor:
             #plotter4.expand2D("Rg")
             print(f"==> Done! \n==>Please check the results and submit the plots!")
 
-        elif HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
-            print(">>> Submitting plots......")
-            logging.info(">>> Submitting plots......")
-            print(f"bsub < {dir_file}.lsf")
-            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            print(f"Submitted: {dir_file}.py")
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
         params = self.params
@@ -2128,7 +2105,7 @@ class JobProcessor:
             for iType in convert2array(params['labels']['Types']):
                 for iEnv in convert2array(params['labels']['Envs']):
                     Config = _config(iDimend, iType, iEnv, params)
-                    if platform.system() == "Linux" and self.check:
+                    if self.check and (platform.system() == "Linux" and self.run_on_cluster == False):
                             params = self.check_params()
                             self.check = False
                     for iGamma in convert2array(params['Gamma']):
