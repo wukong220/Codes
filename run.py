@@ -13,12 +13,10 @@ from itertools import combinations, product, permutations, islice
 import pandas as pd
 import numpy as np
 from numba import vectorize, jit
-from scipy.interpolate import splrep, splev
-from scipy.stats import norm
-from scipy.stats import gaussian_kde
-from scipy.stats import multivariate_normal
-from scipy.spatial import KDTree
 from collections import defaultdict
+from scipy.spatial import KDTree
+from scipy.interpolate import splrep, splev
+from scipy.stats import norm, linregress, gaussian_kde, multivariate_normal
 
 import seaborn as sns
 import matplotlib as mpl
@@ -92,9 +90,9 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [300],
-                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [0.0], #'Fa': [0.0, 0.1, 1.0],
+                              #'N_monos': [300],
+                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [0.0, 0.1, 1.0],
                               #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                               #'Temp': [0.2]
                           },
@@ -108,7 +106,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [1.0]}, #5.0, 10.0, 15.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -863,7 +861,7 @@ class _path:
         if Trun[0] == 1:
             self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[1]}")
         else:
-            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}:{self.Run.Trun[1]}")
+            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}-{self.Run.Trun[1]}")
             self.simus0 = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]-1}")
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
 
@@ -1492,6 +1490,15 @@ class Plotter3D(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+    def cal_nu(self, data, labels):
+        unique_y, unique_z = data
+        variable, xlabel, ylabel, zlabel = labels
+        df_nu = pd.DataFrame(columns=['nu', ylabel, zlabel])
+        for (uy, uz) in [(uy, uz) for uy in unique_y for uz in unique_z]:
+            df_yz = self.df[(self.df[ylabel] == uy) & (self.df[zlabel] == uz)]  # query: z, w
+            coef = scale(np.array(df_yz[xlabel]), np.array(df_yz[variable]))[0]
+            df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
+        return df_nu
     ##################################################################
     def project(self, variable="Rg"):
         '''[Rg, Pe, N, W], [Rg, N, W, Pe], [Rg, W, Pe, N]'''
@@ -1583,6 +1590,7 @@ class Plotter3D(BasePlot):
     def expand(self, variable="Rg"):
         timer = Timer(f"{variable}: Expand3D")
         timer.start()
+        # ----------------------------> start <----------------------------#
         self.fig_save = self.fig_save+".Exp"
         dir_file = os.path.dirname(self.fig_save)
         columns_set = permutate([variable, "Pe", "N", "W"])
@@ -1603,22 +1611,28 @@ class Plotter3D(BasePlot):
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
-                uz = np.unique(z)
+                unique_x, unique_y, unique_z = np.unique(x), np.unique(y), np.unique(z)
+                xnu_yz = self.cal_nu((unique_y, unique_z), (variable, xlabel, ylabel, zlabel))
+                ynu_zx = self.cal_nu((unique_z, unique_x), (variable, ylabel, zlabel, xlabel))
+                znu_xy = self.cal_nu((unique_x, unique_y), (variable, zlabel, xlabel, ylabel))
                 # ----------------------------> set up<----------------------------#
                 self.set_style()
                 cmap = plt.get_cmap("rainbow")
                 # ----------------------------> figures and axies<----------------------------#
-                bot, top = (0.1, 0.90) if len(uz) <= 4 else (0.05, 0.95)
-                fig = plt.figure(figsize=(5 * 2, 5.5 * len(uz)))
+                bot, top = (0.1, 0.90) if len(unique_z) <= 4 else (0.05, 0.95)
+                fig = plt.figure(figsize=(5 * 2, 5.5 * len(unique_z)))
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.5)
-                gs = GridSpec(len(uz), 2, figure=fig)
-                axes_2D = [fig.add_subplot(gs[i, j]) for i in range(len(uz)) for j in range(2)]
+                gs = GridSpec(len(unique_z), 2, figure=fig)
+                axes_2D = [fig.add_subplot(gs[i, j]) for i in range(len(unique_z)) for j in range(2)]
                 fig.suptitle(f"{flabel} with {zlabel} fixed", fontsize=25)
-                for i, iz in enumerate(uz):
+                for i, iz in enumerate(unique_z):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
                     self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
                     self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                    print(self.df_nu)
+                    plt.show()
+                    sys.exit()
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1888,11 +1902,11 @@ def permutate(array, insert=None):
         return list
 def prep_files(file_path, data_frame):
     if not os.path.exists(f'{file_path}.pkl'):
-        data_frame.to_pickle(f'{file_path}.pkl', protocol=4)
+        data_frame.to_pickle(f'{file_path}.pkl')
     if not os.path.exists(f"{file_path}.py"):
         shutil.copy2(os.path.abspath(__file__), f"{file_path}.py")
 def scale(x, y):
-    if x[0] == 0:
+    if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
     else:
         log_x, log_y = np.log10(x), np.log10(y)
@@ -1903,6 +1917,7 @@ def scale(x, y):
     y_range = poly_fit(x_range)
     x_range, y_range = np.power(10, x_range), np.power(10, y_range)
     return coef, x_range, y_range
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -1977,6 +1992,7 @@ class JobProcessor:
         # Initialize directories and files
         self._initialize(Path)
         if Path.jump:  # jump for repeat: check lammpstrj
+            print(f"==>Continue: {Path.lmp_trj} is already!")
             return
 
         # Create simulation directory and copy Run.py
