@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#BSUB -J 20N_3CF_Anas
+#BSUB -Jd "Analysis: original data"
+#BSUB -r
+#BSUB -q 7k83!
+#BSUB -n 1
+#BSUB -oo /Users/wukong/Data/Codes/Anas.out
+#BSUB -eo /Users/wukong/Data/Codes/Anas.err
+export RUN_ON_CLUSTER=true
+source ~/.bashrc
+cd /Users/wukong/Data/Codes
+echo "python3 /Users/wukong/Data/Codes/Anas.py"
+python3 /Users/wukong/Data/Codes/Anas.py

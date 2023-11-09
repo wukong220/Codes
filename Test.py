@@ -906,10 +906,18 @@ plotter = plotGraph(df_Rg2)
 # Given array
 input_array = ["Rg", "Pe", "N", "W"]
 
-# Function to create the list of permutations
-def create_permutations(array):
-    return [array] + [array[:1] + array[i:] + array[1:i] for i in range(2, len(array))]
 
-# Generate the list
-output_list = create_permutations(input_array)
-print(output_list)
+
+chunk = 9
+atoms = 100
+frames = 2001
+
+# Method 1: Using map and lambda
+skiprows_1 = np.array(list(map(lambda x: np.arange(chunk) + (atoms + chunk) * x, np.arange(frames+1)))).ravel()
+
+# Method 2: Using list comprehension and concatenate
+skiprows_2 = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(frames + 1)])
+
+# Test if both methods give the same result
+print(np.array_equal(skiprows_1, skiprows_2))
+

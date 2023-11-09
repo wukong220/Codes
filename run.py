@@ -39,7 +39,8 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump  = ["Simus", "Anas", "Plots"][1], True, False
+task, BSUB = ["Simus", "Anas", "Plots"][1], True
+check, jump = True, False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
@@ -51,9 +52,10 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 5), #(5, 20)
+    'Trun': (1, 2), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
+    'Frames': 2000,
     'num_chains': 1,
 }
 
@@ -149,7 +151,7 @@ class _config:
             Run.Tequ //= 100
 ##########################################END!###############################################################
 class _run:
-    def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = 2000):
+    def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = params["Frames"]):
         self.Params = Params
         self.Queue = "7k83!"
         self.set_queue()
@@ -892,19 +894,6 @@ class _anas:
         except KeyError:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
-    def unwrap_x(self, Lx):
-        frames = self.data.shape[1]
-        for i in range(1, frames):
-            while True:
-                dx = self.data[:, i, :, 0] - self.data[:, i - 1, :, 0]
-                crossed = np.abs(dx) > Lx / 2
-                if not np.any(crossed):
-                    break
-                for file_idx in range(self.data.shape[0]):
-                    for atom_idx in range(self.data.shape[2]):
-                        if crossed[file_idx, atom_idx]:
-                            self.data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
-        return self.data
 
     def read_data(self):
         timer = Timer("Read")
@@ -936,7 +925,7 @@ class _anas:
             elif lastStep != self.Run.Frames * self.Run.Tdump:
                 logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
                 raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
-            skiprows = np.array(list(map(lambda x: np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x, np.arange(self.Run.Frames+1)))).ravel()
+            skiprows = np.concatenate([np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x for x in range(self.Run.Frames + 1)])
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             except Exception as e:
@@ -950,7 +939,7 @@ class _anas:
         # unwrap data
         Lx = hix - lox
         if self.Pe > 50:
-            self.unwrap_x(Lx)  # get real coordinates
+            self.data = unwrap_x(self.data, Lx)  # get real coordinates
         # data = np.copy(self.data)
         # for i in range(1, frames):
         # dx = data[:, i, :, 0] - data[:, i - 1, :, 0]
@@ -1879,6 +1868,19 @@ def prep_files(file_path, data_frame):
     data_frame.to_pickle(f'{file_path}.pkl')
     if os.path.abspath(__file__) != f"{file_path}.py":
         shutil.copy2(os.path.abspath(__file__), f"{file_path}.py")
+def unwrap_x(data, Lx):
+    frames = data.shape[1]
+    for i in range(1, frames):
+        while True:
+            dx = data[:, i, :, 0] - data[:, i - 1, :, 0]
+            crossed = np.abs(dx) > Lx / 2
+            if not np.any(crossed):
+                break
+            for file_idx in range(data.shape[0]):
+                for atom_idx in range(data.shape[2]):
+                    if crossed[file_idx, atom_idx]:
+                        data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
+    return data
 def scale(x, y):
     if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
@@ -1998,49 +2000,100 @@ class JobProcessor:
                 elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
                     self.exe_simus("Submit", Path.simus, infile)
     # -----------------------------------Anas-------------------------------------------#
+    def read_save(self, Path):
+        '''3 parameters from Path and 2 parameters from dict{params}'''
+        Trun, Frames = self.params["Trun"], self.params["Frames"]
+        dump_dict, chunk = {2: "xu yu", 3: "xu yu zu"}, 9
+        dimend_match, pe_match, atoms_match = re.search(r'(\d+)D', Path), re.search(r'_(\d+\.?\d*)Pe_', Path), re.search(r'_(\d+)N(\d+)_', Path)
+        dimend = int(dimend_match.group(1)) if dimend_match else None
+        pe = float(pe_match.group(1)) if pe_match else None
+        atoms = int(atoms_match.group(1)) * int(atoms_match.group(2)) if atoms_match else None
+        # dimend, pe, atoms, dump = 3, 5, 20, dump_dict[3].split(" ")
+        dump = dump_dict[dimend].split(" ")
+
+        self.data = np.zeros((Trun[1], Frames + 1, atoms, len(dump)))
+        # read data
+        for index, ifile in enumerate([f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]):
+            filename = os.path.join(CURRENT_DIR, f"{ifile}.lammpstrj")
+            logging.info(f"==> Reading {filename} file: ......")
+            print(f"==> Reading {filename} file: ......")
+            if index == 0:  # read and check
+                natoms = pd.read_csv(filename, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+                skiprows = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(Frames + 1)])
+                names = list(pd.read_csv(filename, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
+                xlo, xhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=5, nrows=1).values[0, :2]
+                zlo, zhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=7, nrows=1).values[0, :2]
+                Lx, Lz = xhi - xlo, zhi - zlo
+                if natoms != atoms and (Lz < 1.0001 and dimend == 3):
+                    message = f"ERROR: Wrong atoms => {natoms} !={atoms}"
+                    logging.error(message)
+                    raise ValueError(message)
+            df = pd.read_csv(filename, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
+            data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
+        if pe > 50:
+            data = unwrap_x(data, Lx)
+
+        #save data
+        # data[ifile][iframe][iatom][xu, yu]
+        #----------------------------------> Rg <---------------------------------#
+        Rcom_save, Rg_save = os.path.join(Path, "Rcom.npy"), os.path.join(Path, "Rg2_time.npy")
+        Rcom = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位移
+        data_com = data - np.expand_dims(np.mean(data, axis=2), axis=2)
+        data_Rcom = np.linalg.norm(data_com[..., :], axis=-1)
+        Rg2_time = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # average over atoms and files
+        Rg2 = np.mean(Rg2_time)  # average over time
+        message = f"saving Rg2(time) and Rcom(time): {Path}"
+        print(message)
+        logging.info(message)
+        np.save(Rg_save, Rg2_time)
+        np.save(Rcom_save, Rcom)
+        #----------------------------------> MSD <---------------------------------#
+        return data_Rcom
+
     def anas_job(self, Path, **kwargs):
         self._initialize(Path)
         Pe = kwargs.get("Pe", None)
         ###################################################################
         # Initialize directories and files
         Anas, Plot = _anas(Path, Pe), _plot(Path)
-        # copy Run.py
         message = f"dir_figs => {Path.fig0}"
         os.makedirs(Path.fig0, exist_ok=True)
-        dir_file = os.path.join(f"{Path.fig0}", f"dana_org")
-        if os.path.abspath(__file__) != f"{dir_file}.py":
-            shutil.copy2(os.path.abspath(__file__), f"{dir_file}.py")
+        py_file = os.path.join(f"{Path.fig0}", f"dana.py")
+        if os.path.abspath(__file__) != f"{py_file}":
+            shutil.copy2(os.path.abspath(__file__), f"{py_file}")
         print(message)
         logging.info(message)
         # prepare files
-        self.queue = Path.Run.Queue
+        self.queue, dir_file = Path.Run.Queue, os.path.join(CURRENT_DIR, "Run")
         self.subfile(f"{Path.Jobname}_Anas", "Analysis: original data", dir_file)
         if Path.jump:  # jump for repeat: check lammpstrj
             # submitting files
-            if self.run_on_cluster == "true":
-                if "Codes" in CURRENT_DIR:
-            if HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # if HOST == "Darwin":  # macOS
                 print(">>> Submitting plots......")
                 logging.info(">>> Submitting plots......")
                 print(f"bsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}.py")
                 sys.exit()
-            else: #if HOST == "Darwin":  # macOS
-                Path.jump = False  # according to pdf file
+            elif "Codes" in CURRENT_DIR:
                 print(">>> Plotting ......")
                 logging.info(">>> Plotting ......")
-
-                if Anas.save_data(): # saving data
-                    Plot.org(Anas.data_Rcom, "Rcom") # org(data, variable)
-                    #Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-                    #Plot.org(Anas.data_MSD, "MSD")
+                if Anas.save_data():  # saving data
+                    Plot.org(Anas.data_Rcom, "Rcom")  # org(data, variable)
+                    # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                    # Plot.org(Anas.data_MSD, "MSD")
                 print(f"==> Done! \n==>Please check the results and submit the plots!")
+            elif "Figs" in CURRENT_DIR:
+                print(f">>> Plotting: {CURRENT_DIR} ......")
+                logging.info(f">>> Plotting {CURRENT_DIR} ......")
+                path = CURRENT_DIR.replace('Figs', 'Simus')
+                data_Rcom = self.read_save(path)
+                #Plot.org(data_Rcom, "Rcom")  # org(data, variable)
+                print(f"==> Done!")
         else:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
             logging.info(message)
-
     # -----------------------------------Plot-------------------------------------------#
     def Rg_job(self, Config, Run, iRin, variable="Rg"):
         paras = ['Pe', 'N', 'W']
@@ -2053,8 +2106,8 @@ class JobProcessor:
         # copy Run.py
         message = f"dir_figs => {fig_Rg}"
         os.makedirs(fig_Rg, exist_ok=True)
-
-        if HOST == "Linux" and run_on_cluster == "false":  # 登陆节点
+        # submitting files
+        if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
             print(">>> Submitting plots......")
             logging.info(">>> Submitting plots......")
             print(f"bsub < {dir_file}.lsf")
