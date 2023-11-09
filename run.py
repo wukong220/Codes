@@ -39,8 +39,7 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, BSUB = ["Simus", "Anas", "Plots"][2], True
-check, jump = True, True
+task, check, jump = ["Simus", "Anas", "Plots"][0], True, False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
@@ -67,7 +66,7 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
-                          'Gamma': [1, 10],
+                          'Gamma': [10], #[1, 10],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -93,11 +92,12 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              #'N_monos': [300],
                               'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0],
+                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [0.0],
+                              'Gamma': [10.0],
                               #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              'Temp': [0.2]
+                              #'Temp': [0.2]
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -912,8 +912,8 @@ class _anas:
             else:
                 logging.error(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
                 raise ValueError(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
-            logging.info(f"==> Reading {dir_file}.lammpstrj file: ......")
-            print(f"==> Reading {dir_file}.lammpstrj file: ......")
+            logging.info(f"==> Reading {dir_file} file: ......")
+            print(f"==> Reading {dir_file} file: ......")
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
             natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
@@ -969,7 +969,7 @@ class _anas:
             # Rg2_time[iframe]
             Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
             Rg2 = np.mean(Rg2_time) # average over time
-            message = f"saving Rg2_time: {self.Path.fig0}"
+            message = f"==>saving Rg2_time: {self.Path.fig0}"
             print(message)
             logging.info(message)
             np.save(Rg_save, Rg2_time)
@@ -1557,7 +1557,8 @@ class Plotter3D(BasePlot):
         # ----------------------------> start <----------------------------#
         self.fig_save = self.fig_save+".Exp"
         dir_file = os.path.dirname(self.fig_save)
-        columns_set = permutate([variable, "Pe", "N", "W"])
+        #columns_set = permutate([variable, "Pe", "N", "W"])
+        columns_set = ([variable, "N", "W", "Pe"])
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
         labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
         notes = ("(a)", "(b)")
@@ -1941,7 +1942,6 @@ class JobProcessor:
         with open(f"{dir_file}.lsf", "w") as file:
             for command in bsub:
                 file.write(command + "\n")
-        print("-----------------------------------Done!--------------------------------------------")
     # -----------------------------------Simus-------------------------------------------#
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
@@ -2051,8 +2051,8 @@ class JobProcessor:
         np.save(Rcom_save, Rcom)
         #----------------------------------> MSD <---------------------------------#
         return data_Rcom
-
     def anas_job(self, Path, **kwargs):
+        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         self._initialize(Path)
         Pe = kwargs.get("Pe", None)
         ###################################################################
@@ -2068,36 +2068,38 @@ class JobProcessor:
         # prepare files
         self.queue, dir_file = Path.Run.Queue, os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{Path.Jobname}_Anas", "Analysis: original data", dir_file)
-        if Path.jump and (not self.submit):  # jump for repeat: check lammpstrj
-            # submitting files
-            if HOST == "Linux" and self.run_on_cluster == "false" and BSUB:  # if HOST == "Darwin":  # macOS
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
-                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
-                self.submitted = True
-            elif "Codes" in CURRENT_DIR:
-                print(">>> Plotting ......")
-                logging.info(">>> Plotting ......")
-                if Anas.save_data():  # saving data
-                    Plot.org(Anas.data_Rcom, "Rcom")  # org(data, variable)
-                    # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-                    # Plot.org(Anas.data_MSD, "MSD")
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
-            elif "Figs" in CURRENT_DIR:
-                print(f">>> Plotting: {CURRENT_DIR} ......")
-                logging.info(f">>> Plotting {CURRENT_DIR} ......")
-                path = CURRENT_DIR.replace('Figs', 'Simus')
-                data_Rcom = self.read_save(path)
-                #Plot.org(data_Rcom, "Rcom")  # org(data, variable)
-                print(f"==> Done!")
+        if Path.jump:  # jump for repeat: check lammpstrj
+            if not self.submitted:
+                # submitting files
+                if HOST == "Linux" and self.run_on_cluster == "false" and self.bsub:  # if HOST == "Darwin":  # macOS
+                    print(">>> Submitting plots......")
+                    logging.info(">>> Submitting plots......")
+                    print(f"bsub < {dir_file}.lsf")
+                    subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                    print(f"Submitted: {dir_file}.py")
+                    self.submitted = True
+                elif "Codes" in CURRENT_DIR:
+                    print(">>> Plotting ......")
+                    logging.info(">>> Plotting ......")
+                    if Anas.save_data():  # saving data
+                        Plot.org(Anas.data_Rcom, "Rcom")  # org(data, variable)
+                        # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                        # Plot.org(Anas.data_MSD, "MSD")
+                    print(f"==> Done! \n==>Please check the results and submit the plots!")
+                elif "Figs" in CURRENT_DIR:
+                    print(f">>> Plotting: {CURRENT_DIR} ......")
+                    logging.info(f">>> Plotting {CURRENT_DIR} ......")
+                    path = CURRENT_DIR.replace('Figs', 'Simus')
+                    data_Rcom = self.read_save(path)
+                    #Plot.org(data_Rcom, "Rcom")  # org(data, variable)
+                    print(f"==> Done!")
         else:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
             logging.info(message)
     # -----------------------------------Plot-------------------------------------------#
     def Rg_job(self, Config, Run, iRin, variable="Rg"):
+        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         paras = ['Pe', 'N', 'W']
         label, abbre = var2str(variable)
         df_Rg = pd.DataFrame(columns=paras)
@@ -2108,7 +2110,7 @@ class JobProcessor:
         # copy Run.py
         message = f"dir_figs => {fig_Rg}"
         os.makedirs(fig_Rg, exist_ok=True)
-        py_file = os.path.join(f"{Path.fig0}", f"{variable}.py")
+        py_file = os.path.join(f"{fig_Rg}", f"{variable}.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
         print(message)
@@ -2118,7 +2120,7 @@ class JobProcessor:
         self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
         # submitting files
         if not self.submitted:
-            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
+            if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
                 print(">>> Submitting plots......")
                 logging.info(">>> Submitting plots......")
                 print(f"bsub < {dir_file}.lsf")
@@ -2148,7 +2150,7 @@ class JobProcessor:
                 logging.info(message)
                 self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
                 self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
-
+                print("-----------------------------------Done!--------------------------------------------")
                 print(">>> Plotting tests......")
                 logging.info(">>> Plotting tests......")
                 plotter3 = Plotter3D(df_Rg, dirfile3D)
@@ -2169,9 +2171,11 @@ class JobProcessor:
             for iType in convert2array(params['labels']['Types']):
                 for iEnv in convert2array(params['labels']['Envs']):
                     Config = _config(iDimend, iType, iEnv, params)
-                    if self.check and (platform.system() == "Linux" and self.run_on_cluster == False):
+                    if self.check and (platform.system() == "Linux") and (self.run_on_cluster == 'false'):
                             params = self.check_params()
+                            print(platform.system())
                             self.check = False
+                    sys.exit()
                     for iGamma in convert2array(params['Gamma']):
                         for iTemp in convert2array(params['Temp']):
                             for iRin in convert2array(params['Rin']):

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#BSUB -J Rg(Pe,N,W)
+#BSUB -Jd "Analysis: Rg"
+#BSUB -r
+#BSUB -q 9654!
+#BSUB -n 1
+#BSUB -oo /Users/wukong/Data/Codes/Run.out
+#BSUB -eo /Users/wukong/Data/Codes/Run.err
+export RUN_ON_CLUSTER=true
+source ~/.bashrc
+cd /Users/wukong/Data/Codes
+echo "python3 /Users/wukong/Data/Codes/Run.py"
+python3 /Users/wukong/Data/Codes/Run.py
