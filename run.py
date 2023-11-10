@@ -39,7 +39,11 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump = ["Simus", "Anas", "Plots"][0], True, False
+task, check, jump = ["Simus", "Anas", "Plots"][0], True, True
+if task == "Simus":
+    check = True
+elif task == "Plots":
+    check = False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
@@ -51,7 +55,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 20), #(5, 20)
+    'Trun': (1, 10), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -66,7 +70,7 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
-                          'Gamma': [10], #[1, 10],
+                          'Gamma': [1, 10],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -92,12 +96,11 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
                               #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                               'Fa': [0.0],
+                            # 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                               'Gamma': [10.0],
-                              #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              #'Temp': [0.2]
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -109,7 +112,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0, 10.0, 15.0]},
+                         3: {"Rin": [0.0], "Wid": [1.0]}, #3.0, 5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -350,21 +353,20 @@ class _init:
         file.write("{} LAMMPS data file for initial configuration:\n\n".format(datetime.now().strftime("%Y/%m/%d %H:%M:%S")))
         
         # 写入原子数目和边界信息
+        atomTypes = 3 if self.Env == "Free" else 5
         file.write(f"{int(self.total_particles)} atoms\n\n")
         file.write(f"{self.bonds} bonds\n\n")
         file.write(f"{self.angles} angles\n\n")
-        file.write("5 atom types\n\n")
+        file.write(f"{atomTypes} atom types\n\n")
         file.write("1 bond types\n\n")
         file.write("3 angle types\n\n")
         file.write(f"-{self.Lbox} {self.Lbox} xlo xhi\n")
         file.write(f"-{self.Lbox} {self.Lbox} ylo yhi\n")
         file.write(f"{self.zlo} {self.zhi} zlo zhi\n\n")
         file.write("Masses\n\n")
-        file.write(f"1 {self.mass}\n")
-        file.write(f"2 {self.mass}\n")
-        file.write(f"3 {self.mass}\n")
-        file.write(f"4 {self.mass}\n")
-        file.write(f"5 {self.mass}\n\n")
+        for i in range(atomTypes):
+            file.write(f"{i+1} {self.mass}\n")
+        file.write("\n")
     def write_chain(self, file):
         """
         Writes chain data into the file.
@@ -773,61 +775,143 @@ class _model:
 
         for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 1)]:
             print(f"==> Writing infile: {infile}......")
-            try:
-                #setup
-                dir_file = os.path.join(f"{Path.simus}", infile)
-                if Run.Params["restart"][0]:
-                    read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
-                else:
-                    read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Init.Env[0].upper()}.data'
+            dir_file = os.path.join(f"{Path.simus}", infile)
+            if Run.Damp == 0.1:
+                angle_potential = """
+angle_style     harmonic
+angle_coeff     * 0.0 180
+                """
+            elif Run.Damp == 1.0:
+                angle_potential = """
+angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t
+angle_coeff     1 actharmonic_h2 0.0 180 0.0 0.0
+angle_coeff     2 actharmonic   0.0 180 0.0
+angle_coeff     3 actharmonic_t 0.0 180 0.0
+                """
+            else:
+                message = f"ERROR: Wrong Damp =>{Run.Damp}"
+                logging(message)
+                raise ValueError(message)
+            if Init.Env == "Free":
+                file_content = f"""
+# Setup
+echo                screen
+units           lj
+dimension       3
+boundary        p p p
+atom_style      angle
 
-                # potential
-                detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"], self.angle["harmonic"])
-                if Config.Type == "Ring":
-                    initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
-                else:
-                    initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
-                    run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
+variable        dir_file string {dir_file}
+read_data       {dir_file}.CF.data
 
-                #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
-                detach_configure = self.configure('# for configuration', 0.1, 0.01, Run)
-                initial_fix = self.fix('# for initialization',  1.0, 1.0, Run)
-                equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
-                data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
-                refine_read = [
-                    '# for refine',
-                    '##################################################################',
-                    f'read_dump        {self.iofile("dump", self.dump["equ"])} {Run.Tequ} {self.dump_read} wrapped no format native',
-                    '',
-                ]
-                # run
-                v_init, v_equ, v_data, v_refine = self.dump["init"], self.dump["equ"], self.dump["data"], self.dump["refine"]
-                initial_run = self.run(v_init, Run.Tinit, Run.Tinit//20, Run)
-                equal_run = self.run(v_equ, Run.Tequ, Run.Tequ//200, Run)
-                data_run = self.run(v_data, Run.TSteps, Run.TSteps//Run.Frames, Run)
-                refine_run = self.run(v_refine, Run.Tref, Run.Tref//Run.Frames, Run)
+#groups
+group                  chain type 1 2 3
 
-                # Define LAMMPS 参数
-                with open(f"{dir_file}.in", "w") as file:
-                    self.write_section(file, self.setup(Config.Dimend, dir_file, read))
-                    if not Run.Params["restart"][0]:
-                        if Init.Env == "Rand":
-                            self.write_section(file, detach_potential)
-                            self.write_section(file, detach_configure)
-                        self.write_section(file, initial_potential)
-                        self.write_section(file, initial_fix)
-                        self.write_section(file, initial_run)
-                    self.write_section(file, run_potential)
-                    self.write_section(file, equal_fix)
-                    self.write_section(file, equal_run)
-                    self.write_section(file, data_fix)
-                    self.write_section(file, data_run)
-                    self.write_section(file, refine_read)
-                    self.write_section(file, refine_run)
-            except Exception as e:
-                logging.error(f"An error occurred: {e}")
-                raise ValueError(f"An error occurred: {e}")
+# for initialization
+##################################################################
+#pair potential
+pair_style      lj/cut 1.12246
+pair_modify     shift yes
+pair_coeff      * * 1 1.0
+
+# Bond potential
+bond_style      harmonic
+bond_coeff      1 4000 1.0
+special_bonds   lj/coul 1.0 1.0 1.0
+
+# angle potential
+{angle_potential}
+##################################################################
+# for communication
+comm_style      brick
+comm_modify     mode single cutoff 3.0 vel yes
+
+neighbor        1.5 bin
+neigh_modify    every 1 delay 0 check yes 
+
+# for equalibrium
+##################################################################
+fix             LANG chain langevin 1.0 1.0 {Run.Damp} 743050779
+fix             NVE chain nve
+
+dump            EQU chain custom 1000000 ${{dir_file}}.chain_equ.lammpstrj id type xu yu zu
+dump_modify     EQU sort id
+
+reset_timestep  0
+timestep        0.001
+thermo          1000000
+log             ${{dir_file}}.log
+restart         1000000  ${{dir_file}}.a.restart  ${{dir_file}}.b.restart 
+run             200000000
+write_restart   ${{dir_file}}.equ.restart
+
+undump          EQU
+
+dump            DATA chain custom 100000 ${{dir_file}}.lammpstrj id type xu yu zu vx vy vz
+dump_modify     DATA sort id
+
+reset_timestep  0
+run             200000000
+write_restart   ${{dir_file}}.restart
+                """
+                with open(f"{dir_file}.in", 'w') as file:  # Replace with your file path
+                    file.write(file_content.strip())
+            else:
+                try:
+                    #setup
+                    dir_file = os.path.join(f"{Path.simus}", infile)
+                    if Run.Params["restart"][0]:
+                        read = f'read_restart       {self.iofile("restart", Run.Params["restart"][1])}'
+                    else:
+                        read = f'read_data       {dir_file}.{Config.Type[0].upper()}{Init.Env[0].upper()}.data'
+
+                    # potential
+                    detach_potential = self.potential('# for configuration', self.pair["INIT4422"], self.bond["harmonic"], self.angle["harmonic"])
+                    if Config.Type == "Ring":
+                        initial_potential = self.potential(f'# {Config.Type} for initialization', self.pair["LJ4422"], self.bond["fene4422"], self.angle["harmonic"])
+                        run_potential = self.potential('# for equalibrium', self.pair["LJ4422"], self.bond["fene4422"], self.angle["actharmonic"])
+                    else:
+                        initial_potential = self.potential('# for initialization', self.pair["LJ"], self.bond["harmonic"], self.angle["harmonic"])
+                        run_potential = self.potential('# for equalibrium', self.pair["LJ"], self.bond["harmonic"], self.angle["hybrid"])
+
+                    #f'# fix		 	        BOX all deform 1 x final 0.0 {Init.Lbox} y final 0.0 {Init.Lbox} units box remap x',
+                    detach_configure = self.configure('# for configuration', 0.1, 0.01, Run)
+                    initial_fix = self.fix('# for initialization',  1.0, 1.0, Run)
+                    equal_fix = self.fix('# for equalibrium', Run.Temp, Run.Damp, Run)
+                    data_fix = self.fix('# for data', Run.Temp, Run.Damp, Run)
+                    refine_read = [
+                        '# for refine',
+                        '##################################################################',
+                        f'read_dump        {self.iofile("dump", self.dump["equ"])} {Run.Tequ} {self.dump_read} wrapped no format native',
+                        '',
+                    ]
+                    # run
+                    v_init, v_equ, v_data, v_refine = self.dump["init"], self.dump["equ"], self.dump["data"], self.dump["refine"]
+                    initial_run = self.run(v_init, Run.Tinit, Run.Tinit//20, Run)
+                    equal_run = self.run(v_equ, Run.Tequ, Run.Tequ//200, Run)
+                    data_run = self.run(v_data, Run.TSteps, Run.TSteps//Run.Frames, Run)
+                    refine_run = self.run(v_refine, Run.Tref, Run.Tref//Run.Frames, Run)
+
+                    # Define LAMMPS 参数
+                    with open(f"{dir_file}.in", "w") as file:
+                        self.write_section(file, self.setup(Config.Dimend, dir_file, read))
+                        if not Run.Params["restart"][0]:
+                            if Init.Env == "Rand":
+                                self.write_section(file, detach_potential)
+                                self.write_section(file, detach_configure)
+                            self.write_section(file, initial_potential)
+                            self.write_section(file, initial_fix)
+                            self.write_section(file, initial_run)
+                        self.write_section(file, run_potential)
+                        self.write_section(file, equal_fix)
+                        self.write_section(file, equal_run)
+                        self.write_section(file, data_fix)
+                        self.write_section(file, data_run)
+                        self.write_section(file, refine_read)
+                        self.write_section(file, refine_run)
+                except Exception as e:
+                    logging.error(f"An error occurred: {e}")
+                    raise ValueError(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _path:
     def __init__(self, Model):
@@ -1370,7 +1454,7 @@ class Plotter3D(BasePlot):
                 for xi, yi in zip(x[mask], y[mask]):
                     ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
                 legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{zi}, {coef}'))
-            ax.legend(title=fr'{zlabel}, $\nu$', frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/3))
+            ax.legend(title=fr'{zlabel}, $\nu$', frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
             # colorbar
             #self.colorbar(ax, z, zlabel, is_3D)
             self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
@@ -1558,7 +1642,7 @@ class Plotter3D(BasePlot):
         self.fig_save = self.fig_save+".Exp"
         dir_file = os.path.dirname(self.fig_save)
         #columns_set = permutate([variable, "Pe", "N", "W"])
-        columns_set = ([variable, "N", "W", "Pe"])
+        columns_set = [[variable, "N", "W", "Pe"]]
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
         labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
         notes = ("(a)", "(b)")
@@ -1578,13 +1662,14 @@ class Plotter3D(BasePlot):
                 flabel, xlabel, ylabel, zlabel = labels
                 unique_x, unique_y, unique_z = np.unique(x), np.unique(y), np.unique(z)
                 xnu_yz = self.cal_nu((unique_y, unique_z), (variable, xlabel, ylabel, zlabel))
-                ynu_zx = self.cal_nu((unique_z, unique_x), (variable, ylabel, zlabel, xlabel))
-                znu_xy = self.cal_nu((unique_x, unique_y), (variable, zlabel, xlabel, ylabel))
+                if len(columns_set) > 1:
+                    ynu_zx = self.cal_nu((unique_z, unique_x), (variable, ylabel, zlabel, xlabel))
+                    znu_xy = self.cal_nu((unique_x, unique_y), (variable, zlabel, xlabel, ylabel))
                 # ----------------------------> set up<----------------------------#
                 self.set_style()
                 cmap = plt.get_cmap("rainbow")
                 # ----------------------------> figures and axies<----------------------------#
-                bot, top = (0.1, 0.90) if len(unique_z) <= 4 else (0.05, 0.95)
+                bot, top = (0.1, 0.85) if len(unique_z) <= 4 else (0.05, 0.95)
                 fig = plt.figure(figsize=(5 * 2, 5.5 * len(unique_z)))
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.5)
                 gs = GridSpec(len(unique_z), 2, figure=fig)
@@ -1594,7 +1679,8 @@ class Plotter3D(BasePlot):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
                     self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
-                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                    if len(columns_set) > 1:
+                        self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
                     #print(self.df_nu)
                     #plt.show()
                     #sys.exit()
@@ -2172,10 +2258,8 @@ class JobProcessor:
                 for iEnv in convert2array(params['labels']['Envs']):
                     Config = _config(iDimend, iType, iEnv, params)
                     if self.check and (platform.system() == "Linux") and (self.run_on_cluster == 'false'):
-                            params = self.check_params()
-                            print(platform.system())
-                            self.check = False
-                    sys.exit()
+                        params = self.check_params()
+                        self.check = False
                     for iGamma in convert2array(params['Gamma']):
                         for iTemp in convert2array(params['Temp']):
                             for iRin in convert2array(params['Rin']):
