@@ -15,7 +15,7 @@ import numpy as np
 from numba import vectorize, jit
 from collections import defaultdict
 from scipy.spatial import KDTree
-from scipy.interpolate import splrep, splev
+from scipy.interpolate import splrep, splev, griddata
 from scipy.stats import norm, linregress, gaussian_kde, multivariate_normal
 
 import seaborn as sns
@@ -39,23 +39,24 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump = ["Simus", "Anas", "Plots"][0], True, True
+task = ["Simus", "Anas", "Plots"][2]
+check, jump = (task != "Plots"), False
 if task == "Simus":
-    check = True
+    jump = True
 elif task == "Plots":
-    check = False
+    jump = False
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 10), #(5, 20)
+    'Trun': (1, 5), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -96,11 +97,11 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
-                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [0.0],
+                              #'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
+                              'N_monos': [20, 40], #80, 100, 150, 200, 250, 300],
+                              'Fa': [1.0, 10.0],
                             # 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              'Gamma': [10.0],
+                              #'Gamma': [10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -112,7 +113,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [1.0]}, #3.0, 5.0, 10.0, 15.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]}, #3.0, 5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -978,7 +979,6 @@ class _anas:
         except KeyError:
             logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
             raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
-
     def read_data(self):
         timer = Timer("Read")
         timer.start()
@@ -1118,7 +1118,7 @@ class BasePlot:
                 getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
             if axis_name == 'x':
                 ax.tick_params(axis='x', rotation=rotation)
-    def adding(self, ax, note, is_3D=False, pos=-0.25):
+    def adding(self, ax, note, pos=-0.25, is_3D=False):
         # linewidth and note
         ax.annotate(note, (pos, 0.9), textcoords="axes fraction", xycoords="axes fraction", va="center", ha="center", fontsize=20)
         if is_3D:
@@ -1424,42 +1424,59 @@ class Plotter3D(BasePlot):
                 getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
             if axis_name == 'x':
                 ax.tick_params(axis='x', rotation=rotation)
-    def colorbar(self, ax, data, label, is_3D):
+    def set_axes2D(self, ax, data, labels, title, rot=0, loc="right", log=False):
+        # label settings
+        axis_labels = {
+            "x": labels[0],
+            "y": labels[1],
+        }
+        ax.set_title(title, loc=loc, fontsize=20)
+        # Set axis limits and rotation
+        for i, (axis_data, axis_name) in enumerate(zip(data, "xy")):
+            min_val, max_val = min(axis_data), max(axis_data)
+            if log:
+                lo, hi = 0.5, 2.0
+                getattr(ax, f'set_{axis_name}scale')('log')
+            else:
+                ax.grid(True)
+                lo = 1.2 if min_val < 0 else 0.1
+                hi = 0.1 if max_val < 0 else 1.2
+            if axis_name == 'x':
+                ax.tick_params(axis='x', rotation=rot)
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3)
+            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
+    def set_axes3D(self, ax, data, labels, title, rot=0, loc="center", log=False):
+        # label settings
+        axis_labels = {
+            "x": labels[0],
+            "y": labels[1],
+            "z": labels[2],
+        }
+        ax.set_title(title, loc=loc, fontsize=20)
+        # Set axis limits and rotation
+        for i, (axis_data, axis_name) in enumerate(zip(data, "xyz")):
+            min_val, max_val = min(axis_data), max(axis_data)
+            if log:
+                lo, hi = 0.5, 2.0
+                getattr(ax, f'set_{axis_name}scale')('log')
+            else:
+                ax.grid(True)
+                lo = 1.2 if min_val < 0 else 0.5
+                hi = 0.1 if max_val < 0 else 1.2
+            if axis_name == 'x':
+                ax.tick_params(axis='x', rotation=rot)
+
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=12)
+            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
+    def colorbar(self, ax, data, label, is_3D=False):
         loc, pad = ("left", 0) if is_3D else ("right", 0.05)
         sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("rainbow"), norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
-    def scatter_exp(self, uw, ax, data, labels, note, is_3D=False, scatter=True, log=False):
-        x, y, z, w = data
-        xlabel, ylabel, zlabel, wlabel = labels
-
-        if is_3D:
-            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
-            self.colorbar(ax, w, wlabel, is_3D)
-            self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
-            self.adding(ax, note, is_3D, -0.2)
-        else:
-            legend_handles = []
-            uz, uw = np.unique(z), np.unique(w)[0]
-            markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
-            colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
-            color_map = list(zip(markers[:len(uz)], colors))
-
-            for zi, (marker, color) in zip(uz, color_map):
-                mask = (z==zi)
-                coef, x_range, y_range = scale(x[mask], y[mask])
-                ax.plot(x_range, y_range, color=color, linestyle='dashed')
-                for xi, yi in zip(x[mask], y[mask]):
-                    ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{zi}, {coef}'))
-            ax.legend(title=fr'{zlabel}, $\nu$', frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
-            # colorbar
-            #self.colorbar(ax, z, zlabel, is_3D)
-            self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
-            self.adding(ax, note, is_3D, -0.12)
-    def scatter(self, fig, ax, data, labels, note, is_3D=False, scatter=True, log=False):
+    #--------------------------------------> scatter <-----------------------------------------
+    def scatter(self, ax, data, labels, note, is_3D=False, scatter=True, log=False):
         x, y, z, w = data
         xlabel, ylabel, zlabel, wlabel = labels
         cmap = plt.get_cmap("rainbow")
@@ -1469,7 +1486,7 @@ class Plotter3D(BasePlot):
             sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
             self.colorbar(ax, cmap, norm, wlabel, is_3D)
             self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
-            self.adding(ax, note, is_3D, -0.2)
+            self.adding(ax, note, -0.2, is_3D)
         else:
             legend_handles = []
             for idx, uw in enumerate(np.unique(w)):
@@ -1484,7 +1501,58 @@ class Plotter3D(BasePlot):
             # colorbar
             self.colorbar(ax, cmap, norm, zlabel, is_3D)
             self.set_axes(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
-            self.adding(ax, note, is_3D, -0.2)
+            self.adding(ax, note, -0.2, is_3D)
+    def scatter_exp(self, uw, ax, data, labels, note, is_3D=False, scatter=True, log=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+
+        if is_3D:
+            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
+            self.colorbar(ax, w, wlabel, is_3D)
+            self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
+            self.adding(ax, note, -0.2, is_3D)
+        else:
+            legend_handles = []
+            uz, uw = np.unique(z), np.unique(w)[0]
+            markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
+            color_map = list(zip(markers[:len(uz)], colors))
+
+            for zi, (marker, color) in zip(uz, color_map):
+                mask = (z==zi)
+                coef, x_range, y_range = scale(x[mask].to_numpy(), y[mask].to_numpy())
+                if coef:
+                    ax.plot(x_range, y_range, color=color, linestyle='dashed')
+                    title = fr'{zlabel}, $\nu$'
+                    label = f'{label2mark(zi, zlabel)}, {coef}'
+                else:
+                    title = fr'{zlabel}'
+                    label = f'{label2mark(zi, zlabel)}'
+                for xi, yi in zip(x[mask], y[mask]):
+                    ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
+                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+            ax.legend(title=title, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
+            # colorbar
+            #self.colorbar(ax, z, zlabel, is_3D)
+            self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
+            self.adding(ax, note, -0.12, is_3D)
+    def scatter2D(self, ax, data, labels, note, is_3D=False):
+        x, y, z = data
+        xlabel, ylabel, zlabel = labels
+        uz = np.unique(z)
+
+        legend_handles, markers = [], ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
+        color_map = list(zip(markers[:len(uz)], colors))
+        for zi, (marker, color) in zip(uz, color_map):
+            mask = (z == zi)
+            for xi, yi in zip(x[mask], y[mask]):
+                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
+            legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color,
+                                             facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+        ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
+        self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}")
+        self.adding(ax, note, -0.12, is_3D)
     def Rg(self, variable="Rg"):
         timer = Timer(variable)
         timer.start()
@@ -1518,15 +1586,15 @@ class Plotter3D(BasePlot):
                 x, y, z, w = data
                 xlabel, ylabel, zlabel, wlabel = labels
                 # ----------------------------> plot3D<----------------------------#
-                self.scatter(fig, axes_3D[i], data, labels, note[0], True)
+                self.scatter(axes_3D[i], data, labels, note[0], True)
                 if i == 0:
                     continue
                 # ----------------------------> plot2D<----------------------------#
-                self.scatter(fig, axes_2D[2*(i-1)], data, labels, note[1])
+                self.scatter(axes_2D[2*(i-1)], data, labels, note[1])
                 if i == 2:
-                    self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, y, x), (wlabel, zlabel, ylabel, xlabel), note[2])
+                    self.scatter(axes_2D[2*(i-1) + 1], (w, z, y, x), (wlabel, zlabel, ylabel, xlabel), note[2])
                 else:
-                    self.scatter(fig, axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
+                    self.scatter(axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
             # ----------------------------> save fig <----------------------------#
             pdf.savefig(plt.gcf(), dpi=500, transparent=True)
 
@@ -1544,8 +1612,9 @@ class Plotter3D(BasePlot):
         df_nu = pd.DataFrame(columns=['nu', ylabel, zlabel])
         for (uy, uz) in [(uy, uz) for uy in unique_y for uz in unique_z]:
             df_yz = self.df[(self.df[ylabel] == uy) & (self.df[zlabel] == uz)]  # query: z, w
-            coef = scale(np.array(df_yz[xlabel]), np.array(df_yz[variable]))[0]
-            df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
+            coef = np.float32(scale(df_yz[xlabel].to_numpy(), df_yz[variable].to_numpy())[0])
+            if coef:
+                df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
         return df_nu
     ##################################################################
     def project(self, variable="Rg"):
@@ -1641,8 +1710,8 @@ class Plotter3D(BasePlot):
         # ----------------------------> start <----------------------------#
         self.fig_save = self.fig_save+".Exp"
         dir_file = os.path.dirname(self.fig_save)
-        #columns_set = permutate([variable, "Pe", "N", "W"])
-        columns_set = [[variable, "N", "W", "Pe"]]
+        columns_set = permutate([variable, "Pe", "N", "W"])
+        #columns_set = [[variable, "N", "W", "Pe"]]
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
         labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
         notes = ("(a)", "(b)")
@@ -1661,10 +1730,6 @@ class Plotter3D(BasePlot):
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
                 unique_x, unique_y, unique_z = np.unique(x), np.unique(y), np.unique(z)
-                xnu_yz = self.cal_nu((unique_y, unique_z), (variable, xlabel, ylabel, zlabel))
-                if len(columns_set) > 1:
-                    ynu_zx = self.cal_nu((unique_z, unique_x), (variable, ylabel, zlabel, xlabel))
-                    znu_xy = self.cal_nu((unique_x, unique_y), (variable, zlabel, xlabel, ylabel))
                 # ----------------------------> set up<----------------------------#
                 self.set_style()
                 cmap = plt.get_cmap("rainbow")
@@ -1679,11 +1744,7 @@ class Plotter3D(BasePlot):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
                     self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
-                    if len(columns_set) > 1:
-                        self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
-                    #print(self.df_nu)
-                    #plt.show()
-                    #sys.exit()
+                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1694,10 +1755,47 @@ class Plotter3D(BasePlot):
         # -------------------------------Done!----------------------------------------#
         return False
     ##################################################################
-    def Rg_N(self, variable="Rg"):
-        timer = Timer(f"{variable}: Rg_N")
+    def nRg(self, variable="Rg"):
+        timer = Timer(f"{variable}: Expand3D")
         timer.start()
+        # ----------------------------> start <----------------------------#
+        labels_set = permutate([variable, "Pe", "N", "W"])
+        #labels_set = [[variable, "Pe", "N", "W"]]
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
+        for data, labels in zip(data_set, labels_set):
+            df_xnu = self.cal_nu((np.unique(data[2]), np.unique(data[3])), labels)
+            f, x, y = df_xnu['nu'].to_numpy(), df_xnu[labels[2]].to_numpy(), df_xnu[labels[3]].to_numpy()
+            #print(f"nu: {f}\n N:{x}\n W:{y}")
+            self.flim = np.min(f), np.max(f)
+            flabel = fr"$^{{{variable}}}_{{{labels[1]}}}\nu$"
+            xlabel, ylabel = labels[2:4]
+            notes = ["(a)", "(b)", "(c)", "(d)"]
+            fig = plt.figure(figsize=(12, 10))
+            #plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.3, hspace=0.5)
+            # ----------------------------> set up<----------------------------#
+            self.set_style()
+            cmap = plt.get_cmap("rainbow")
+            fig.suptitle(f"{flabel}({xlabel}, {ylabel})", fontsize=25)
+            # ----------------------------> Figures<----------------------------#
+            ax = fig.add_subplot(221, projection='3d')
+            sc = ax.scatter(x, y, f, c=f, cmap="rainbow", s=100)
+            self.colorbar(ax, f, flabel, True)
+            self.set_axes3D(ax, (x, y, f), (xlabel, ylabel, flabel), f"{flabel}({xlabel},{ylabel})")
+            self.adding(ax, notes[0], -0.2)
 
+            ax = fig.add_subplot(222)
+            self.scatter2D(ax, (x, f, y), (xlabel, flabel, ylabel), notes[1])
+            ax = fig.add_subplot(224)
+            self.scatter2D(ax, (y, f, x), (ylabel, flabel, xlabel), notes[3])
+
+            ax = fig.add_subplot(223)
+            ax.scatter(x, y, c=f, s=100, cmap=cmap, label=f'{flabel}')
+            # colorbar
+            self.colorbar(ax, f, flabel)
+            self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{flabel}({xlabel},{ylabel})")
+            self.adding(ax, notes[2], -0.2)
+            plt.tight_layout(pad=3, w_pad=0.3, h_pad=0.5, rect=[0, 0, 0.95, 1])
+            plt.show()
         timer.stop()
 class Plotter4D(BasePlot):
     def colorbar(self, ax, data, label, loc="right"):
@@ -1969,18 +2067,29 @@ def unwrap_x(data, Lx):
                         data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
     return data
 def scale(x, y):
+    #print(f"x:{x},\n y:{y}")
     if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
     else:
         log_x, log_y = np.log10(x), np.log10(y)
-    slop, intercept = np.polyfit(log_x, log_y, 1)
-    coef = '{:.2f}'.format(slop)
-    poly_fit = np.poly1d((slop, intercept))
-    x_range = np.linspace(np.min(log_x) - np.log10(1.41), np.max(log_x) + np.log10(1.41), 100)
-    y_range = poly_fit(x_range)
-    x_range, y_range = np.power(10, x_range), np.power(10, y_range)
-    return coef, x_range, y_range
-
+    if len(log_x) > 1:
+        slop, intercept = np.polyfit(log_x, log_y, 1)
+        coef = '{:.2f}'.format(slop)
+        poly_fit = np.poly1d((slop, intercept))
+        x_range = np.linspace(np.min(log_x) - np.log10(1.41), np.max(log_x) + np.log10(1.41), 100)
+        y_range = poly_fit(x_range)
+        x_range, y_range = np.power(10, x_range), np.power(10, y_range)
+        return coef, x_range, y_range
+    else:
+        return False, log_x, log_y
+def label2mark(f, flabel):
+    if flabel == "Pe" and f < 1e-6:
+        mark = "Passive"
+    elif flabel == "W" and f< 1e-6:
+        mark = "Free"
+    else:
+        mark = f
+    return mark
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -2243,7 +2352,8 @@ class JobProcessor:
                 plotter4 = Plotter4D(df_Rgt, dirfile4D)
                 #plotter3.Rg()
                 #plotter3.project("Rg")
-                plotter3.expand("Rg")
+                #plotter3.expand("Rg")
+                plotter3.nRg("Rg")
                 #plotter4.expand("Rg")
                 #plotter4.expand2D("Rg")
                 print(f"==> Done! \n==>Please check the results and submit the plots!")

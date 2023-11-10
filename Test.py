@@ -1,13 +1,12 @@
 import numpy as np
 import pandas as pd
-from scipy.spatial import KDTree
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from matplotlib.gridspec import GridSpec
-from scipy.stats import norm
-from scipy.stats import gaussian_kde
-from scipy.stats import multivariate_normal
+from scipy.stats import norm, gaussian_kde, multivariate_normal
+from scipy.spatial import KDTree
+from scipy.interpolate import griddata
 import matplotlib.transforms as mtransforms
 import seaborn as sns
 import warnings
@@ -894,30 +893,54 @@ class plotGraph:
 
 # Generate some example DataFrame; replace this with your actual data
 
-df_Rg2 = pd.DataFrame({
+data = pd.DataFrame({
     'Pe': np.random.rand(100),
     'N': np.random.rand(100),
     'W': np.random.rand(100),
-    'Rg2': np.random.rand(100)
+    'nu': np.random.rand(100)
 })
 
-plotter = plotGraph(df_Rg2)
-#plotter.plot_graphs()
-# Given array
-input_array = ["Rg", "Pe", "N", "W"]
+df = pd.DataFrame(data)
 
+# 定义变量
+nu = np.array(df['nu'])
+N = np.array(df['N'])
+W = np.array(df['W'])
 
+# 创建网格数据
+xi = np.linspace(N.min(), N.max(), 100)
+yi = np.linspace(W.min(), W.max(), 100)
+X, Y = np.meshgrid(xi, yi)
+Z = griddata((N, W), nu, (X, Y), method='cubic')
 
-chunk = 9
-atoms = 100
-frames = 2001
+# 创建图形
+fig, axs = plt.subplots(2, 2, figsize=(14, 10))
 
-# Method 1: Using map and lambda
-skiprows_1 = np.array(list(map(lambda x: np.arange(chunk) + (atoms + chunk) * x, np.arange(frames+1)))).ravel()
+# ax_c Pcolormesh热图
+c = axs[0, 1].pcolormesh(X, Y, Z, shading='gouraud', cmap='viridis')
+fig.colorbar(c, ax=axs[0, 1], extend='both')
+axs[0, 1].set_xlabel('N')
+axs[0, 1].set_ylabel('W')
+axs[0, 1].set_title('Pcolormesh Heatmap of nu')
 
-# Method 2: Using list comprehension and concatenate
-skiprows_2 = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(frames + 1)])
+# 等高线图
+CS = axs[1, 0].contour(X, Y, Z, levels=14, linewidths=0.5, colors='k')
+axs[1, 0].contourf(X, Y, Z, levels=14, cmap="rainbow")
+axs[1, 0].clabel(CS, inline=True, fontsize=8)
+axs[1, 0].set_xlabel('N')
+axs[1, 0].set_ylabel('W')
+axs[1, 0].set_title('Contour plot of nu')
 
-# Test if both methods give the same result
-print(np.array_equal(skiprows_1, skiprows_2))
+# 密度图（Hexbin）
+hb = axs[1, 1].hexbin(N, W, C=nu, gridsize=50, cmap='inferno', bins='log')
+fig.colorbar(hb, ax=axs[1, 1], extend='both')
+axs[1, 1].set_xlabel('N')
+axs[1, 1].set_ylabel('W')
+axs[1, 1].set_title('Hexbin plot of nu')
+
+# 调整子图间距
+plt.tight_layout()
+plt.show()
+
+# 如果您有其他的可视化需求，例如3D曲面图、散点图矩阵等，请补充您的需求，我可以继续为您提供相应的代码和解释。
 
