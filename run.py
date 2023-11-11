@@ -39,24 +39,25 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task = ["Simus", "Anas", "Plots"][2]
-check, jump = (task != "Plots"), False
+task, check, jump = ["Simus", "Anas", "Plots"][1], (task != "Plots"), True
 if task == "Simus":
     jump = True
 elif task == "Plots":
     jump = False
+if HOST == "Darwin":
+    OPEN = True
 #-----------------------------------Dictionary-------------------------------------------
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 10), #(5, 20)
+    'Trun': (6, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -68,10 +69,10 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
-                          'Gamma': [1, 10],
+                          #'Gamma': [1, 10],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -90,18 +91,18 @@ class _config:
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[1.0]}, #3.0, 5.0, 10.0, 15.0, 20.0]},
+                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]},
                         },
                 },
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
-                              #'N_monos': [20, 40], #80, 100, 150, 200, 250, 300],
+                              #'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
+                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                               #'Fa': [1.0, 10.0],
-                              'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              'Gamma': [1.0, 10.0],
+                              'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                              #'Gamma': [10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -113,7 +114,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]}, #3.0, 5.0, 10.0, 15.0]},
+                         3: {"Rin": [0.0], "Wid": [1.0, 3.0, 5.0, 10.0, 15.0]},
                          },
             },
         }
@@ -927,7 +928,7 @@ class _path:
         self.jump = self.build_paths()
         self.filename = os.path.basename(os.path.abspath(__file__))
     def build_paths(self):
-        self.simus = os.path.join(self.host, self.mydirs[1])
+        self.base = os.path.join(self.host, self.mydirs[1])
         for dir in self.mydirs:
             self.host_dir = os.path.join(self.host, dir)
             os.makedirs(self.host_dir, exist_ok=True)
@@ -946,21 +947,21 @@ class _path:
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5
-        if Trun[0] == 1:
-            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[1]}")
-        else:
-            self.simus = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}-{self.Run.Trun[1]}")
-            self.simus0 = os.path.join(self.simus, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]-1}")
+        self.simus0 = os.path.join(self.base, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]}-{self.Run.Trun[1]}")
+        self.simus1 = os.path.join(self.base, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[0]-1}")
+        self.simus2 = os.path.join(self.base, self.dir1, f'{self.dir2}', f"{self.dir3}_{self.Run.eSteps}T{self.Run.Trun[1]}")
+        self.simus = self.simus2 if Trun[0] == 1 else self.simus0
         #/Users/wukong/Data/Simus/2D_100G_1.0Pe_Chain/5.0R5.0_100N1_Anulus/1.0T_0.0Xi_8T5/5.0R5.0_100N1_CA.data
 
         #Anas and Figures
-        self.fig0 = self.simus.replace(self.mydirs[1], self.mydirs[2])
+        self.fig = self.simus.replace(self.mydirs[1], self.mydirs[2])
+        self.fig0 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
         self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
         return os.path.exists(self.lmp_trj)
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
-              f"Path.simus: {self.simus}\nPath.fig0: {self.fig0}")
+              f"Path.simus: {self.simus}\nPath.fig: {self.fig}")
 #############################################################################################################
 class _anas:
     def __init__(self, Path, Pe):
@@ -987,15 +988,15 @@ class _anas:
 
         self.data = np.zeros((self.Run.Trun[1], self.Run.Frames+1, self.Init.num_monos, len(dump)))
         # read the lammpstrj files with 2001 frames
-        print(f"{self.Path.simus}")
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun[1] + 1)]):
-            if int(ifile) < self.Run.Trun[0]:
-                dir_file = os.path.join(f"{self.Path.simus0}", f"{ifile}.lammpstrj")
-            elif int(ifile) >= self.Run.Trun[0] and int(ifile) <= self.Run.Trun[1]:
-                dir_file = os.path.join(f"{self.Path.simus}", f"{ifile}.lammpstrj")
-            else:
-                logging.error(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
-                raise ValueError(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
+            for i, path in enumerate([self.Path.simus, self.Path.simus1, self.Path.simus2, self.Path.simus0]):
+                if os.path.exists(path):
+                    dir_file = os.path.join(f"{path}", f"{ifile}.lammpstrj")
+                    print(f"{path}")
+                    break
+                elif i == 3:
+                    logging.error(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
+                    raise ValueError(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
             logging.info(f"==> Reading {dir_file} file: ......")
             print(f"==> Reading {dir_file} file: ......")
             # extract natoms, time steps, and check the last time step
@@ -1033,7 +1034,7 @@ class _anas:
         return self.data
     def save_data(self):
         # data[ifile][iframe][iatom][xu, yu]
-        Rg_save = os.path.join(self.Path.fig0, "Rg2_time.npy")
+        Rg_save = os.path.join(self.Path.fig, "Rg2_time.npy")
         if os.path.exists(Rg_save) and jump:
             print(f"JUMP==>{Rg_save} is already!")
             logging.info(f"JUMP==>{Rg_save} is already!")
@@ -1053,7 +1054,7 @@ class _anas:
             # Rg2_time[iframe]
             Rg2_time = np.mean(np.mean(self.data_Rcom ** 2, axis=-1), axis=0) #average over atoms and files
             Rg2 = np.mean(Rg2_time) # average over time
-            message = f"==>saving Rg2_time: {self.Path.fig0}"
+            message = f"==>saving Rg2_time: {self.Path.fig}"
             print(message)
             logging.info(message)
             np.save(Rg_save, Rg2_time)
@@ -1066,15 +1067,16 @@ class BasePlot:
         self.fig_save = fig_save
         self.variable = variable
         self.jump = jump
-    def fig_path(self, mark):
-        self.fig_save = f"{self.fig_save}.{mark}"
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
+    def fig_path(self, mark=None, fig_save=None):
+        fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
+        if os.path.exists(f"{fig_file}.pdf") and self.jump:
+            print(f"==>{fig_file}.pdf is already!")
+            logging.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
+            print(f"{fig_file}.pdf")
+            logging.info(f"{fig_file}.pdf")
+        return fig_file
     def set_style(self):
         '''plotting'''
         plt.clf()
@@ -1219,15 +1221,15 @@ class _plot(BasePlot):
         unique_coords_g, _, _, counts_g = statistics(data_g)
 
         #----------------------------> figure path <----------------------------#
-        fig_save = os.path.join(f"{self.Path.fig0}", fr"{self.variable}.Org.({z_abbre},{x_abbre},{y_abbre})")
-        if os.path.exists(f"{fig_save}.pdf") and self.jump:
-            print(f"==>{fig_save}.pdf is already!")
-            logging.info(f"==>{fig_save}.pdf is already!")
+        fig_file = os.path.join(f"{self.Path.fig}", fr"{self.variable}.Org.({z_abbre},{x_abbre},{y_abbre})")
+        if os.path.exists(f"{fig_file}.pdf") and self.jump:
+            print(f"==>{fig_file}.pdf is already!")
+            logging.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{fig_save}.pdf")
-            logging.info(f"{fig_save}.pdf")
-        with PdfPages(f"{fig_save}.pdf") as pdf:
+            print(f"{fig_file}.pdf")
+            logging.info(f"{fig_file}.pdf")
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figure<----------------------------#
             self.set_style()
             # Prepare figure and subplots
@@ -1281,7 +1283,7 @@ class _plot(BasePlot):
             # ----------------------------> save fig <----------------------------#
             pdf.savefig(plt.gcf(), dpi=500, transparent=True)
             # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-            #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+            #fig.savefig(f"{fig_file}.png", format="png", dpi=1000, transparent=True)
             timer.count("saving figure")
             plt.show()
             plt.close()
@@ -1306,15 +1308,15 @@ class _plot(BasePlot):
             #hist_x_at_y, hist_y_at_x = np.nan_to_num(hist_x_at_y), np.nan_to_num(hist_y_at_x)
 
             #----------------------------> figure settings <----------------------------#
-            fig_save = os.path.join(f"{self.Path.fig0}", f"{self.variable}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
-            if os.path.exists(f"{fig_save}.pdf") and self.jump:
-                print(f"==>{fig_save}.pdf is already!")
-                logging.info(f"==>{fig_save}.pdf is already!")
+            fig_file = os.path.join(f"{self.Path.fig}", f"{self.variable}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
+            if os.path.exists(f"{fig_file}.pdf") and self.jump:
+                print(f"==>{fig_file}.pdf is already!")
+                logging.info(f"==>{fig_file}.pdf is already!")
                 return True
             else:
-                print(f"{fig_save}.pdf")
-                logging.info(f"{fig_save}.pdf")
-            with PdfPages(f"{fig_save}.pdf") as pdf:
+                print(f"{fig_file}.pdf")
+                logging.info(f"{fig_file}.pdf")
+            with PdfPages(f"{fig_file}.pdf") as pdf:
                 self.set_style()
                 # ----------------------------> plot figure<----------------------------#
                 # Create the layout
@@ -1377,7 +1379,7 @@ class _plot(BasePlot):
 
                 #print("saving png......")
                 # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-                #fig0.savefig(f"{fig_save}.png", format="png", dpi=1000, transparent=True)
+                #fig.savefig(f"{fig_file}.png", format="png", dpi=1000, transparent=True)
                 plt.show()
                 plt.close()
             # -------------------------------Done!----------------------------------------#
@@ -1528,7 +1530,7 @@ class Plotter3D(BasePlot):
 
             for zi, (marker, color) in zip(uz, color_map):
                 mask = (z==zi)
-                coef, x_range, y_range = scale(x[mask].to_numpy(), y[mask].to_numpy())
+                coef, x_range, y_range = scale(x[mask], y[mask])
                 if coef:
                     ax.plot(x_range, y_range, color=color, linestyle='dashed')
                     title = fr'{zlabel}, $\nu$'
@@ -1564,21 +1566,15 @@ class Plotter3D(BasePlot):
     def Rg(self):
         timer = Timer(self.variable)
         timer.start()
-        #----------------------------> figure settings <----------------------------#
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
+
         # ----------------------------> preparing<----------------------------#
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", self.variable), ("Pe", "N", self.variable, "W"),
                                                                                                                             ("Pe", "W", self.variable, "N"), ("N", "W", self.variable, "Pe")]]
         labels_set = [("Pe", "N", "W", var2str(self.variable)[0]), ("Pe", "N", var2str(self.variable)[0], "W"),
                             ("Pe", "W", var2str(self.variable)[0], "N"), ("N", "W", var2str(self.variable)[0], "Pe")]
         notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path()
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figures<----------------------------#
             self.set_style()
             #Prepare figure and subplots
@@ -1606,7 +1602,7 @@ class Plotter3D(BasePlot):
             pdf.savefig(plt.gcf(), dpi=500, transparent=True)
 
             # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-            #fig0.savefig(f"{self.fig_save}.png", format="png", dpi=1000, transparent=True)
+            #fig.savefig(f"{fig_file}.png", format="png", dpi=1000, transparent=True)
             timer.count("saving figure")
             plt.show()
             plt.close()
@@ -1627,7 +1623,6 @@ class Plotter3D(BasePlot):
         timer = Timer(f"{self.variable}: Expand3D")
         timer.start()
 
-        dir_file = os.path.dirname(self.fig_save)
         columns_set = permutate([self.variable, "Pe", "N", "W"])
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
         labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in columns_set]
@@ -1635,17 +1630,10 @@ class Plotter3D(BasePlot):
             f, x, y, z = data
             flabel, xlabel, ylabel, zlabel = labels
             fcolumn, xcolumn, ycolumn, zcolumn = columns
-            self.fig_save = os.path.join(f"{dir_file}", f"(r,s,t){fcolumn}({xcolumn},{ycolumn};{zcolumn}).Exp")
             # ----------------------------> figure.pdf and jump<----------------------------#
-            if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-                print(f"==>{self.fig_save}.pdf is already!")
-                logging.info(f"==>{self.fig_save}.pdf is already!")
-                continue
-            else:
-                print(f"{self.fig_save}.pdf")
-                logging.info(f"{self.fig_save}.pdf")
-            # -----------------------------------------------------------------------------#
-            with PdfPages(f"{self.fig_save}.pdf") as pdf:
+            fig_save = os.path.join(os.path.dirname(self.fig_save), f"(r,s,t){fcolumn}({xcolumn},{ycolumn};{zcolumn})")
+            fig_file = self.fig_path("Exp", fig_save)
+            with PdfPages(f"{fig_file}.pdf") as pdf:
                 for iz in z:
                     # ----------------------------> set up<----------------------------#
                     self.set_style()
@@ -1673,8 +1661,8 @@ class Plotter3D(BasePlot):
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
         labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in labels_set]
         # ----------------------------> figure.pdf <----------------------------#
-        self.fig_path("Proj")
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path("Proj")
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 # ----------------------------> data and labels <----------------------------#
                 f, x, y, z = data
@@ -1708,8 +1696,8 @@ class Plotter3D(BasePlot):
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
         labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in columns_set]
         # ----------------------------> figure.pdf <----------------------------#
-        self.fig_path("Exp")
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path("Exp")
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
@@ -1733,7 +1721,7 @@ class Plotter3D(BasePlot):
                 pdf.savefig(fig, dpi=500, transparent=True)
                 plt.show()
                 plt.close()
-                timer.count(f'{variable}({xlabel}, {ylabel}; {zlabel})')
+                timer.count(f'{self.variable}({xlabel}, {ylabel}; {zlabel})')
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
@@ -1746,8 +1734,8 @@ class Plotter3D(BasePlot):
         #labels_set = [[self.variable, "Pe", "N", "W"]]
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
         # ----------------------------> figure.pdf <----------------------------#
-        self.fig_path("Scale")
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path("Scale")
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             for data, labels in zip(data_set, labels_set):
                 df_xnu = self.cal_nu((np.unique(data[2]), np.unique(data[3])), labels)
                 f, x, y = df_xnu['nu'].to_numpy(), df_xnu[labels[2]].to_numpy(), df_xnu[labels[3]].to_numpy()
@@ -1842,11 +1830,10 @@ class Plotter4D(BasePlot):
     def expand(self):
         timer = Timer(f"{self.variable}: Expand4D1")
         timer.start()
-        dir_file = os.path.dirname(self.fig_save)
-        self.fig_save = os.path.join(f"{dir_file}", f"(r,s){self.variable}(t,Pe,N;W)")
+        fig_save = os.path.join(os.path.dirname(self.fig_save), f"(r,s){self.variable}(t,Pe,N;W)")
         # ----------------------------> figure.pdf <----------------------------#
-        self.fig_path("Exp1D")
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path("Exp1D", fig_save)
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             for columns in permutate([self.variable, 'Pe', 'N', 'W'], 't'): #[[variable, 't', 'Pe', 'N', 'W']]:
                 # ----------------------------> prepare: data and labels<----------------------------#
                 xlabel, ylabel, zlabel, wlabel = columns[1:]
@@ -1874,11 +1861,10 @@ class Plotter4D(BasePlot):
     def expand2D(self):
         timer = Timer(f"{self.variable}: Expand4D2")
         timer.start()
-        dir_file = os.path.dirname(self.fig_save)
-        self.fig_save = os.path.join(f"{dir_file}", f"(r,s){self.variable}(t,Pe;N,W)")
+        fig_save = os.path.join(os.path.dirname(self.fig_save), f"(r,s){self.variable}(t,Pe;N,W)")
         # ----------------------------> figure.pdf <----------------------------#
-        self.fig_path("Exp2D")
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+        fig_file = self.fig_path("Exp2D", fig_save)
+        with PdfPages(f"{fig_file}.pdf") as pdf:
             for columns in permutate([variable, 'Pe', 'N', 'W'], 't'): #[[variable, 't', 'Pe', 'N', 'W']]:
                 # ----------------------------> prepare: data and labels<----------------------------#
                 xlabel, ylabel, zlabel, wlabel = columns[1:]
@@ -2229,9 +2215,9 @@ class JobProcessor:
         ###################################################################
         # Initialize directories and files
         Anas, Plot = _anas(Path, Pe), _plot(Path)
-        message = f"dir_figs => {Path.fig0}"
-        os.makedirs(Path.fig0, exist_ok=True)
-        py_file = os.path.join(f"{Path.fig0}", f"dana.py")
+        message = f"dir_figs => {Path.fig}"
+        os.makedirs(Path.fig, exist_ok=True)
+        py_file = os.path.join(f"{Path.fig}", f"dana.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
         print(message)
@@ -2299,7 +2285,10 @@ class JobProcessor:
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 print(f"Submitted: {dir_file}.py")
                 self.submitted = True
-            else: # HOST == "Darwin":  # macOS
+            elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+                run.exe_plot("load", "Rg", ['Pe', 'N', 'W'])
+                print(f"==> Done!")
+            elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
                         Init = _init(Config, Run.Trun, iRin, iWid, iN)
@@ -2308,7 +2297,14 @@ class JobProcessor:
                         for iFa in convert2array(params['Fa']):
                             for iXi in convert2array(params['Xi']):
                                 Path = _path(_model(Init, Run, iFa, iXi))
-                                Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
+                                for i, path in enumerate([Path.fig0, Path.fig]):
+                                    if os.path.exists(path):
+                                        Rg2 = np.load(os.path.join(path, "Rg2_time.npy"))
+                                        break
+                                    elif i == 1:
+                                        message = f"ERROR: Wrong figure path = {path}"
+                                        logging.error(message)
+                                        raise ValueError(message)
                                 Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
                                 self.df_Rg = self.df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
                                 self.df_Rgt = self.df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
@@ -2337,8 +2333,12 @@ class JobProcessor:
         plotter3.project()
         plotter3.expand()
         #plotter3.nRg_scale()
+
         # plotter4.expand()
         # plotter4.expand2D()
+        if OPEN:
+            subprocess.run(f"open {path}")
+            OPEN = False
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
         params = self.params
@@ -2383,6 +2383,7 @@ if __name__ == "__main__":
     Trun = params['Trun']
     if task == "Simus":
         if "Codes" in CURRENT_DIR:
+            shutil.copy(__file__, f"{task}.py")
             run.process(data_job="simus_job")
         elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
             try:
@@ -2395,14 +2396,13 @@ if __name__ == "__main__":
                 print(usage)
                 logging.error(f"An error occurred: {e}")
                 raise ValueError(f"An error occurred: {e}")
-
     # Analysis: single
     elif task == "Anas":
+        shutil.copy(__file__, f"{task}.py")
         run.process(data_job="anas_job")
+        shutil.copy(__file__, f"{task}.py")
+        run.process(plot_job="Rg_job")
     # plot: Pe, N, W
     elif task == "Plots":
-        if "Codes" in CURRENT_DIR:
-            run.process(plot_job="Rg_job")
-        elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-            run.exe_plot("load", "Rg", ['Pe', 'N', 'W'])
-            print(f"==> Done!")
+        shutil.copy(__file__, f"{task}.py")
+        run.process(plot_job="Rg_job")
