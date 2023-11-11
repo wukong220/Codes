@@ -39,7 +39,8 @@ usage = "Run.py infile or bsub < infile.lsf"
 
 #-----------------------------------Parameters-------------------------------------------
 #mpl.use("agg")
-task, check, jump = ["Simus", "Anas", "Plots"][1], (task != "Plots"), True
+task = ["Simus", "Anas", "Plots"][0]
+check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
 elif task == "Plots":
@@ -50,14 +51,14 @@ if HOST == "Darwin":
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
+                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (6, 20), #(5, 20)
+    'Trun': (1, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -72,7 +73,6 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
-                          #'Gamma': [1, 10],
                           },
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -91,7 +91,7 @@ class _config:
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]},
+                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
                         },
                 },
 
@@ -238,6 +238,7 @@ class _run:
                 f'#BSUB -n 1',
                 f'#BSUB -oo {dir_file}.out',
                 f'#BSUB -eo {dir_file}.err',
+                f'source ~/.bashrc',
                 f'export RUN_ON_CLUSTER=true',
                 f'cd {Path.simus}',
                 f'echo "python3 Run.py {infile}"',
@@ -778,22 +779,6 @@ class _model:
         for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 1)]:
             print(f"==> Writing infile: {infile}......")
             dir_file = os.path.join(f"{Path.simus}", infile)
-            if Run.Damp == 0.1:
-                angle_potential = """
-angle_style     harmonic
-angle_coeff     * 0.0 180
-                """
-            elif Run.Damp == 1.0:
-                angle_potential = """
-angle_style     hybrid actharmonic_h2 actharmonic actharmonic_t
-angle_coeff     1 actharmonic_h2 0.0 180 0.0 0.0
-angle_coeff     2 actharmonic   0.0 180 0.0
-angle_coeff     3 actharmonic_t 0.0 180 0.0
-                """
-            else:
-                message = f"ERROR: Wrong Damp =>{Run.Damp}"
-                logging(message)
-                raise ValueError(message)
             if Init.Env == "Free":
                 file_content = f"""
 # Setup
@@ -822,7 +807,8 @@ bond_coeff      1 4000 1.0
 special_bonds   lj/coul 1.0 1.0 1.0
 
 # angle potential
-{angle_potential}
+angle_style     harmonic
+angle_coeff     * 0.0 180
 ##################################################################
 # for communication
 comm_style      brick
@@ -990,13 +976,13 @@ class _anas:
         # read the lammpstrj files with 2001 frames
         for index, ifile in enumerate([f"{i:03}" for i in range(1, self.Run.Trun[1] + 1)]):
             for i, path in enumerate([self.Path.simus, self.Path.simus1, self.Path.simus2, self.Path.simus0]):
-                if os.path.exists(path):
-                    dir_file = os.path.join(f"{path}", f"{ifile}.lammpstrj")
+                dir_file = os.path.join(f"{path}", f"{ifile}.lammpstrj")
+                if os.path.exists(dir_file):
                     print(f"{path}")
                     break
                 elif i == 3:
-                    logging.error(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
-                    raise ValueError(f"ERROR: Wrong Trun => ifile = {ifile} while Trun = {self.Run.Trun}")
+                    logging.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
+                    raise ValueError(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
             logging.info(f"==> Reading {dir_file} file: ......")
             print(f"==> Reading {dir_file} file: ......")
             # extract natoms, time steps, and check the last time step
@@ -2091,8 +2077,8 @@ class JobProcessor:
             f'#BSUB -n 1',
             f'#BSUB -oo {dir_file}.out',
             f'#BSUB -eo {dir_file}.err',
-            f'export RUN_ON_CLUSTER=true',
             f'source ~/.bashrc',
+            f'export RUN_ON_CLUSTER=true',
             f'cd {os.path.dirname(dir_file)}',
             f'echo "python3 {dir_file}.py"',
             f'python3 {dir_file}.py',
@@ -2381,9 +2367,11 @@ if __name__ == "__main__":
     # Simulations
     run = JobProcessor(params)
     Trun = params['Trun']
+    back_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{task}.py")
+    if os.path.abspath(__file__) != back_file:
+        shutil.copy(os.path.abspath(__file__), back_file)
     if task == "Simus":
         if "Codes" in CURRENT_DIR:
-            shutil.copy(__file__, f"{task}.py")
             run.process(data_job="simus_job")
         elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
             try:
@@ -2398,11 +2386,8 @@ if __name__ == "__main__":
                 raise ValueError(f"An error occurred: {e}")
     # Analysis: single
     elif task == "Anas":
-        shutil.copy(__file__, f"{task}.py")
         run.process(data_job="anas_job")
-        shutil.copy(__file__, f"{task}.py")
         run.process(plot_job="Rg_job")
     # plot: Pe, N, W
     elif task == "Plots":
-        shutil.copy(__file__, f"{task}.py")
         run.process(plot_job="Rg_job")
