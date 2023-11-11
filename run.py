@@ -36,7 +36,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Parameters-------------------------------------------
-task = ["Simus", "Anas", "Plots"][0]
+task = ["Simus", "Anas", "Plots"][2]
 check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
@@ -47,14 +47,14 @@ if HOST == "Darwin":
 #-----------------------------------Dictionary-------------------------------------------
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 20), #(5, 20)
+    'Trun': (6, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -937,7 +937,8 @@ class _path:
 
         #Anas and Figures
         self.fig = self.simus.replace(self.mydirs[1], self.mydirs[2])
-        self.fig0 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
+        self.fig0 = self.simus0.replace(self.mydirs[1], self.mydirs[2])
+        self.fig1 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
         self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
         return os.path.exists(self.lmp_trj)
     def show(self):
@@ -2277,14 +2278,15 @@ class JobProcessor:
                         for iFa in convert2array(params['Fa']):
                             for iXi in convert2array(params['Xi']):
                                 Path = _path(_model(Init, Run, iFa, iXi))
-                                for i, path in enumerate([Path.fig0, Path.fig]):
-                                    if os.path.exists(path):
-                                        Rg2 = np.load(os.path.join(path, "Rg2_time.npy"))
+                                for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
+                                    Rg_file = os.path.join(path, "Rg2_time.npy")
+                                    if os.path.exists(Rg_file):
                                         break
-                                    elif i == 1:
-                                        message = f"ERROR: Wrong figure path = {path}"
+                                    elif i == 2:
+                                        message = f"ERROR: Wrong {variable} path = {Rg_file}"
                                         logging.error(message)
                                         raise ValueError(message)
+                                Rg2 = np.load(Rg_file)
                                 Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
                                 self.df_Rg = self.df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
                                 self.df_Rgt = self.df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
