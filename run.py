@@ -49,14 +49,14 @@ elif task == "Plots":
 #参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
+                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 5), #(5, 20)
+    'Trun': (1, 10), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -97,11 +97,11 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              #'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
-                              'N_monos': [20, 40], #80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0, 10.0],
-                            # 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                              #'Gamma': [10.0],
+                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
+                              #'N_monos': [20, 40], #80, 100, 150, 200, 250, 300],
+                              #'Fa': [1.0, 10.0],
+                              'Fa': [0.0], #0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                              'Gamma': [1.0, 10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
@@ -1061,10 +1061,20 @@ class _anas:
 
         return True
 class BasePlot:
-    def __init__(self, df, fig_save):
+    def __init__(self, variable, df, fig_save):
         self.df = df
         self.fig_save = fig_save
+        self.variable = variable
         self.jump = jump
+    def fig_path(self, mark):
+        self.fig_save = f"{self.fig_save}.{mark}"
+        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
+            print(f"==>{self.fig_save}.pdf is already!")
+            logging.info(f"==>{self.fig_save}.pdf is already!")
+            return True
+        else:
+            print(f"{self.fig_save}.pdf")
+            logging.info(f"{self.fig_save}.pdf")
     def set_style(self):
         '''plotting'''
         plt.clf()
@@ -1074,6 +1084,8 @@ class BasePlot:
         plt.rcParams['ytick.direction'] = 'in'
         plt.rcParams['xtick.labelsize'] = 15
         plt.rcParams['ytick.labelsize'] = 15
+        self.notes = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)", "(g)", "(h)", "(i)", "(j)", "(k)"]
+        self.markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
     def colorbar(self, fig, ax, sc, label, is_3D=False, loc="right"):
         '''colorbar'''
         axpos = ax.get_position()
@@ -1316,11 +1328,11 @@ class _plot(BasePlot):
                 ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
 
                 # Plot fz(x,y)
-                cmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
+                heatmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
                 ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
                 ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
                 title = fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})"
-                self.colorbar(fig, ax_a, cmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
+                self.colorbar(fig, ax_a, heatmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
                 self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
 
                 # Plot Fz(x;y0)
@@ -1417,7 +1429,7 @@ class Plotter3D(BasePlot):
             min_val, max_val = min(axis_data), max(axis_data)
             if scatter:
                 if axis_name == "y":
-                    getattr(ax, f'set_{axis_name}lim')(self.flim[0]* lo, self.flim[1]*hi)
+                    getattr(ax, f'set_{axis_name}lim')(np.min(self.df[self.variable])* lo, np.max(self.df[self.variable])*hi)
                 else:
                     getattr(ax, f'set_{axis_name}lim')((min_val - 1) * lo, max_val * hi)
             else:
@@ -1470,7 +1482,7 @@ class Plotter3D(BasePlot):
             getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
     def colorbar(self, ax, data, label, is_3D=False):
         loc, pad = ("left", 0) if is_3D else ("right", 0.05)
-        sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("rainbow"), norm=Normalize(vmin=data.min(), vmax=data.max()))
+        sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
@@ -1479,27 +1491,24 @@ class Plotter3D(BasePlot):
     def scatter(self, ax, data, labels, note, is_3D=False, scatter=True, log=False):
         x, y, z, w = data
         xlabel, ylabel, zlabel, wlabel = labels
-        cmap = plt.get_cmap("rainbow")
-        markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
         if is_3D:
-            norm = Normalize(vmin=w.min(), vmax=w.max())
             sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
-            self.colorbar(ax, cmap, norm, wlabel, is_3D)
+            self.colorbar(ax, w, wlabel, is_3D)
             self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
             self.adding(ax, note, -0.2, is_3D)
         else:
             legend_handles = []
             for idx, uw in enumerate(np.unique(w)):
                 mask = (w == uw)
-                marker = markers[idx % len(markers)]
+                marker = self.markers[idx % len(self.markers)]
                 norm = Normalize(vmin=z.min(), vmax=z.max())
-                colors = [cmap(norm(zi)) for zi in z[mask]]
+                colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
                 for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
                     ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
                 legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
             ax.legend(handles=legend_handles, title=wlabel, frameon=False)
             # colorbar
-            self.colorbar(ax, cmap, norm, zlabel, is_3D)
+            self.colorbar(ax, z, zlabel, is_3D)
             self.set_axes(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
             self.adding(ax, note, -0.2, is_3D)
     def scatter_exp(self, uw, ax, data, labels, note, is_3D=False, scatter=True, log=False):
@@ -1514,9 +1523,8 @@ class Plotter3D(BasePlot):
         else:
             legend_handles = []
             uz, uw = np.unique(z), np.unique(w)[0]
-            markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
             colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
-            color_map = list(zip(markers[:len(uz)], colors))
+            color_map = list(zip(self.markers[:len(uz)], colors))
 
             for zi, (marker, color) in zip(uz, color_map):
                 mask = (z==zi)
@@ -1541,9 +1549,9 @@ class Plotter3D(BasePlot):
         xlabel, ylabel, zlabel = labels
         uz = np.unique(z)
 
-        legend_handles, markers = [], ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
+        legend_handles = []
         colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
-        color_map = list(zip(markers[:len(uz)], colors))
+        color_map = list(zip(self.markers[:len(uz)], colors))
         for zi, (marker, color) in zip(uz, color_map):
             mask = (z == zi)
             for xi, yi in zip(x[mask], y[mask]):
@@ -1553,8 +1561,8 @@ class Plotter3D(BasePlot):
         ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
         self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}")
         self.adding(ax, note, -0.12, is_3D)
-    def Rg(self, variable="Rg"):
-        timer = Timer(variable)
+    def Rg(self):
+        timer = Timer(self.variable)
         timer.start()
         #----------------------------> figure settings <----------------------------#
         if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
@@ -1565,10 +1573,10 @@ class Plotter3D(BasePlot):
             print(f"{self.fig_save}.pdf")
             logging.info(f"{self.fig_save}.pdf")
         # ----------------------------> preparing<----------------------------#
-        data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", variable), ("Pe", "N", variable, "W"),
-                                                                                                                            ("Pe", "W", variable, "N"), ("N", "W", variable, "Pe")]]
-        labels_set = [("Pe", "N", "W", var2str(variable)[0]), ("Pe", "N", var2str(variable)[0], "W"),
-                            ("Pe", "W", var2str(variable)[0], "N"), ("N", "W", var2str(variable)[0], "Pe")]
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in [("Pe", "N", "W", self.variable), ("Pe", "N", self.variable, "W"),
+                                                                                                                            ("Pe", "W", self.variable, "N"), ("N", "W", self.variable, "Pe")]]
+        labels_set = [("Pe", "N", "W", var2str(self.variable)[0]), ("Pe", "N", var2str(self.variable)[0], "W"),
+                            ("Pe", "W", var2str(self.variable)[0], "N"), ("N", "W", var2str(self.variable)[0], "Pe")]
         notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
         with PdfPages(f"{self.fig_save}.pdf") as pdf:
             # ----------------------------> plot figures<----------------------------#
@@ -1577,7 +1585,6 @@ class Plotter3D(BasePlot):
             fig = plt.figure(figsize=(18, 25))
             plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.35, hspace=0.5)
             gs = GridSpec(6, 4, figure=fig)
-            cmap = plt.get_cmap("rainbow")
             axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
             axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
 
@@ -1608,68 +1615,22 @@ class Plotter3D(BasePlot):
         return False
     def cal_nu(self, data, labels):
         unique_y, unique_z = data
-        variable, xlabel, ylabel, zlabel = labels
+        flabel, xlabel, ylabel, zlabel = labels
         df_nu = pd.DataFrame(columns=['nu', ylabel, zlabel])
         for (uy, uz) in [(uy, uz) for uy in unique_y for uz in unique_z]:
             df_yz = self.df[(self.df[ylabel] == uy) & (self.df[zlabel] == uz)]  # query: z, w
-            coef = np.float32(scale(df_yz[xlabel].to_numpy(), df_yz[variable].to_numpy())[0])
+            coef = np.float32(scale(df_yz[xlabel].to_numpy(), df_yz[flabel].to_numpy())[0])
             if coef:
                 df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
         return df_nu
-    ##################################################################
-    def project(self, variable="Rg"):
-        '''[Rg, Pe, N, W], [Rg, N, W, Pe], [Rg, W, Pe, N]'''
-        timer = Timer(f"{variable}: Project3D")
-        timer.start()
-        self.fig_save = self.fig_save+".Proj"
-        labels_set = permutate([variable, "Pe", "N", "W"])
-        data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
-        labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in labels_set]
-        notes = ("(a)", "(b)", "(c)")
-        #----------------------------> figure.pdf and jump<----------------------------#
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
-        # -------------------------------------------------------------------------#
-        with PdfPages(f"{self.fig_save}.pdf") as pdf:
-            for i, (data, labels) in enumerate(zip(data_set, labels_set)):
-                # ----------------------------> data and labels <----------------------------#
-                f, x, y, z = data
-                flabel, xlabel, ylabel, zlabel = labels
-                # ----------------------------> set up<----------------------------#
-                self.set_style()
-                cmap = plt.get_cmap("rainbow")
-                # ----------------------------> figures and axies<----------------------------#
-                fig = plt.figure(figsize=(6.4*3, 4.8))
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
-                gs = GridSpec(1, 3, figure=fig)
-                axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
-                axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,3)]
-                # ----------------------------> plotting <----------------------------#
-                self.scatter(fig, axes_3D[0], (x, y, z, f), (xlabel, ylabel, zlabel, flabel), notes[0], True)
-                self.scatter(fig, axes_2D[0], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), notes[1])
-                self.scatter(fig, axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), notes[2], log=True)
-                # ----------------------------> save fig <----------------------------#
-                fig = plt.gcf()
-                pdf.savefig(fig, dpi=500, transparent=True)
-                #plt.show()
-                plt.close()
-        timer.stop()
-        # -------------------------------Done!----------------------------------------#
-        return False
-    def exp_seprate(self, variable="Rg"):
-        timer = Timer(f"{variable}: Expand3D")
+    def exp_seprate(self):
+        timer = Timer(f"{self.variable}: Expand3D")
         timer.start()
 
         dir_file = os.path.dirname(self.fig_save)
-        columns_set = permutate([variable, "Pe", "N", "W"])
+        columns_set = permutate([self.variable, "Pe", "N", "W"])
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
-        labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
-        notes = ("(a)", "(b)")
+        labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in columns_set]
         for i, (data, columns, labels) in enumerate(zip(data_set, columns_set, labels_set)):
             f, x, y, z = data
             flabel, xlabel, ylabel, zlabel = labels
@@ -1688,15 +1649,14 @@ class Plotter3D(BasePlot):
                 for iz in z:
                     # ----------------------------> set up<----------------------------#
                     self.set_style()
-                    cmap = plt.get_cmap("rainbow")
                     # ----------------------------> figures and axies<----------------------------#
                     fig = plt.figure(figsize=(6.4 * 2, 4.8))
                     plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
                     gs = GridSpec(1, 2, figure=fig)
                     axes_2D = [fig.add_subplot(gs[0, j]) for j in range(0, 2)]
                     # ----------------------------> plotting <----------------------------#
-                    self.scatter(fig, axes_2D[0], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
-                    self.scatter(fig, axes_2D[1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                    self.scatter(fig, axes_2D[0], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), self.notes[0], log=True)
+                    self.scatter(fig, axes_2D[1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), self.notes[1], log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1704,27 +1664,51 @@ class Plotter3D(BasePlot):
                 plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
-    def expand(self, variable="Rg"):
-        timer = Timer(f"{variable}: Expand3D")
+    ##################################################################
+    def project(self):
+        '''[Rg, Pe, N, W], [Rg, N, W, Pe], [Rg, W, Pe, N]'''
+        timer = Timer(f"{self.variable}: Project3D")
+        timer.start()
+        labels_set = permutate([self.variable, "Pe", "N", "W"])
+        data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
+        labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in labels_set]
+        # ----------------------------> figure.pdf <----------------------------#
+        self.fig_path("Proj")
+        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+            for i, (data, labels) in enumerate(zip(data_set, labels_set)):
+                # ----------------------------> data and labels <----------------------------#
+                f, x, y, z = data
+                flabel, xlabel, ylabel, zlabel = labels
+                # ----------------------------> set up<----------------------------#
+                self.set_style()
+                # ----------------------------> figures and axies<----------------------------#
+                fig = plt.figure(figsize=(6.4*3, 4.8))
+                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
+                gs = GridSpec(1, 3, figure=fig)
+                axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
+                axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,3)]
+                # ----------------------------> plotting <----------------------------#
+                self.scatter(axes_3D[0], (x, y, z, f), (xlabel, ylabel, zlabel, flabel), self.notes[0], True)
+                self.scatter(axes_2D[0], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), self.notes[1])
+                self.scatter(axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), self.notes[2], log=True)
+                # ----------------------------> save fig <----------------------------#
+                fig = plt.gcf()
+                pdf.savefig(fig, dpi=500, transparent=True)
+                #plt.show()
+                plt.close()
+        timer.stop()
+        # -------------------------------Done!----------------------------------------#
+        return False
+    def expand(self):
+        timer = Timer(f"{self.variable}: Expand3D")
         timer.start()
         # ----------------------------> start <----------------------------#
-        self.fig_save = self.fig_save+".Exp"
-        dir_file = os.path.dirname(self.fig_save)
-        columns_set = permutate([variable, "Pe", "N", "W"])
-        #columns_set = [[variable, "N", "W", "Pe"]]
+        columns_set = permutate([self.variable, "Pe", "N", "W"])
+        #columns_set = [[self.variable, "N", "W", "Pe"]]
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
-        labels_set = [list(map(lambda x: var2str(variable)[0] if x == variable else x, label_set)) for label_set in columns_set]
-        notes = ("(a)", "(b)")
-        self.flim = np.min(self.df[variable]), np.max(self.df[variable])
-        # ----------------------------> figure.pdf and jump<----------------------------#
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
-        # -----------------------------------------------------------------------------#
+        labels_set = [list(map(lambda x: var2str(self.variable)[0] if x == self.variable else x, label_set)) for label_set in columns_set]
+        # ----------------------------> figure.pdf <----------------------------#
+        self.fig_path("Exp")
         with PdfPages(f"{self.fig_save}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 f, x, y, z = data
@@ -1732,7 +1716,6 @@ class Plotter3D(BasePlot):
                 unique_x, unique_y, unique_z = np.unique(x), np.unique(y), np.unique(z)
                 # ----------------------------> set up<----------------------------#
                 self.set_style()
-                cmap = plt.get_cmap("rainbow")
                 # ----------------------------> figures and axies<----------------------------#
                 bot, top = (0.1, 0.85) if len(unique_z) <= 4 else (0.05, 0.95)
                 fig = plt.figure(figsize=(5 * 2, 5.5 * len(unique_z)))
@@ -1743,8 +1726,8 @@ class Plotter3D(BasePlot):
                 for i, iz in enumerate(unique_z):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
-                    self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), notes[0], log=True)
-                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), notes[1], log=True)
+                    self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), self.notes[0], log=True)
+                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), self.notes[1], log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1755,51 +1738,57 @@ class Plotter3D(BasePlot):
         # -------------------------------Done!----------------------------------------#
         return False
     ##################################################################
-    def nRg(self, variable="Rg"):
-        timer = Timer(f"{variable}: Expand3D")
+    def nRg_scale(self):
+        timer = Timer(f"{self.variable}: scale")
         timer.start()
-        # ----------------------------> start <----------------------------#
-        labels_set = permutate([variable, "Pe", "N", "W"])
-        #labels_set = [[variable, "Pe", "N", "W"]]
+        # ----------------------------> setup: data and labels <----------------------------#
+        labels_set = permutate([self.variable, "Pe", "N", "W"])
+        #labels_set = [[self.variable, "Pe", "N", "W"]]
         data_set = [tuple(self.df[label].values for label in label_set) for label_set in labels_set]
-        for data, labels in zip(data_set, labels_set):
-            df_xnu = self.cal_nu((np.unique(data[2]), np.unique(data[3])), labels)
-            f, x, y = df_xnu['nu'].to_numpy(), df_xnu[labels[2]].to_numpy(), df_xnu[labels[3]].to_numpy()
-            #print(f"nu: {f}\n N:{x}\n W:{y}")
-            self.flim = np.min(f), np.max(f)
-            flabel = fr"$^{{{variable}}}_{{{labels[1]}}}\nu$"
-            xlabel, ylabel = labels[2:4]
-            notes = ["(a)", "(b)", "(c)", "(d)"]
-            fig = plt.figure(figsize=(12, 10))
-            #plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.3, hspace=0.5)
-            # ----------------------------> set up<----------------------------#
-            self.set_style()
-            cmap = plt.get_cmap("rainbow")
-            fig.suptitle(f"{flabel}({xlabel}, {ylabel})", fontsize=25)
-            # ----------------------------> Figures<----------------------------#
-            ax = fig.add_subplot(221, projection='3d')
-            sc = ax.scatter(x, y, f, c=f, cmap="rainbow", s=100)
-            self.colorbar(ax, f, flabel, True)
-            self.set_axes3D(ax, (x, y, f), (xlabel, ylabel, flabel), f"{flabel}({xlabel},{ylabel})")
-            self.adding(ax, notes[0], -0.2)
-
-            ax = fig.add_subplot(222)
-            self.scatter2D(ax, (x, f, y), (xlabel, flabel, ylabel), notes[1])
-            ax = fig.add_subplot(224)
-            self.scatter2D(ax, (y, f, x), (ylabel, flabel, xlabel), notes[3])
-
-            ax = fig.add_subplot(223)
-            ax.scatter(x, y, c=f, s=100, cmap=cmap, label=f'{flabel}')
-            # colorbar
-            self.colorbar(ax, f, flabel)
-            self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{flabel}({xlabel},{ylabel})")
-            self.adding(ax, notes[2], -0.2)
-            plt.tight_layout(pad=3, w_pad=0.3, h_pad=0.5, rect=[0, 0, 0.95, 1])
-            plt.show()
+        # ----------------------------> figure.pdf <----------------------------#
+        self.fig_path("Scale")
+        with PdfPages(f"{self.fig_save}.pdf") as pdf:
+            for data, labels in zip(data_set, labels_set):
+                df_xnu = self.cal_nu((np.unique(data[2]), np.unique(data[3])), labels)
+                f, x, y = df_xnu['nu'].to_numpy(), df_xnu[labels[2]].to_numpy(), df_xnu[labels[3]].to_numpy()
+                #print(f"nu: {f}\n N:{x}\n W:{y}")
+                xlabel, ylabel = labels[2:4]
+                flabel = fr"$^{{{self.variable}}}_{{{labels[1]}}}\nu$"
+                # ----------------------------> start <----------------------------#
+                self.set_style()
+                rows, cols, bot, top = 2, 2, 0.1, 0.85
+                fig = plt.figure(figsize=(6*rows, 5*cols))
+                plt.subplots_adjust(left=0.1, right=0.85, bottom=bot, top=top, wspace=0.2, hspace=0.5)
+                gs = GridSpec(rows, cols, figure=fig)
+                axe3D = [fig.add_subplot(gs[0, 0], projection='3d')]
+                axe2D = [fig.add_subplot(gs[i, j]) for i in range(rows) for j in range(cols) if not (i == 0 and j == 0)]
+                fig.suptitle(f"{flabel}({xlabel}, {ylabel})", fontsize=25)
+                # ----------------------------> plotting <----------------------------#
+                axe3D[0].scatter(x, y, f, c=f, cmap="rainbow", s=100)
+                pos = axe3D[0].get_position().bounds
+                axe3D[0].set_position([pos[0] - 0.05, pos[1], pos[2], pos[3]])
+                self.colorbar(axe3D[0], f, flabel, True)
+                self.set_axes3D(axe3D[0], (x, y, f), (xlabel, ylabel, flabel), f"{flabel}({xlabel},{ylabel})")
+                self.adding(axe3D[0], self.notes[0], -0.2)
+                # ----------------------------> Fig bd <----------------------------#
+                self.scatter2D(axe2D[0], (x, f, y), (xlabel, flabel, ylabel), self.notes[1])
+                self.scatter2D(axe2D[2], (y, f, x), (ylabel, flabel, xlabel), self.notes[3])
+                # ----------------------------> Fig c <----------------------------#
+                axe2D[1].scatter(x, y, c=f, s=100, cmap="rainbow", label=f'{flabel}')
+                self.colorbar(axe2D[1], f, flabel)
+                self.set_axes2D(axe2D[1], (x, y), (xlabel, ylabel), f"{flabel}({xlabel},{ylabel})")
+                self.adding(axe2D[1], self.notes[2], -0.2)
+                #plt.tight_layout(pad=3, w_pad=0.3, h_pad=0.5, rect=[0, 0, 0.95, 1])
+                # ----------------------------> save fig <----------------------------#
+                fig = plt.gcf()
+                pdf.savefig(fig, dpi=500, transparent=True)
+                plt.show()
+                plt.close()
+                timer.count(f'({labels[1]})n{labels[0]}({xlabel}, {ylabel})')
         timer.stop()
 class Plotter4D(BasePlot):
     def colorbar(self, ax, data, label, loc="right"):
-        sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("rainbow"), norm=Normalize(vmin=min(data), vmax=max(data)))
+        sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=min(data), vmax=max(data)))
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
         cbar.ax.yaxis.set_ticks_position(loc)
@@ -1839,8 +1828,7 @@ class Plotter4D(BasePlot):
         xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
         colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))
         color_map = dict(zip(unique_y, colors))
-        markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
-        marker_map = dict(zip(unique_z, markers[:len(unique_z)]))
+        marker_map = dict(zip(unique_z, self.markers[:len(unique_z)]))
         for _, data in df_w.iterrows():
             sca = ax.scatter(x, data[self.variable], c='none', s=8, edgecolors=color_map[data[ylabel]],
                                 linewidths=3, facecolors='none', marker=marker_map[data[zlabel]])
@@ -1850,22 +1838,15 @@ class Plotter4D(BasePlot):
                               markerfacecolor='none', markeredgecolor='k') for z in unique_z]
         title = f'{flabel}({xlabel}, {ylabel}, {zlabel}; {wlabel}={w})'
         self.set_axes(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), note, legends=legends, log=True)
-    def expand(self, variable="Rg"):
-        timer = Timer(f"{variable}: Expand4D1")
+    ##################################################################
+    def expand(self):
+        timer = Timer(f"{self.variable}: Expand4D1")
         timer.start()
         dir_file = os.path.dirname(self.fig_save)
-        self.variable = variable
         self.fig_save = os.path.join(f"{dir_file}", f"(r,s){self.variable}(t,Pe,N;W)")
-        # ----------------------------> figure.pdf and jump<----------------------------#
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
-        # -----------------------------------------------------------------------------#
-        with PdfPages(f"{self.fig_save}.Exp1D.pdf") as pdf:
+        # ----------------------------> figure.pdf <----------------------------#
+        self.fig_path("Exp1D")
+        with PdfPages(f"{self.fig_save}.pdf") as pdf:
             for columns in permutate([self.variable, 'Pe', 'N', 'W'], 't'): #[[variable, 't', 'Pe', 'N', 'W']]:
                 # ----------------------------> prepare: data and labels<----------------------------#
                 xlabel, ylabel, zlabel, wlabel = columns[1:]
@@ -1875,15 +1856,14 @@ class Plotter4D(BasePlot):
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
                 # ---------------------------------> setup: figure and axes<------------------------------------#
                 self.set_style()
-                notes = ("(a)", "(b)")
                 fig, axes = plt.subplots(len(unique_w), 2, figsize=(6.4 * 2, 5.4 * len(unique_w)))
                 bot, top = (0.1, 0.9) if len(unique_w) <= 2 else (0.05, 0.93)
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.4)
                 fig.suptitle(suplabel, fontsize=25)
                 # ----------------------------> plotting <----------------------------#
                 for ax, w in zip(axes, unique_w):
-                    self.scatter_exp(w, ax[0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), notes[0])
-                    self.scatter_exp(w, ax[1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), notes[1])
+                    self.scatter_exp(w, ax[0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
+                    self.scatter_exp(w, ax[1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1891,21 +1871,14 @@ class Plotter4D(BasePlot):
                 plt.close()
                 timer.count(f'{self.variable}({xlabel}, {ylabel}, {zlabel}; {wlabel})')
         timer.stop()
-    def expand2D(self, variable="Rg"):
-        timer = Timer(f"{variable}: Expand4D2")
+    def expand2D(self):
+        timer = Timer(f"{self.variable}: Expand4D2")
         timer.start()
         dir_file = os.path.dirname(self.fig_save)
-        self.fig_save = os.path.join(f"{dir_file}", f"(r,s){variable}(t,Pe;N,W)")
-        # ----------------------------> figure.pdf and jump<----------------------------#
-        if os.path.exists(f"{self.fig_save}.pdf") and self.jump:
-            print(f"==>{self.fig_save}.pdf is already!")
-            logging.info(f"==>{self.fig_save}.pdf is already!")
-            return True
-        else:
-            print(f"{self.fig_save}.pdf")
-            logging.info(f"{self.fig_save}.pdf")
-        # -----------------------------------------------------------------------------#
-        with PdfPages(f"{self.fig_save}.Exp2D.pdf") as pdf:
+        self.fig_save = os.path.join(f"{dir_file}", f"(r,s){self.variable}(t,Pe;N,W)")
+        # ----------------------------> figure.pdf <----------------------------#
+        self.fig_path("Exp2D")
+        with PdfPages(f"{self.fig_save}.pdf") as pdf:
             for columns in permutate([variable, 'Pe', 'N', 'W'], 't'): #[[variable, 't', 'Pe', 'N', 'W']]:
                 # ----------------------------> prepare: data and labels<----------------------------#
                 xlabel, ylabel, zlabel, wlabel = columns[1:]
@@ -1916,9 +1889,8 @@ class Plotter4D(BasePlot):
                 xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
                 # ---------------------------------> set up<------------------------------------#
                 self.set_style()
-                markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
                 colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))
-                color_map = list(zip(markers, colors))
+                color_map = list(zip(self.markers, colors))
                 # ----------------------------> figure and axes<----------------------------#
                 num_axis = len(unique_z) * len(unique_w)
                 rows = num_axis // 2 + num_axis % 2
@@ -1944,6 +1916,12 @@ class Plotter4D(BasePlot):
                 #plt.show()
                 plt.close()
                 timer.count(f'{variable}({xlabel}, {ylabel}; {zlabel}, {wlabel})')
+        timer.stop()
+    ##################################################################
+    def nMSD_scale(self):
+        timer = Timer(f"{self.variable}: scale")
+        timer.start()
+
         timer.stop()
 #############################################################################################################
 class Timer:
@@ -1985,7 +1963,6 @@ class Timer:
         return self
     def __exit__(self, *args):
         self.stop()
-
 def convert2array(x):
     # 如果x已经是一个列表，numpy数组，直接转换为numpy数组
     if isinstance(x, (list, np.ndarray, tuple)):
@@ -2138,29 +2115,6 @@ class JobProcessor:
             for command in bsub:
                 file.write(command + "\n")
     # -----------------------------------Simus-------------------------------------------#
-    def exe_simus(self, task, path, infile):
-        dir_file = os.path.join(path, infile)
-        if task == "Run":
-            print(f">>> Running jobs: {infile}......")
-            logging.info(f">>> Running jobs: {infile}......")
-
-            print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
-            subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-            print(f"{dir_file}.in ==> Done! \n")
-
-        elif task == "Submit":
-            print(f">>> Running jobs : {infile}......")
-            logging.info(f">>> Running jobs : {infile}......")
-
-            print(f"bsub < {dir_file}.lsf")
-            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            print(f"Submitted: {dir_file}")
-            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        else:
-            message = f"ERROR: Wrong task => {task} != Run or Submit"
-            print(message)
-            logging.error(message)
-            raise ValueError(message)
     def simus_job(self, Path, **kwargs):
         # Initialize directories and files
         self._initialize(Path)
@@ -2196,6 +2150,29 @@ class JobProcessor:
                 # submitting files
                 elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
                     self.exe_simus("Submit", Path.simus, infile)
+    def exe_simus(self, task, path, infile):
+        dir_file = os.path.join(path, infile)
+        if task == "Run":
+            print(f">>> Running jobs: {infile}......")
+            logging.info(f">>> Running jobs: {infile}......")
+
+            print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
+            subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
+            print(f"{dir_file}.in ==> Done! \n")
+
+        elif task == "Submit":
+            print(f">>> Running jobs : {infile}......")
+            logging.info(f">>> Running jobs : {infile}......")
+
+            print(f"bsub < {dir_file}.lsf")
+            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+            print(f"Submitted: {dir_file}")
+            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        else:
+            message = f"ERROR: Wrong task => {task} != Run or Submit"
+            print(message)
+            logging.error(message)
+            raise ValueError(message)
     # -----------------------------------Anas-------------------------------------------#
     def read_save(self, Path):
         '''3 parameters from Path and 2 parameters from dict{params}'''
@@ -2229,7 +2206,6 @@ class JobProcessor:
             data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
         if pe > 50:
             data = unwrap_x(data, Lx)
-
         #save data
         # data[ifile][iframe][iatom][xu, yu]
         #----------------------------------> Rg <---------------------------------#
@@ -2273,21 +2249,23 @@ class JobProcessor:
                     subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                     print(f"Submitted: {dir_file}.py")
                     self.submitted = True
-                elif "Codes" in CURRENT_DIR:
-                    print(">>> Plotting ......")
-                    logging.info(">>> Plotting ......")
-                    if Anas.save_data():  # saving data
-                        Plot.org(Anas.data_Rcom, "Rcom")  # org(data, variable)
-                        # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
-                        # Plot.org(Anas.data_MSD, "MSD")
-                    print(f"==> Done! \n==>Please check the results and submit the plots!")
-                elif "Figs" in CURRENT_DIR:
-                    print(f">>> Plotting: {CURRENT_DIR} ......")
-                    logging.info(f">>> Plotting {CURRENT_DIR} ......")
-                    path = CURRENT_DIR.replace('Figs', 'Simus')
-                    data_Rcom = self.read_save(path)
-                    #Plot.org(data_Rcom, "Rcom")  # org(data, variable)
-                    print(f"==> Done!")
+                else:
+                    #self.exe_anas(task, path)
+                    if "Codes" in CURRENT_DIR:
+                        print(">>> Plotting ......")
+                        logging.info(">>> Plotting ......")
+                        if Anas.save_data():  # saving data
+                            Plot.org(Anas.data_Rcom, "Rcom")  # org(data, variable)
+                            # Plot.org(Anas.data_Rcom ** 2, "Rcom2")
+                            # Plot.org(Anas.data_MSD, "MSD")
+                        print(f"==> Done! \n==>Please check the results and submit the plots!")
+                    elif "Figs" in CURRENT_DIR:
+                        print(f">>> Plotting: {CURRENT_DIR} ......")
+                        logging.info(f">>> Plotting {CURRENT_DIR} ......")
+                        path = CURRENT_DIR.replace('Figs', 'Simus')
+                        data_Rcom = self.read_save(path)
+                        #Plot.org(data_Rcom, "Rcom")  # org(data, variable)
+                        print(f"==> Done!")
         else:
             message = f"File doesn't exist in data: {Path.lmp_trj}"
             print(message)
@@ -2296,9 +2274,8 @@ class JobProcessor:
     def Rg_job(self, Config, Run, iRin, variable="Rg"):
         self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         paras = ['Pe', 'N', 'W']
-        label, abbre = var2str(variable)
-        df_Rg = pd.DataFrame(columns=paras)
-        df_Rgt = df_Rg.copy()
+        self.df_Rg = pd.DataFrame(columns=paras)
+        self.df_Rgt = self.df_Rg.copy()
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
         fig_Rg = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
                       f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
@@ -2331,33 +2308,37 @@ class JobProcessor:
                         for iFa in convert2array(params['Fa']):
                             for iXi in convert2array(params['Xi']):
                                 Path = _path(_model(Init, Run, iFa, iXi))
-                                Rgt = np.sqrt(np.load(os.path.join(Path.fig0, "Rg2_time.npy")))
-                                Rg = np.sqrt(np.mean(Rgt))
-                                df_Rg = df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
-                                df_Rgt = df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
-                df_Rgt['dt']=Run.Tdump * 0.001
+                                Rg2 = np.load(os.path.join(Path.fig0, "Rg2_time.npy"))
+                                Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
+                                self.df_Rg = self.df_Rg.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rg}, ignore_index=True)
+                                self.df_Rgt = self.df_Rgt.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, 'Rg': Rgt}, ignore_index=True)
+                self.df_Rgt['dt']=Run.Tdump * 0.001
                 # saving, subfile, plotting
-                dirfile3D = os.path.join(fig_Rg, f"(r,s,t){abbre}(Pe,N,W)")
-                dirfile4D = os.path.join(fig_Rg, f"(r,s){abbre}(t,Pe,N,W)")
-                prep_files(dirfile3D, df_Rg)
-                prep_files(dirfile4D, df_Rgt)
-                print(message)
-                logging.info(message)
-                self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
-                self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
-                print("-----------------------------------Done!--------------------------------------------")
-                print(">>> Plotting tests......")
-                logging.info(">>> Plotting tests......")
-                plotter3 = Plotter3D(df_Rg, dirfile3D)
-                plotter4 = Plotter4D(df_Rgt, dirfile4D)
-                #plotter3.Rg()
-                #plotter3.project("Rg")
-                #plotter3.expand("Rg")
-                plotter3.nRg("Rg")
-                #plotter4.expand("Rg")
-                #plotter4.expand2D("Rg")
+                self.exe_plot("save", variable, paras, fig_Rg)
                 print(f"==> Done! \n==>Please check the results and submit the plots!")
-
+    def exe_plot(self, task, variable, paras, path=CURRENT_DIR):
+        abbre, file_name = var2str(variable)[1], ','.join(paras)
+        dirfile3D = os.path.join(path, f"(r,s,t){abbre}({file_name})")
+        dirfile4D = os.path.join(path, f"(r,s){abbre}(t,{file_name})")
+        print("-----------------------------------Done!--------------------------------------------")
+        if task == "load":
+            df_Rg, df_Rgt = pd.read_pickle(dirfile3D), pd.read_pickle(dirfile4D)
+        elif task == "save":
+            df_Rg, df_Rgt = self.df_Rg, self.df_Rgt
+            prep_files(dirfile3D, df_Rg)
+            prep_files(dirfile4D, df_Rgt)
+            # self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
+            # self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
+        print(">>> Plotting ......")
+        logging.info(">>> Plotting ......")
+        plotter3 = Plotter3D(variable, df_Rg, dirfile3D)
+        plotter4 = Plotter4D(variable, df_Rgt, dirfile4D)
+        # plotter3.Rg()
+        plotter3.project()
+        plotter3.expand()
+        #plotter3.nRg_scale()
+        # plotter4.expand()
+        # plotter4.expand2D()
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
         params = self.params
@@ -2420,4 +2401,8 @@ if __name__ == "__main__":
         run.process(data_job="anas_job")
     # plot: Pe, N, W
     elif task == "Plots":
-        run.process(plot_job="Rg_job")
+        if "Codes" in CURRENT_DIR:
+            run.process(plot_job="Rg_job")
+        elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+            run.exe_plot("load", "Rg", ['Pe', 'N', 'W'])
+            print(f"==> Done!")
