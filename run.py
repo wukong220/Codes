@@ -978,7 +978,6 @@ class _anas:
             for i, path in enumerate([self.Path.simus, self.Path.simus1, self.Path.simus2, self.Path.simus0]):
                 dir_file = os.path.join(f"{path}", f"{ifile}.lammpstrj")
                 if os.path.exists(dir_file):
-                    print(f"{path}")
                     break
                 elif i == 3:
                     logging.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
