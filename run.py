@@ -29,16 +29,13 @@ from matplotlib.colors import Normalize
 import warnings
 warnings.filterwarnings('ignore')
 logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # -----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
 HOST = platform.system()
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
-
 #-----------------------------------Parameters-------------------------------------------
-#mpl.use("agg")
 task = ["Simus", "Anas", "Plots"][0]
 check, jump = (task != "Plots"), True
 if task == "Simus":
@@ -48,7 +45,6 @@ elif task == "Plots":
 if HOST == "Darwin":
     OPEN = True
 #-----------------------------------Dictionary-------------------------------------------
-#参数字典
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
                 'Envs': ["Anlus", "Rand", "Slit"][0:1]},
@@ -64,7 +60,7 @@ params = {
     'Frames': 2000,
     'num_chains': 1,
 }
-
+#---------------------------------------------------------------------------------------
 class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
@@ -154,7 +150,7 @@ class _config:
         if self.Type == _BACT:
             Run.Tdump //= 10
             Run.Tequ //= 100
-##########################################END!###############################################################
+#############################################################################################################
 class _run:
     def __init__(self, Dimend, Gamma, Temp, Trun, Params = params, Frames = params["Frames"]):
         self.Params = Params
@@ -2015,7 +2011,6 @@ def unwrap_x(data, Lx):
                         data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
     return data
 def scale(x, y):
-    #print(f"x:{x},\n y:{y}")
     if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
     else:
