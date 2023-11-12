@@ -36,7 +36,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][2], True
+task, OPEN = ["Simus", "Anas", "Plots"][1], True
 check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
@@ -1811,9 +1811,7 @@ class Plotter4D(BasePlot):
         color_map = dict(zip(unique_y, colors))
         marker_map = dict(zip(unique_z, self.markers[:len(unique_z)]))
         for _, data in df_w.iterrows():
-            if self.variable.name == "MSD":
-                ax.plot(x[1:], data[self.variable.name][1:], color=color_map[data[ylabel]], linestyle="--")
-            ax.scatter(x, data[self.variable.name], c='none', s=50, edgecolors=color_map[data[ylabel]],
+            ax.scatter(x, data[self.variable.name], c='none', s=30, edgecolors=color_map[data[ylabel]],
                                 linewidths=2, facecolors='none', marker=marker_map[data[zlabel]])
         # colorbar
         self.colorbar(ax, unique_y, ylabel)
@@ -1853,6 +1851,25 @@ class Plotter4D(BasePlot):
                 plt.close()
                 timer.count(f'{self.variable.name}({xlabel}, {ylabel}, {zlabel}; {wlabel})')
         timer.stop()
+    def scatter2D(self, ax, data, labels, note, scatter=True, log=False):
+        '''set_axes2D'''
+        is_3D = False
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+        legend_handles = []
+        for idx, uw in enumerate(np.unique(w)):
+            mask = (w == uw)
+            marker = self.markers[idx % len(self.markers)]
+            norm = Normalize(vmin=z.min(), vmax=z.max())
+            colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
+            for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
+                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
+            legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+        ax.legend(handles=legend_handles, title=wlabel, frameon=False)
+        # colorbar
+        self.colorbar(ax, z, zlabel, is_3D)
+        self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
+        self.adding(ax, note, -0.2, is_3D)
     def expand2D(self):
         '''scatter2D'''
         timer = Timer(f"{self.variable.name}: Expand4D2")
@@ -1877,7 +1894,7 @@ class Plotter4D(BasePlot):
                 num_axis = len(unique_z) * len(unique_w)
                 rows = num_axis // 2 + num_axis % 2
                 fig, axes = plt.subplots(rows, 2, figsize=(6.4 * 2, 5.3 * rows))
-                bot, top = (0.1, 0.85) if num_axis <= 4 else (0.05, 0.93)
+                bot, top = (0.1, 0.9) if num_axis <= 4 else (0.05, 0.93)
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.3)
                 fig.suptitle(suplabel, fontsize=25)
                 axes = axes.flatten()
@@ -1889,9 +1906,7 @@ class Plotter4D(BasePlot):
                     for (marker, color), y in zip(color_map, unique_y):
                         df_y = df_zw[df_zw[ylabel] == y] # query: y
                         for _, ydata in df_y.iterrows():
-                            if self.variable.name == "MSD":
-                                ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
-                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=f'{y}')
+                            sc = ax.scatter(x, ydata[self.variable.name], color=color, s=8, marker=marker, label=f'{y}')
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
                     self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), log=True)
                 # ----------------------------> save fig <----------------------------#
