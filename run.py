@@ -2420,6 +2420,7 @@ class JobProcessor:
                 variable.df = io_data(dirfile)
             elif task == "save":
                 io_data(dirfile, variable.df)
+                # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
             plotter4 = Plotter4D(variable, dirfile)
             plotter4.expand()
             plotter4.expand2D()
@@ -2429,8 +2430,7 @@ class JobProcessor:
                 variable.df = io_data(dirfile)
             elif task == "save":
                 io_data(dirfile, variable.df)
-                # self.subfile(f"{abbre}(Pe,N,W)_Plot", "Plot: Pe, N, W", dirfile3D)
-                # self.subfile(f"{abbre}(t,Pe,N,W)_Plot", "Plot: t, Pe, N, W", dirfile4D)
+                # self.subfile(f"{abbre}(t,{file_name})_Plot", "Plot: t, {file_name}", dirfile)
             plotter3 = Plotter3D(variable, dirfile)
             # plotter3.Rg()
             plotter3.project()
