@@ -1365,6 +1365,184 @@ class _plot(BasePlot):
         timer.stop()
 #############################################################################################################
 class Plotter3D(BasePlot):
+    def set_axes(self, ax, data, labels, title, is_3D=False, scatter=False, rotation=-60, loc="right", log=False):
+        if is_3D:
+            rotation, loc = 0, "center"
+        # label settings
+        ax.set_title(title, loc=loc, fontsize=20)
+        axis_labels = {
+            "x": labels[0],
+            "y": labels[1],
+            "z": labels[2] if is_3D else None
+        }
+        if log:
+            lo, hi = 0.5, 2.0
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            if is_3D:
+                ax.set_zscale('log')
+        else:
+            lo, hi = 0.1, 1.2
+            ax.grid(True)
+
+        # Set axis limits and rotation
+        for i, (axis_data, axis_name) in enumerate(zip(data[:2 + is_3D], "xyz"[:2 + is_3D])):
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3 if axis_name == 'z' else 5)
+            min_val, max_val = min(axis_data), max(axis_data)
+            if scatter:
+                getattr(ax, f'set_{axis_name}lim')((min_val - 1) * lo, max_val * hi)
+               #getattr(ax, f'set_{axis_name}lim')(np.min(self.df[self.variable.name])* lo, np.max(self.df[self.variable.name])*hi)
+            else:
+                getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
+            if axis_name == 'x':
+                ax.tick_params(axis='x', rotation=rotation)
+    def set_axes2D(self, ax, data, labels, title, rot=0, loc="right", log=False):
+        # label settings
+        x, y = data
+        xlabel, ylabel = labels
+        ax.set_title(title, loc=loc, fontsize=20)
+        ax.tick_params(axis='x', rotation=rot)
+        # Set axis limits and rotation
+        ax.set_xlabel(xlabel, fontsize=20, labelpad=3)
+        ax.set_ylabel(ylabel, fontsize=20, labelpad=3)
+        lo, hi = 0.98, 1.02
+        xlo, xhi = hi if min(x) < 0 else lo, lo if max(x) < 0 else hi
+        ylo, yhi = hi if min(y) < 0 else lo, lo if max(y) < 0 else hi
+        ax.set_xlim(min(x) * xlo, max(x) * xhi)
+        ax.set_ylim(min(y) * ylo, max(y) * yhi)
+        if log:
+            ax.set_xscale("log")
+            xlo, xhi = 0.5, 2.0
+            ax.set_xlim(min(x) * xlo, max(x) * xhi)
+            ax.set_ylim(min(y) * ylo, max(y) * yhi)
+        else:
+            ax.grid(True)
+    def set_axes2D_old(self, ax, data, labels, title, rot=0, loc="right", log=False):
+        # label settings
+        axis_labels = {
+            "x": labels[0],
+            "y": labels[1],
+        }
+        ax.set_title(title, loc=loc, fontsize=20)
+        # Set axis limits and rotation
+        for i, (axis_data, axis_name) in enumerate(zip(data, "xy")):
+            min_val, max_val = min(axis_data), max(axis_data)
+            if log:
+                lo, hi = 0.5, 2.0
+                getattr(ax, f'set_{axis_name}scale')('log')
+            else:
+                ax.grid(True)
+                lo = 1.2 if min_val < 0 else 0.1
+                hi = 0.1 if max_val < 0 else 1.2
+            if axis_name == 'x':
+                ax.tick_params(axis='x', rotation=rot)
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3)
+            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
+    def set_axes3D(self, ax, data, labels, title, rot=0, loc="center", log=False):
+        # label settings
+        axis_labels = {
+            "x": labels[0],
+            "y": labels[1],
+            "z": labels[2],
+        }
+        ax.set_title(title, loc=loc, fontsize=20)
+        # Set axis limits and rotation
+        for i, (axis_data, axis_name) in enumerate(zip(data, "xyz")):
+            min_val, max_val = min(axis_data), max(axis_data)
+            if log:
+                lo, hi = 0.5, 2.0
+                getattr(ax, f'set_{axis_name}scale')('log')
+            else:
+                ax.grid(True)
+                lo = 1.2 if min_val < 0 else 0.5
+                hi = 0.1 if max_val < 0 else 1.2
+            if axis_name == 'x':
+                ax.tick_params(axis='x', rotation=rot)
+
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=12)
+            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
+    def colorbar(self, ax, data, label, is_3D=False):
+        loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
+        sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        cbar.ax.yaxis.set_ticks_position(loc)
+        cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
+    #--------------------------------------> scatter <-----------------------------------------
+    def scatter(self, ax, data, labels, note, is_3D=False, scatter=True, log=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+        if is_3D:
+            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
+            self.colorbar(ax, w, wlabel, is_3D)
+            self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
+            self.adding(ax, note, -0.2, is_3D)
+        else:
+            legend_handles = []
+            for idx, uw in enumerate(np.unique(w)):
+                mask = (w == uw)
+                marker = self.markers[idx % len(self.markers)]
+                norm = Normalize(vmin=z.min(), vmax=z.max())
+                colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
+                for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
+                    ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
+                legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+            ax.legend(handles=legend_handles, title=wlabel, frameon=False)
+            # colorbar
+            self.colorbar(ax, z, zlabel, is_3D)
+            self.set_axes(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
+            self.adding(ax, note, -0.2, is_3D)
+    def scatter_exp(self, uw, ax, data, labels, note, is_3D=False, scatter=True, log=False):
+        x, y, z, w = data
+        xlabel, ylabel, zlabel, wlabel = labels
+
+        if is_3D:
+            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
+            self.colorbar(ax, w, wlabel, is_3D)
+            self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
+            self.adding(ax, note, -0.2, is_3D)
+        else:
+            legend_handles = []
+            uz, uw = np.unique(z), np.unique(w)[0]
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
+            color_map = list(zip(self.markers[:len(uz)], colors))
+
+            for zi, (marker, color) in zip(uz, color_map):
+                mask = (z==zi)
+                coef, x_range, y_range = scale(x[mask], y[mask])
+                if coef:
+                    ax.plot(x_range, y_range, color=color, linestyle='dashed')
+                    title = fr'{zlabel}, ${self.variable.scale}$'
+                    label = f'{label2mark(zi, zlabel)}, {coef}'
+                else:
+                    title = fr'{zlabel}'
+                    label = f'{label2mark(zi, zlabel)}'
+                for xi, yi in zip(x[mask], y[mask]):
+                    ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
+                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+            ax.legend(title=title, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
+            # colorbar
+            #self.colorbar(ax, z, zlabel, is_3D)
+            self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
+            self.adding(ax, note, -0.12, is_3D)
+    def scatter2D(self, ax, data, labels, note, is_3D=False):
+        x, y, z = data
+        xlabel, ylabel, zlabel = labels
+        uz = np.unique(z)
+        log = True #if xlabel != "Pe" else False
+        legend_handles = []
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
+        color_map = list(zip(self.markers[:len(uz)], colors))
+        for zi, (marker, color) in zip(uz, color_map):
+            mask = (z == zi)
+            ax.plot(x[mask], y[mask], color=color, linestyle="--")
+            for xi, yi in zip(x[mask], y[mask]):
+                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
+            legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color,
+                                             facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+        ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
+        self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}", log=log)
+        self.adding(ax, note, -0.12, is_3D)
     def Rg(self):
         timer = Timer(self.variable.name)
         timer.start()
@@ -1410,6 +1588,16 @@ class Plotter3D(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
+    def cal_nu(self, data, labels):
+        unique_y, unique_z = data
+        flabel, xlabel, ylabel, zlabel = labels
+        df_nu = pd.DataFrame(columns=['nu', ylabel, zlabel])
+        for (uy, uz) in [(uy, uz) for uy in unique_y for uz in unique_z]:
+            df_yz = self.df[(self.df[ylabel] == uy) & (self.df[zlabel] == uz)]  # query: z, w
+            coef = np.float32(scale(df_yz[xlabel].to_numpy(), df_yz[flabel].to_numpy())[0])
+            if coef:
+                df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
+        return df_nu
     def exp_seprate(self):
         timer = Timer(f"{self.variable.name}: Expand3D")
         timer.start()
@@ -1443,90 +1631,8 @@ class Plotter3D(BasePlot):
                 plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
-    def set_axes2D_old(self, ax, data, labels, title, rot=0, loc="right", log=False):
-        # label settings
-        axis_labels = {
-            "x": labels[0],
-            "y": labels[1],
-        }
-        ax.set_title(title, loc=loc, fontsize=20)
-        # Set axis limits and rotation
-        for i, (axis_data, axis_name) in enumerate(zip(data, "xy")):
-            min_val, max_val = min(axis_data), max(axis_data)
-            if log:
-                lo, hi = 0.5, 2.0
-                getattr(ax, f'set_{axis_name}scale')('log')
-            else:
-                ax.grid(True)
-                lo = 1.2 if min_val < 0 else 0.1
-                hi = 0.1 if max_val < 0 else 1.2
-            if axis_name == 'x':
-                ax.tick_params(axis='x', rotation=rot)
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3)
-            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
-    # -----------------------------------------------------------------------------------------
-    def set_axes(self, ax, data, labels, title, is_3D=False, scatter=False, rotation=-60, loc="right", log=False):
-        if is_3D:
-            rotation, loc = 0, "center"
-        # label settings
-        ax.set_title(title, loc=loc, fontsize=20)
-        axis_labels = {
-            "x": labels[0],
-            "y": labels[1],
-            "z": labels[2] if is_3D else None
-        }
-        if log:
-            lo, hi = 0.5, 2.0
-            ax.set_xscale('log')
-            ax.set_yscale('log')
-            if is_3D:
-                ax.set_zscale('log')
-        else:
-            lo, hi = 0.1, 1.2
-            ax.grid(True)
-
-        # Set axis limits and rotation
-        for i, (axis_data, axis_name) in enumerate(zip(data[:2 + is_3D], "xyz"[:2 + is_3D])):
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3 if axis_name == 'z' else 5)
-            min_val, max_val = min(axis_data), max(axis_data)
-            if scatter:
-                getattr(ax, f'set_{axis_name}lim')((min_val - 1) * lo, max_val * hi)
-               #getattr(ax, f'set_{axis_name}lim')(np.min(self.df[self.variable.name])* lo, np.max(self.df[self.variable.name])*hi)
-            else:
-                getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
-            if axis_name == 'x':
-                ax.tick_params(axis='x', rotation=rotation)
-    def colorbar(self, ax, data, label, is_3D=False):
-        loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
-        sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
-        sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
-        cbar.ax.yaxis.set_ticks_position(loc)
-        cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
     ##################################################################
-    # --------------------------------------> scatter: project <-----------------------------------------
-    def scatter(self, ax, data, labels, note, scatter=True, log=False):
-        '''set_axes'''
-        is_3D = False
-        x, y, z, w = data
-        xlabel, ylabel, zlabel, wlabel = labels
-        legend_handles = []
-        for idx, uw in enumerate(np.unique(w)):
-            mask = (w == uw)
-            marker = self.markers[idx % len(self.markers)]
-            norm = Normalize(vmin=z.min(), vmax=z.max())
-            colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
-            for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
-                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black',
-                                             facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
-        ax.legend(handles=legend_handles, title=wlabel, frameon=False)
-        # colorbar
-        self.colorbar(ax, z, zlabel, is_3D)
-        self.set_axes(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
-        self.adding(ax, note, -0.2, is_3D)
     def project(self):
-        '''scatter'''
         timer = Timer(f"{self.variable.name}: Project3D")
         timer.start()
         labels_set = permutate([self.variable.name] + self.variable.paras)
@@ -1547,12 +1653,8 @@ class Plotter3D(BasePlot):
                 gs = GridSpec(1, 3, figure=fig)
                 axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
                 axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,3)]
-                # ----------------------------> plotting: a <----------------------------#
-                sc = axes_3D[0].scatter(x, y, z, c=f, cmap="rainbow", s=100)
-                self.colorbar(axes_3D[0], f, flabel, True)
-                self.set_axes(axes_3D[0], (x, y, z, f), (xlabel, ylabel, zlabel, flabel), f"{flabel} in {xlabel}-{ylabel}-{zlabel} Space", True, scatter, 0)
-                self.adding(axes_3D[0], self.notes[0], -0.2, True)
-                # ----------------------------> plotting: bc <----------------------------#
+                # ----------------------------> plotting <----------------------------#
+                self.scatter(axes_3D[0], (x, y, z, f), (xlabel, ylabel, zlabel, flabel), self.notes[0], True)
                 self.scatter(axes_2D[0], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), self.notes[1])
                 self.scatter(axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), self.notes[2], log=True)
                 # ----------------------------> save fig <----------------------------#
@@ -1564,44 +1666,7 @@ class Plotter3D(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
-    #--------------------------------------> scatter: expand <-----------------------------------------
-    def scatter_exp(self, uw, ax, data, labels, note, scatter=True, log=False):
-        '''set_axes'''
-        is_3D = False
-        x, y, z, w = data
-        xlabel, ylabel, zlabel, wlabel = labels
-
-        if is_3D:
-            sc = ax.scatter(x, y, z, c=w, cmap="rainbow", s=100)
-            self.colorbar(ax, w, wlabel, is_3D)
-            self.set_axes(ax, data, labels, f"{wlabel} in {xlabel}-{ylabel}-{zlabel} Space", is_3D, scatter, 0)
-            self.adding(ax, note, -0.2, is_3D)
-        else:
-            legend_handles = []
-            uz, uw = np.unique(z), np.unique(w)[0]
-            colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
-            color_map = list(zip(self.markers[:len(uz)], colors))
-
-            for zi, (marker, color) in zip(uz, color_map):
-                mask = (z==zi)
-                coef, x_range, y_range = scale(x[mask], y[mask])
-                if coef:
-                    ax.plot(x_range, y_range, color=color, linestyle='dashed')
-                    title = fr'{zlabel}, ${self.variable.scale}$'
-                    label = f'{label2mark(zi, zlabel)}, {coef}'
-                else:
-                    title = fr'{zlabel}'
-                    label = f'{label2mark(zi, zlabel)}'
-                for xi, yi in zip(x[mask], y[mask]):
-                    ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
-            ax.legend(title=title, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
-            # colorbar
-            #self.colorbar(ax, z, zlabel, is_3D)
-            self.set_axes(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel},{zlabel};{wlabel}={uw})", is_3D, scatter, 0, log=log)
-            self.adding(ax, note, -0.12, is_3D)
     def expand(self):
-        '''scatter_exp'''
         timer = Timer(f"{self.variable.name}: Expand3D")
         timer.start()
         # ----------------------------> start <----------------------------#
@@ -1639,82 +1704,8 @@ class Plotter3D(BasePlot):
         timer.stop()
         # -------------------------------Done!----------------------------------------#
         return False
-    # --------------------------------------> scatter: scale <-----------------------------------------
-    def set_axes3D(self, ax, data, labels, title, rot=0, loc="center", log=False):
-        # label settings
-        axis_labels = {
-            "x": labels[0],
-            "y": labels[1],
-            "z": labels[2],
-        }
-        ax.set_title(title, loc=loc, fontsize=20)
-        # Set axis limits and rotation
-        for i, (axis_data, axis_name) in enumerate(zip(data, "xyz")):
-            min_val, max_val = min(axis_data), max(axis_data)
-            if log:
-                lo, hi = 0.5, 2.0
-                getattr(ax, f'set_{axis_name}scale')('log')
-            else:
-                ax.grid(True)
-                lo = 1.2 if min_val < 0 else 0.5
-                hi = 0.1 if max_val < 0 else 1.2
-            if axis_name == 'x':
-                ax.tick_params(axis='x', rotation=rot)
-
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=12)
-            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
-    def set_axes2D(self, ax, data, labels, title, rot=0, loc="right", log=False):
-        # label settings
-        x, y = data
-        xlabel, ylabel = labels
-        ax.set_title(title, loc=loc, fontsize=20)
-        ax.tick_params(axis='x', rotation=rot)
-        # Set axis limits and rotation
-        ax.set_xlabel(xlabel, fontsize=20, labelpad=3)
-        ax.set_ylabel(ylabel, fontsize=20, labelpad=3)
-        lo, hi = 0.98, 1.02
-        xlo, xhi = hi if min(x) < 0 else lo, lo if max(x) < 0 else hi
-        ylo, yhi = hi if min(y) < 0 else lo, lo if max(y) < 0 else hi
-        ax.set_xlim(min(x) * xlo, max(x) * xhi)
-        ax.set_ylim(min(y) * ylo, max(y) * yhi)
-        if log:
-            ax.set_xscale("log")
-            xlo, xhi = 0.5, 2.0
-            ax.set_xlim(min(x) * xlo, max(x) * xhi)
-            ax.set_ylim(min(y) * ylo, max(y) * yhi)
-        else:
-            ax.grid(True)
-    def scatter2D(self, ax, data, labels, note):
-        '''set_axes2D'''
-        x, y, z = data
-        xlabel, ylabel, zlabel = labels
-        uz = np.unique(z)
-        log = True #if xlabel != "Pe" else False
-        legend_handles = []
-        colors = plt.cm.rainbow(np.linspace(0, 1, len(uz)))
-        color_map = list(zip(self.markers[:len(uz)], colors))
-        for zi, (marker, color) in zip(uz, color_map):
-            mask = (z == zi)
-            ax.plot(x[mask], y[mask], color=color, linestyle="--")
-            for xi, yi in zip(x[mask], y[mask]):
-                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color,
-                                             facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
-        ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
-        self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}", log=log)
-        self.adding(ax, note, -0.12, False)
-    def cal_nu(self, data, labels):
-        unique_y, unique_z = data
-        flabel, xlabel, ylabel, zlabel = labels
-        df_nu = pd.DataFrame(columns=['nu', ylabel, zlabel])
-        for (uy, uz) in [(uy, uz) for uy in unique_y for uz in unique_z]:
-            df_yz = self.df[(self.df[ylabel] == uy) & (self.df[zlabel] == uz)]  # query: z, w
-            coef = np.float32(scale(df_yz[xlabel].to_numpy(), df_yz[flabel].to_numpy())[0])
-            if coef:
-                df_nu = df_nu.append({'nu': coef, ylabel: uy, zlabel: uz}, ignore_index=True)
-        return df_nu
+    ##################################################################
     def scale(self):
-        '''scatter2D'''
         timer = Timer(f"{self.variable.name}: scale")
         timer.start()
         # ----------------------------> setup: data and labels <----------------------------#
@@ -1770,7 +1761,7 @@ class Plotter4D(BasePlot):
         cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
-    def set_axes2D(self, ax, title, labels, lims, note=None, legends=None, log=False):
+    def set_axes(self, ax, title, labels, lims, note=None, legends=None, log=False):
         flabel, xlabel, ylabel, zlabel = labels
         xlim, ylim = lims
         # ----------------------------> set axes <----------------------------#
@@ -1796,9 +1787,7 @@ class Plotter4D(BasePlot):
         ax.tick_params(axis='both', which="both", width=2, labelsize=15, pad=5.0)
         for spine in ["bottom", "left", "right", "top"]:  # axes lines
             ax.spines[spine].set_linewidth(2)
-    ##################################################################
     def scatter_exp(self, w, ax, data, labels, note):
-        '''set_axes2D'''
         x, unique_y, unique_z, unique_w = data
         flabel, xlabel, ylabel, zlabel, wlabel = labels
         df_w = self.df[self.df[wlabel] == w]  # query: w
@@ -1816,9 +1805,9 @@ class Plotter4D(BasePlot):
         legends = [plt.Line2D([0], [0], marker=marker_map[z], color='w', label=f'{z}',
                               markerfacecolor='none', markeredgecolor='k') for z in unique_z]
         title = f'{flabel}({xlabel}, {ylabel}, {zlabel}; {wlabel}={w})'
-        self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), note, legends=legends, log=True)
+        self.set_axes(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), note, legends=legends, log=True)
+    ##################################################################
     def expand(self):
-        '''scatter_exp'''
         timer = Timer(f"{self.variable.name}: Expand4D1")
         timer.start()
         fig_save = os.path.join(os.path.dirname(self.fig_save), f"(r,s){self.variable.name}(t,Pe,N;W)")
@@ -1849,27 +1838,7 @@ class Plotter4D(BasePlot):
                 plt.close()
                 timer.count(f'{self.variable.name}({xlabel}, {ylabel}, {zlabel}; {wlabel})')
         timer.stop()
-    def scatter2D(self, ax, data, labels, note, scatter=True, log=False):
-        '''set_axes2D'''
-        is_3D = False
-        x, y, z, w = data
-        xlabel, ylabel, zlabel, wlabel = labels
-        legend_handles = []
-        for idx, uw in enumerate(np.unique(w)):
-            mask = (w == uw)
-            marker = self.markers[idx % len(self.markers)]
-            norm = Normalize(vmin=z.min(), vmax=z.max())
-            colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
-            for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
-                ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
-        ax.legend(handles=legend_handles, title=wlabel, frameon=False)
-        # colorbar
-        self.colorbar(ax, z, zlabel, is_3D)
-        self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"({ylabel},{xlabel}) with {zlabel}-{wlabel}", is_3D, scatter, 0, log=log)
-        self.adding(ax, note, -0.2, is_3D)
     def expand2D(self):
-        '''scatter2D'''
         timer = Timer(f"{self.variable.name}: Expand4D2")
         timer.start()
         fig_save = os.path.join(os.path.dirname(self.fig_save), f"(r,s){self.variable.name}(t,Pe;N,W)")
@@ -1904,7 +1873,7 @@ class Plotter4D(BasePlot):
                     for (marker, color), y in zip(color_map, unique_y):
                         df_y = df_zw[df_zw[ylabel] == y] # query: y
                         for _, ydata in df_y.iterrows():
-                            sc = ax.scatter2D(x, ydata[variable], color=color, s=8, marker=marker, label=f'{y}')
+                            sc = ax.scatter(x, ydata[variable], color=color, s=8, marker=marker, label=f'{y}')
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
                     self.set_axes(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim))
                 # ----------------------------> save fig <----------------------------#
@@ -1915,7 +1884,7 @@ class Plotter4D(BasePlot):
                 timer.count(f'{variable}({xlabel}, {ylabel}; {zlabel}, {wlabel})')
         timer.stop()
     ##################################################################
-    def scale(self):
+    def nMSD_scale(self):
         timer = Timer(f"{self.variable.name}: scale")
         timer.start()
 
@@ -2017,6 +1986,7 @@ def describe(dataset, str="data", flag = True):
           "------------------------------------------Done!----------------------------------------")
     if flag:
         sys.exit()
+
 def permutate(array, insert=None):
     list = [array] + [array[:1] + array[i:] + array[1:i] for i in range(2, len(array))]
     if insert:
@@ -2074,66 +2044,6 @@ class JobProcessor:
         self.queue, self.submitted = "7k83!", False
         #self.queue, self.submitted = "9654!", False
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-    # -----------------------------------backup:history-------------------------------------------#
-    def Rg_job(self, Config, Run, iRin, variable="Rg", var_file="Rg2_time"):
-        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
-        paras = ['Pe', 'N', 'W']
-        if variable == "Rg":
-            self.dtime = False
-            self.df = pd.DataFrame(columns=paras)
-            self.dft = self.df.copy()
-        run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
-        fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
-                      f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
-        # copy Run.py
-        message = f"dir_figs => {fig_save}"
-        os.makedirs(fig_save, exist_ok=True)
-        py_file = os.path.join(f"{fig_save}", f"{variable}.py")
-        if os.path.abspath(__file__) != f"{py_file}":
-            shutil.copy2(os.path.abspath(__file__), f"{py_file}")
-        print(message)
-        logging.info(message)
-        # prepare files
-        dir_file = os.path.splitext(os.path.abspath(__file__))[0]
-        self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
-        # submitting files
-        if not self.submitted:
-            if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
-                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
-                self.submitted = True
-            elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-                run.exe_plot("load", variable, ['Pe', 'N', 'W'])
-                print(f"==> Done!")
-            elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
-                for iWid in convert2array(params['Wid']):
-                    for iN in convert2array(params['N_monos']):
-                        Init = _init(Config, Run.Trun, iRin, iWid, iN)
-                        if Init.jump:
-                            continue
-                        for iFa in convert2array(params['Fa']):
-                            for iXi in convert2array(params['Xi']):
-                                Path = _path(_model(Init, Run, iFa, iXi))
-                                for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
-                                    data_path = os.path.join(path, f"{var_file}.npy")
-                                    if os.path.exists(data_path):
-                                        break
-                                    elif i == 2:
-                                        message = f"ERROR: Wrong {variable} path = {data_path}"
-                                        logging.error(message)
-                                        raise ValueError(message)
-                                if variable == "Rg":
-                                    Rg2 = np.load(data_path)
-                                    Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
-                                    self.df = self.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable: Rg}, ignore_index=True)
-                                    self.dft = self.dft.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable: Rgt}, ignore_index=True)
-                self.dft['dt']=Run.Tdump * 0.001
-                # saving, subfile, plotting
-                self.exe_plot("save", variable, paras, fig_save)
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
@@ -2150,40 +2060,6 @@ class JobProcessor:
                 new_value = input(f"Please enter the new value for {key}: ")
                 self.params[key] = type(value)(new_value)  # 更新值，并尝试保持原来的数据类型
         return self.params
-    def read_simp(self, Path):
-        '''3 parameters from Path and 2 parameters from dict{params}'''
-        Trun, Frames = self.params["Trun"], self.params["Frames"]
-        dump_dict, chunk = {2: "xu yu", 3: "xu yu zu"}, 9
-        dimend_match, pe_match, atoms_match = re.search(r'(\d+)D', Path), re.search(r'_(\d+\.?\d*)Pe_', Path), re.search(r'_(\d+)N(\d+)_', Path)
-        dimend = int(dimend_match.group(1)) if dimend_match else None
-        pe = float(pe_match.group(1)) if pe_match else None
-        atoms = int(atoms_match.group(1)) * int(atoms_match.group(2)) if atoms_match else None
-        # dimend, pe, atoms, dump = 3, 5, 20, dump_dict[3].split(" ")
-        dump = dump_dict[dimend].split(" ")
-
-        self.data = np.zeros((Trun[1], Frames + 1, atoms, len(dump)))
-        # read data
-        for index, ifile in enumerate([f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]):
-            filename = os.path.join(CURRENT_DIR, f"{ifile}.lammpstrj")
-            logging.info(f"==> Reading {filename} file: ......")
-            print(f"==> Reading {filename} file: ......")
-            if index == 0:  # read and check
-                natoms = pd.read_csv(filename, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
-                skiprows = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(Frames + 1)])
-                names = list(pd.read_csv(filename, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
-                xlo, xhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=5, nrows=1).values[0, :2]
-                zlo, zhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=7, nrows=1).values[0, :2]
-                Lx, Lz = xhi - xlo, zhi - zlo
-                if natoms != atoms and (Lz < 1.0001 and dimend == 3):
-                    message = f"ERROR: Wrong atoms => {natoms} !={atoms}"
-                    logging.error(message)
-                    raise ValueError(message)
-            df = pd.read_csv(filename, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
-            data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
-        if pe > 50:
-            data = unwrap_x(data, Lx)
-        #analysis and save data
-        return  data
     def subfile(self, jobname, descript, dir_file):
         print(f">>> Preparing subfile for {jobname}......")
         logging.info(f">>> Preparing subfile for {jobname}......")
@@ -2266,6 +2142,40 @@ class JobProcessor:
             logging.error(message)
             raise ValueError(message)
     # -----------------------------------Anas-------------------------------------------#
+    def read_simp(self, Path):
+        '''3 parameters from Path and 2 parameters from dict{params}'''
+        Trun, Frames = self.params["Trun"], self.params["Frames"]
+        dump_dict, chunk = {2: "xu yu", 3: "xu yu zu"}, 9
+        dimend_match, pe_match, atoms_match = re.search(r'(\d+)D', Path), re.search(r'_(\d+\.?\d*)Pe_', Path), re.search(r'_(\d+)N(\d+)_', Path)
+        dimend = int(dimend_match.group(1)) if dimend_match else None
+        pe = float(pe_match.group(1)) if pe_match else None
+        atoms = int(atoms_match.group(1)) * int(atoms_match.group(2)) if atoms_match else None
+        # dimend, pe, atoms, dump = 3, 5, 20, dump_dict[3].split(" ")
+        dump = dump_dict[dimend].split(" ")
+
+        self.data = np.zeros((Trun[1], Frames + 1, atoms, len(dump)))
+        # read data
+        for index, ifile in enumerate([f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]):
+            filename = os.path.join(CURRENT_DIR, f"{ifile}.lammpstrj")
+            logging.info(f"==> Reading {filename} file: ......")
+            print(f"==> Reading {filename} file: ......")
+            if index == 0:  # read and check
+                natoms = pd.read_csv(filename, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
+                skiprows = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(Frames + 1)])
+                names = list(pd.read_csv(filename, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
+                xlo, xhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=5, nrows=1).values[0, :2]
+                zlo, zhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=7, nrows=1).values[0, :2]
+                Lx, Lz = xhi - xlo, zhi - zlo
+                if natoms != atoms and (Lz < 1.0001 and dimend == 3):
+                    message = f"ERROR: Wrong atoms => {natoms} !={atoms}"
+                    logging.error(message)
+                    raise ValueError(message)
+            df = pd.read_csv(filename, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
+            data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
+        if pe > 50:
+            data = unwrap_x(data, Lx)
+        #analysis and save data
+        return  data
     def anas_job(self, Path, **kwargs):
         self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         self._initialize(Path)
@@ -2341,6 +2251,66 @@ class JobProcessor:
         np.save(Rg_save, np.mean(Rg2_time)) #average over time
         # ---------------------------------------> MSD <---------------------------------------#
         return Rcom.data,
+    # -----------------------------------backup-------------------------------------------#
+    def Rg_job(self, Config, Run, iRin, variable="Rg", var_file="Rg2_time"):
+        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
+        paras = ['Pe', 'N', 'W']
+        if variable == "Rg":
+            self.dtime = False
+            self.df = pd.DataFrame(columns=paras)
+            self.dft = self.df.copy()
+        run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
+        fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
+                      f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
+        # copy Run.py
+        message = f"dir_figs => {fig_save}"
+        os.makedirs(fig_save, exist_ok=True)
+        py_file = os.path.join(f"{fig_save}", f"{variable}.py")
+        if os.path.abspath(__file__) != f"{py_file}":
+            shutil.copy2(os.path.abspath(__file__), f"{py_file}")
+        print(message)
+        logging.info(message)
+        # prepare files
+        dir_file = os.path.splitext(os.path.abspath(__file__))[0]
+        self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
+        # submitting files
+        if not self.submitted:
+            if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
+                print(">>> Submitting plots......")
+                logging.info(">>> Submitting plots......")
+                print(f"bsub < {dir_file}.lsf")
+                subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+                print(f"Submitted: {dir_file}.py")
+                self.submitted = True
+            elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+                run.exe_plot("load", variable, ['Pe', 'N', 'W'])
+                print(f"==> Done!")
+            elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
+                for iWid in convert2array(params['Wid']):
+                    for iN in convert2array(params['N_monos']):
+                        Init = _init(Config, Run.Trun, iRin, iWid, iN)
+                        if Init.jump:
+                            continue
+                        for iFa in convert2array(params['Fa']):
+                            for iXi in convert2array(params['Xi']):
+                                Path = _path(_model(Init, Run, iFa, iXi))
+                                for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
+                                    data_path = os.path.join(path, f"{var_file}.npy")
+                                    if os.path.exists(data_path):
+                                        break
+                                    elif i == 2:
+                                        message = f"ERROR: Wrong {variable} path = {data_path}"
+                                        logging.error(message)
+                                        raise ValueError(message)
+                                if variable == "Rg":
+                                    Rg2 = np.load(data_path)
+                                    Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
+                                    self.df = self.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable: Rg}, ignore_index=True)
+                                    self.dft = self.dft.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable: Rgt}, ignore_index=True)
+                self.dft['dt']=Run.Tdump * 0.001
+                # saving, subfile, plotting
+                self.exe_plot("save", variable, paras, fig_save)
+                print(f"==> Done! \n==>Please check the results and submit the plots!")
     # -----------------------------------Plot-------------------------------------------#
     def plot_job(self, Config, Run, iRin, variable=Rg):
         self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
