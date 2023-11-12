@@ -36,7 +36,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][2], True
+task, OPEN = ["Simus", "Anas", "Plots"][1], True
 check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
@@ -47,14 +47,14 @@ elif task == "Anas" and HOST == "Darwin":
 #-----------------------------------Dictionary-------------------------------------------
 params = {
     'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 5), #(5, 20)
+    'Trun': (6, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -75,7 +75,7 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
                           },
@@ -948,8 +948,15 @@ class _path:
         self.fig = self.simus.replace(self.mydirs[1], self.mydirs[2])
         self.fig0 = self.simus0.replace(self.mydirs[1], self.mydirs[2])
         self.fig1 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
-        self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
-        return os.path.exists(self.lmp_trj)
+
+        for i, path in enumerate([self.simus, self.simus1, self.simus2, self.simus0]):
+            self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
+            if os.path.exists(self.lmp_trj):
+                return True
+            elif i == 3:
+                echo(f"File doesn't exist in data: {self.lmp_trj}")
+                return False
+
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
@@ -2309,10 +2316,10 @@ class JobProcessor:
                     if "Codes" in CURRENT_DIR:
                         print(">>> Plotting ......")
                         logging.info(">>> Plotting ......")
-                        Rg_save = os.path.join(Path.fig, f"{Rg.path}.npy")
+                        Rg_save = os.path.join(Path.fig, f"{MSD.path}.npy")
                         if os.path.exists(Rg_save) and jump:
-                            print(f"JUMP==>{Rg_save} is already!")
-                            logging.info(f"JUMP==>{Rg_save} is already!")
+                            print(f"JUMP==>{MSD_save} is already!")
+                            logging.info(f"JUMP==>{MSD_save} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
