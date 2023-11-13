@@ -45,8 +45,8 @@ class Property:
         self.paras = paras
 Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][0], True
-check, jump, JOBS = (task != "Plots"), True, [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD]
+check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
 elif task == "Plots":
@@ -63,8 +63,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    #'Trun': (1, 20),
-    'Trun': (1, 20),
+    'Trun': [6, 20],
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -80,11 +79,14 @@ class _config:
                            # 'Fa':[0.0, 0.1], 'Gamma':[10],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
                           },
+                "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         },
+
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
                          # 'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                          },
-
                 "Anlus": {2: {'Rin': [0.0], 'Wid': [0.0]},
                               3: {'Rin': [0.0], 'Wid': [0.0]},
                               #2: {'Rin': [5.0, 10.0, 15.0, 20.0, 30.0], 'Wid': [5.0, 10.0, 15.0, 20.0, 30.0]},
@@ -96,17 +98,14 @@ class _config:
                             #2: {'Rin': [0.0628], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
-                "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
-                        },
                 },
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              #'N_monos': [100], 'Fa': [1.0], 'Temp': [0.2],
                               'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
                               'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
+                              'N_monos': [40, 100], 'Fa': [1.0, 5.0],# 'Temp': [0.2],
                               #'Gamma': [10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -119,7 +118,7 @@ class _config:
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [0.0]}, #1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]}, #1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
                          },
             },
         }
@@ -167,6 +166,11 @@ class _run:
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
+        if task == "Anas":
+            if  HOST == "Linux":
+                self.Trun[0] = 6  # supplement
+            elif HOST == "Darwin":
+                self.Trun[1] = 5
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
@@ -271,7 +275,6 @@ class _init:
         self.R_ring = 0
         self.jump = False
         self.set_box()   #set box
-
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
             print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
@@ -948,14 +951,15 @@ class _path:
         self.fig = self.simus.replace(self.mydirs[1], self.mydirs[2])
         self.fig0 = self.simus0.replace(self.mydirs[1], self.mydirs[2])
         self.fig1 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
-
+        self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
         for i, path in enumerate([self.simus, self.simus1, self.simus2, self.simus0]):
-            self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
-            if os.path.exists(self.lmp_trj):
+            lmp_trj = os.path.join(path, f"{self.Run.Trun[1]:03}.lammpstrj")
+            if os.path.exists(lmp_trj):
                 return True
-            elif i == 3:
-                #echo(f"File doesn't exist in data: {self.lmp_trj}")
-                return False
+            else:
+                echo(f"File doesn't exist in Path: {lmp_trj}")
+                if i == 3:
+                    return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
@@ -1035,36 +1039,7 @@ class BasePlot:
         self.df = variable.df
         self.fig_save = fig_save
         self.jump = jump
-    def fig_path(self, mark=None, fig_save=None):
-        fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
-        if os.path.exists(f"{fig_file}.pdf") and self.jump:
-            print(f"==>{fig_file}.pdf is already!")
-            logging.info(f"==>{fig_file}.pdf is already!")
-            return True
-        else:
-            print(f"{fig_file}.pdf")
-            logging.info(f"{fig_file}.pdf")
-        return fig_file
-    def set_style(self, mag, size=(6.4, 5.4), inter=(0.2, 0.5), title=""):
-        '''plotting'''
-        plt.clf()
-        plt.rc('text', usetex=True)
-        plt.rc('font', family='serif')
-        plt.rcParams['xtick.direction'] = 'in'
-        plt.rcParams['ytick.direction'] = 'in'
-        plt.rcParams['xtick.labelsize'] = 15
-        plt.rcParams['ytick.labelsize'] = 15
-        self.notes = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)", "(g)", "(h)", "(i)", "(j)", "(k)"]
-        self.markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
-        # ----------------------------> setup: canvas<----------------------------#
-        (cols, rows), (width, heigh), (wspace, hspace) = mag, size, inter
-        left, right, bot, top = 0.5 / width * cols, 1 - 0.5 / width * cols, 1.5 / heigh * rows, 1 - 1.5 / heigh * rows
-        plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
-        fig = plt.figure(figsize=(width * cols, heigh * rows))
-        gs = GridSpec(rows, cols, figure=fig)
-        fig.suptitle(title, fontsize=25)
-        return fig, gs
-    def colorbar(self, fig, ax, sc, label, is_3D=False, loc="right"):
+    def colorbar_old(self, fig, ax, sc, label, is_3D=False, loc="right"):
         '''colorbar'''
         axpos = ax.get_position()
         if is_3D:
@@ -1078,9 +1053,46 @@ class BasePlot:
         cbar = plt.colorbar(sc, ax=ax, cax=cax)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
-    def set_axes(self, ax, data, labels, title, is_3D=False, scatter=False, rotation=-60, loc="right", log=False):
-        if is_3D:
-            rotation, loc = 0, "center"
+#---------------------------------------------------------------------------#
+    def fig_path(self, mark=None, fig_save=None):
+        fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
+        if os.path.exists(f"{fig_file}.pdf") and self.jump:
+            print(f"==>{fig_file}.pdf is already!")
+            logging.info(f"==>{fig_file}.pdf is already!")
+            return True
+        else:
+            print(f"{fig_file}.pdf")
+            logging.info(f"{fig_file}.pdf")
+        return fig_file
+    def set_style(self, mag, size=(6.4, 5.4), inter=(0.2, 0.5), edge=(1.0, 1.5), title=""):
+        '''plotting:  axes = [ax for row in axes for ax in row]'''
+        plt.clf()
+        plt.rc('text', usetex=True)
+        plt.rc('font', family='serif')
+        plt.rcParams['xtick.direction'] = 'in'
+        plt.rcParams['ytick.direction'] = 'in'
+        plt.rcParams['xtick.labelsize'] = 15
+        plt.rcParams['ytick.labelsize'] = 15
+        self.notes = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)", "(g)", "(h)", "(i)", "(j)", "(k)"]
+        self.markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
+        # ----------------------------> setup: canvas<----------------------------#
+        (cols, rows), (width, heigh), (wspace, hspace), (ledge, redge) = mag, size, inter, edge
+        left, bot = ledge / (width * cols), redge / (heigh * rows)
+        right, top = 1-left, 1-bot
+        fig = plt.figure(figsize=(width * cols, heigh * rows))
+        plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
+        gs = GridSpec(rows, cols, figure=fig)
+        fig.suptitle(title, fontsize=25)
+        return fig, gs
+    def colorbar(self, ax, data, label, is_3D=False):
+        loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
+        sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        cbar.ax.yaxis.set_ticks_position(loc)
+        #cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
+        cbar.ax.set_title(label, fontsize=20, pad=10)
+    def set_axes(self, ax, data, labels, title, is_3D=False, fill=True, rotation=0, loc="right", log=False):
         # label settings
         ax.set_title(title, loc=loc, fontsize=20)
         axis_labels = {
@@ -1100,12 +1112,12 @@ class BasePlot:
 
         # Set axis limits and rotation
         for i, (axis_data, axis_name) in enumerate(zip(data[:2 + is_3D], "xyz"[:2 + is_3D])):
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3 if axis_name == 'z' else 5)
+            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=5)
             min_val, max_val = min(axis_data), max(axis_data)
-            if scatter:
-                getattr(ax, f'set_{axis_name}lim')((min_val - 1) * lo, max_val * hi)
-            else:
+            if fill:
                 getattr(ax, f'set_{axis_name}lim')(min_val, max_val)
+            else:
+                getattr(ax, f'set_{axis_name}lim')((min_val - 1) * lo, max_val * hi)
             if axis_name == 'x':
                 ax.tick_params(axis='x', rotation=rotation)
     def adding(self, ax, note, pos=-0.25, is_3D=False):
@@ -1162,7 +1174,7 @@ class _plot(BasePlot):
         x_range = np.linspace(min(x), max(x), self.num_pdf)
         pdf_x = gaussian_kde(x).evaluate(x_range)
         return hist_x, x_bins, x_bin_centers, x_range, pdf_x
-    def adding(self, ax, note, loc=(-0.25, 0.9)):
+    def adding(self, ax, note, loc=(-0.2, 0.9)):
         # linewidth and note
         ax.annotate(note, loc, textcoords="axes fraction", xycoords="axes fraction", va="center",
                     ha="center", fontsize=20)
@@ -1195,7 +1207,6 @@ class _plot(BasePlot):
         unique_coords_e, _, _, counts_e = statistics(data_e)
         unique_coords_f, _, _, counts_f = statistics(data_f)
         unique_coords_g, _, _, counts_g = statistics(data_g)
-
         #----------------------------> figure path <----------------------------#
         fig_file = os.path.join(f"{self.Path.fig}", fr"{self.variable.name}.Org.({z_abbre},{x_abbre},{y_abbre})")
         if os.path.exists(f"{fig_file}.pdf") and self.jump:
@@ -1207,8 +1218,7 @@ class _plot(BasePlot):
             logging.info(f"{fig_file}.pdf")
         with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figure<----------------------------#
-            self.set_style()
-            fig, gs = self.set_gs((5, 2), (4, 4.5), (0.6, 0.5))
+            fig, gs = self.set_style((5, 2), (4, 4.5), (0.3, 0.5))
             ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
             ax_b, ax_c, ax_d = [fig.add_subplot(gs[0, i]) for i in [2, 3, 4]]
             ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
@@ -1219,10 +1229,10 @@ class _plot(BasePlot):
             #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
             #ax_a.axvline(x=mid_x, linestyle='--', lw=1.5, color='black')  # Selected Time frame
             title = fr'({z_label}, {x_label}, {y_label}) in 3D Space'
-            self.colorbar(fig, ax_a, sc_a, z_label, True)
-            self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, True, rotation=0, loc="center")
+            #self.colorbar(fig, ax_a, sc_a, z_label, True)
+            self.colorbar(ax_a, simp_z, z_label, True)
+            self.set_axes(ax_a, (simp_x, simp_y, simp_z), (x_label, y_label, z_label), title, is_3D=True, rotation=30, loc="center")
             self.adding(ax_a, "(a)")
-
             ## ----------------------------> ax_bcd <----------------------------#
             for ax, data, axis_labels, note in zip([ax_b, ax_c, ax_d],
                                              [np.column_stack([simp_x, simp_y, simp_z]), np.column_stack([simp_x, simp_z, simp_y]), np.column_stack([simp_y, simp_z, simp_x])],
@@ -1231,7 +1241,7 @@ class _plot(BasePlot):
                 unique_coords, mean_values, std_values = statistics(data)[:3]
                 sc = ax.scatter(unique_coords[:, 0], unique_coords[:, 1], c=mean_values, s=(std_values + 1) * 10, cmap='rainbow', alpha=0.7)
                 title = fr'$\langle$ {axis_labels[2]} $\rangle$ in {axis_labels[0]}-{axis_labels[1]} Space'
-                self.colorbar(fig, ax, sc, axis_labels[2])
+                self.colorbar(ax, mean_values, axis_labels[2])
                 self.set_axes(ax, (unique_coords[:, 0], unique_coords[:, 1], None), axis_labels, title)
                 self.adding(ax, note)
 
@@ -1292,51 +1302,50 @@ class _plot(BasePlot):
                 # ----------------------------> setup: canvas<----------------------------#
                 fig, gs = self.set_style((4, 2), (4.5, 4.5), (0.5, 0.5))
                 ax_a = fig.add_subplot(gs[0:2, 0:2])
-                #ax_b, ax_c = fig.add_subplot(gs[0, 2], sharex=ax_a), fig.add_subplot(gs[0, 3], sharex=ax_a),
-                #ax_d, ax_e = fig.add_subplot(gs[1, 2], sharey=ax_a), fig.add_subplot(gs[1, 3], sharey=ax_a)
-                axes = [[fig.add_subplot(gs[i, j]) for j in range(2,4)] for i in range(2)].flattern()
+                axes = [[fig.add_subplot(gs[i, j], sharex=ax_a if i == 0 else None, sharey=ax_a if i == 1 else None)
+                            for j in range(2, 4)] for i in range(2)]
                 # Plot fz(x,y)
                 heatmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
                 ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
                 ax_a.axvline(x=x_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Time frame
                 title = fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})"
-                self.colorbar(fig, ax_a, heatmap, fr"$f^{{{z_label.replace('$', '')}}}$({x_label},{y_label})", loc="left")
-                self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
+                self.colorbar(ax_a, hist_2D.T, fr"$f^{{{z_label.replace('$', '')}}}$")
+                self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, loc="center")
 
                 # Plot Fz(x;y0)
-                axes[0].bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-                axes[0].set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-                axes[0].tick_params(axis='x', rotation=45)
-                axes[0].set_xlabel(f"{x_label}", fontsize=20)
-                axes[0].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
-                axes[0].set_ylim(0, max(hist_x_at_y) * 1.1)
+                axes[0][0].bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                axes[0][0].set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                axes[0][0].tick_params(axis='x', rotation=45)
+                axes[0][0].set_xlabel(f"{x_label}", fontsize=20)
+                axes[0][0].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
+                axes[0][0].set_ylim(0, max(hist_x_at_y) * 1.1)
 
                 # Plot Fzy(x)
-                axes[1].bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-                axes[1].plot(x_range, pdf_x, 'r', label='PDF')
-                axes[1].set_title("Distribution", loc='right', fontsize=20)
-                axes[1].tick_params(axis='x', rotation=45)
-                axes[1].set_xlabel(f"{x_label}", fontsize=20)
-                axes[1].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
-                axes[1].set_ylim(0, max(hist_x) *1.1)
+                axes[0][1].bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                axes[0][1].plot(x_range, pdf_x, 'r', label='PDF')
+                axes[0][1].set_title("Distribution", loc='right', fontsize=20)
+                axes[0][1].tick_params(axis='x', rotation=45)
+                axes[0][1].set_xlabel(f"{x_label}", fontsize=20)
+                axes[0][1].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
+                axes[0][1].set_ylim(0, max(hist_x) *1.1)
 
                 # Plot Fz(y;x0)
-                axes[2].barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-                axes[2].set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-                axes[2].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
-                axes[2].set_ylabel(f"{y_label}", fontsize=20)
-                axes[2].set_xlim(0, max(hist_y_at_x)*1.1)
+                axes[1][0].barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                axes[1][0].set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                axes[1][0].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
+                axes[1][0].set_ylabel(f"{y_label}", fontsize=20)
+                axes[1][0].set_xlim(0, max(hist_y_at_x)*1.1)
 
                 # Plot Fzx(y)
-                axes[3].barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-                axes[3].plot(pdf_y, y_range, 'r', label='PDF')
-                axes[3].set_title('Distribution', loc='right', fontsize=20)
-                axes[3].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
-                axes[3].set_ylabel(f"{y_label}", fontsize=20)
-                axes[3].set_xlim(0, max(hist_y)*1.1)
+                axes[1][1].barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                axes[1][1].plot(pdf_y, y_range, 'r', label='PDF')
+                axes[1][1].set_title('Distribution', loc='right', fontsize=20)
+                axes[1][1].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
+                axes[1][1].set_ylabel(f"{y_label}", fontsize=20)
+                axes[1][1].set_xlim(0, max(hist_y)*1.1)
 
                 # ----------------------------> linewidth <----------------------------#
-                for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
+                for ax, note in zip([ax_a, axes[0][0], axes[0][1], axes[1][0], axes[1][1]], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
                     self.adding(ax, note, (-0.3, 0.9))
 
                 timer.count("saving figure")
@@ -1540,7 +1549,7 @@ class Plotter3D(BasePlot):
                 flabel, xlabel, ylabel, zlabel = labels
                 # ----------------------------> setup: canvas<----------------------------#
                 cols, rows = 3, 1
-                fig, gs = self.set_style((cols, rows))
+                fig, gs = self.set_style((cols, rows), edge=(0.5, 1.0))
                 axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
                 axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,cols)]
                 # ----------------------------> plotting: a <----------------------------#
@@ -1554,7 +1563,7 @@ class Plotter3D(BasePlot):
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
-                #plt.show()
+                plt.show()
                 plt.close()
         timer.count("Project3D")
         timer.stop()
@@ -1615,7 +1624,7 @@ class Plotter3D(BasePlot):
                 suplabel = f"{flabel} with {zlabel} fixed"
                 # ----------------------------> setup: canvas<----------------------------#
                 cols, rows  = 2, len(unique_z)
-                fig, gs = self.set_style((cols, rows), (5, 5.5), (0.5, 0.5), title=suplabel)
+                fig, gs = self.set_style((cols, rows), (6, 5.5), (0.3, 0.3), (1.1, 1.5), title=suplabel)
                 axes_2D = [fig.add_subplot(gs[i, j]) for i in range(rows) for j in range(cols)]
                 for i, iz in enumerate(unique_z):
                     mask = (z == iz)
@@ -1725,7 +1734,7 @@ class Plotter3D(BasePlot):
                 suplabel = f"{flabel}({xlabel}, {ylabel})"
                 # ----------------------------> setup: canvas<----------------------------#
                 cols, rows  = 2, 2
-                fig, gs = self.set_style((cols, rows), (6, 5.5), title=suplabel)
+                fig, gs = self.set_style((cols, rows), (6, 5.5), (0.35, 0.5), title=suplabel)
                 axe3D = [fig.add_subplot(gs[0, 0], projection='3d')]
                 axe2D = [fig.add_subplot(gs[i, j]) for i in range(rows) for j in range(cols) if not (i == 0 and j == 0)]
                 # ----------------------------> plotting <----------------------------#
@@ -1824,12 +1833,13 @@ class Plotter4D(BasePlot):
                 x = self.df["dt"][0] * np.arange(len(self.df[self.variable.name][0]))
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
                 # ----------------------------> setup: canvas<----------------------------#
-                fig, gs = self.set_style((2, len(unique_w)), title=suplabel)
+                cols, rows = 2, len(unique_w)
+                fig, gs = self.set_style((cols, rows), title=suplabel)
                 axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)]
                 # ----------------------------> plotting <----------------------------#
                 for i, w in enumerate(unique_w):
-                    self.scatter_exp(w, axes[i, 0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
-                    self.scatter_exp(w, axes[i, 1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
+                    self.scatter_exp(w, axes[i][0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
+                    self.scatter_exp(w, axes[i][1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1856,9 +1866,10 @@ class Plotter4D(BasePlot):
                 # ----------------------------> setup: canvas<----------------------------#
                 num_axis = len(unique_z) * len(unique_w)
                 cols, rows = 2, num_axis // 2 + num_axis % 2
-                fig, gs = self.set_style((cols, rows), title=suplabel)
+                fig, gs = self.set_style((cols, rows), (5.5, 5.5), title=suplabel)
                 color_map = list(zip(self.markers, plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))))
-                axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)].flatten()
+                axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)]
+                axes = [ax for row in axes for ax in row]
                 if num_axis % 2:
                     axes[-1].axis('off')
                 # ----------------------------> plotting <----------------------------#
@@ -2286,7 +2297,7 @@ class JobProcessor:
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
                         print(f"==> Done!")
         else:
-            echo(f"File doesn't exist in data: {Path.lmp_trj}")
+            echo(f"File doesn't exist in anas_job: {Path.lmp_trj}")
     def exe_analysis(self, Path, data):
         '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
         echo(f"analyse and save data => {Path}")
@@ -2360,7 +2371,7 @@ class JobProcessor:
                                         raise ValueError(message)
                                 if variable.name == "Rg":
                                     data_Rg2 = np.load(data_path)
-                                    data_Rg = np.sqrt(np.mean(data_Rg2),dtype=np.float32)
+                                    data_Rg = np.sqrt(np.mean(data_Rg2))
                                     if variable.dtime:
                                         variable.df = variable.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable.name: np.sqrt(data_Rg2)}, ignore_index=True)
                                     else:
