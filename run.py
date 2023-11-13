@@ -45,7 +45,7 @@ class Property:
         self.paras = paras
 Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][0], [Rg, MSD]
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -62,8 +62,8 @@ params = {
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
-    'Gamma': 100,
-    'Trun': [6, 20],
+    'Gamma': 10,
+    'Trun': [1, 20],
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -75,13 +75,16 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0],
+                "Chain": {#'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                          'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
                            # 'Fa':[0.0, 0.1], 'Gamma':[10],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         # 3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
+
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -166,10 +169,10 @@ class _run:
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
-        if task == "Anas":
+        if task != "Simus":
             if  HOST == "Linux":
                 self.Trun[0] = 6  # supplement
-            elif HOST == "Darwin":
+            elif HOST == "Darwin" and task == "Anas":
                 self.Trun[1] = 5
         self.Dimend = Dimend
         self.Frames = Frames
@@ -957,8 +960,8 @@ class _path:
             if os.path.exists(lmp_trj):
                 return True
             else:
-                echo(f"File doesn't exist in Path: {lmp_trj}")
                 if i == 3:
+                    echo(f"File doesn't exist in Path: {lmp_trj}")
                     return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
@@ -1088,7 +1091,10 @@ class BasePlot:
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=pad)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
         #cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
         cbar.ax.set_title(label, fontsize=20, pad=10)
@@ -1508,7 +1514,10 @@ class Plotter3D(BasePlot):
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=pad)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
     ##################################################################
@@ -1765,7 +1774,10 @@ class Plotter4D(BasePlot):
     def colorbar(self, ax, data, label, loc="right"):
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=min(data), vmax=max(data)))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=0.05)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
     def set_axes2D(self, ax, title, labels, lims, note=None, legends=None, log=False):
@@ -2101,7 +2113,7 @@ class JobProcessor:
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        message = f"ERROR: Wrong {variable} path = {data_path}"
+                                        message = f"ERROR: Wrong {variable} path: Anas.job \n==> {data_path},"
                                         logging.error(message)
                                         raise ValueError(message)
                                 if variable == "Rg":
@@ -2485,6 +2497,7 @@ if __name__ == "__main__":
     elif task == "Anas":
         run.process(data_job="anas_job")
         if HOST == "Linux":
+            print(f"{usage}\n=====>task: {Plots}......\n###################################################################")
             run.process(plot_job="plot_job")
     # plot: Pe, N, W
     elif task == "Plots":
