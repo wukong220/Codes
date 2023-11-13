@@ -36,7 +36,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][1], True
+task, OPEN = ["Simus", "Anas", "Plots"][0], True
 check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
@@ -54,7 +54,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (6, 20), #(5, 20)
+    'Trun': (1, 20), #(5, 20)
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -96,7 +96,7 @@ class _config:
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                        3: {"Rin":[0.0],"Wid":[1.0]}, #3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
                         },
                 },
 
@@ -2316,10 +2316,10 @@ class JobProcessor:
                     if "Codes" in CURRENT_DIR:
                         print(">>> Plotting ......")
                         logging.info(">>> Plotting ......")
-                        Rg_save = os.path.join(Path.fig, f"{MSD.path}.npy")
-                        if os.path.exists(Rg_save) and jump:
-                            print(f"JUMP==>{MSD_save} is already!")
-                            logging.info(f"JUMP==>{MSD_save} is already!")
+                        MSD.save = os.path.join(Path.fig, f"{MSD.path}.npy")
+                        if os.path.exists(MSD.save) and jump:
+                            print(f"JUMP==>{MSD.save} is already!")
+                            logging.info(f"JUMP==>{MSD.save} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
