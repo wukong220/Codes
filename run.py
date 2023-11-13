@@ -954,9 +954,8 @@ class _path:
             if os.path.exists(self.lmp_trj):
                 return True
             elif i == 3:
-                echo(f"File doesn't exist in data: {self.lmp_trj}")
+                echo(f"File doesn't exist in data: {Path.lmp_trj}")
                 return False
-
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
@@ -1851,8 +1850,8 @@ class Plotter4D(BasePlot):
                 fig.suptitle(suplabel, fontsize=25)
                 # ----------------------------> plotting <----------------------------#
                 for i, w in enumerate(unique_w):
-                    self.scatter_exp(w, axes[2*i], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
-                    self.scatter_exp(w, axes[2*i+1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
+                    self.scatter_exp(w, axes[i, 0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
+                    self.scatter_exp(w, axes[i, 1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -2316,10 +2315,10 @@ class JobProcessor:
                     if "Codes" in CURRENT_DIR:
                         print(">>> Plotting ......")
                         logging.info(">>> Plotting ......")
-                        MSD.save = os.path.join(Path.fig, f"{MSD.path}.npy")
-                        if os.path.exists(MSD.save) and jump:
-                            print(f"JUMP==>{MSD.save} is already!")
-                            logging.info(f"JUMP==>{MSD.save} is already!")
+                        file_check = os.path.join(Path.fig, f"{MSD.path}.npy")
+                        if os.path.exists(file_check) and jump:
+                            print(f"JUMP==>{file_check} is already!")
+                            logging.info(f"JUMP==>{file_check} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
@@ -2338,9 +2337,7 @@ class JobProcessor:
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
                         print(f"==> Done!")
         else:
-            message = f"File doesn't exist in data: {Path.lmp_trj}"
-            print(message)
-            logging.info(message)
+            echo(f"File doesn't exist in data: {Path.lmp_trj}")
     # -----------------------------------Plot-------------------------------------------#
     def plot_job(self, Config, Run, iRin, variable=Rg):
         '''expand Rg(t) -> Rg(t, Pe, W, N)'''
