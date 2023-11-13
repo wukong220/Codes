@@ -45,7 +45,7 @@ class Property:
         self.paras = paras
 Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][0], [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD]
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -62,7 +62,7 @@ params = {
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
-    'Gamma': 10,
+    'Gamma': 100,
     'Trun': [1, 20],
     'Dimend': 3,
     #'Dimend': [2,3],
@@ -75,14 +75,14 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {#'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                          'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
+                          #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
                            # 'Fa':[0.0, 0.1], 'Gamma':[10],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                         # 3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                          3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
 
 
@@ -2374,7 +2374,8 @@ class JobProcessor:
                             for iXi in convert2array(params['Xi']):
                                 Path = _path(_model(Init, Run, iFa, iXi))
                                 for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
-                                    data_path = os.path.join(path, f"{variable.path}.npy")
+                                    variable.save = os.path.join(path, f"{variable.path}.npy")
+                                    data_path = variable.save #if iFa >= 1 else variable.save.replace(f"{Run.Gamma:.1f}G", f"{10:.1f}G")
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
