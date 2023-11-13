@@ -35,31 +35,6 @@ HOST = platform.system()
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
-#-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][2], True
-check, jump = (task != "Plots"), True
-if task == "Simus":
-    jump = True
-elif task == "Plots":
-    jump = False
-elif task == "Anas" and HOST == "Darwin":
-    jump = False
-#-----------------------------------Dictionary-------------------------------------------
-params = {
-    'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
-                'Envs': ["Anlus", "Rand", "Slit"][0:1]},
-    'marks': {'labels': [], 'config': []},
-    'restart': [False, "equ"],
-    'Queues': {'7k83!': 1.0, '9654!': 1.0},
-    # 动力学方程的重要参数
-    'Temp': 1.0,
-    'Gamma': 100,
-    'Trun': (1, 5), #(5, 20)
-    'Dimend': 3,
-    #'Dimend': [2,3],
-    'Frames': 2000,
-    'num_chains': 1,
-}
 #-----------------------------------Variable-------------------------------------------
 class Property:
     def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
@@ -69,13 +44,39 @@ class Property:
         self.scale = scale
         self.paras = paras
 Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
+#-----------------------------------Parameters-------------------------------------------
+task, OPEN = ["Simus", "Anas", "Plots"][2], True
+check, jump, JOBS = (task != "Plots"), True, [Rg] #, MSD]
+if task == "Simus":
+    jump = True
+elif task == "Plots":
+    jump = False
+elif task == "Anas" and HOST == "Darwin":
+    jump = False
+#-----------------------------------Dictionary-------------------------------------------
+params = {
+    'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
+                'Envs': ["Anlus", "Rand", "Slit"][2:3]},
+    'marks': {'labels': [], 'config': []},
+    'restart': [False, "equ"],
+    'Queues': {'7k83!': 1.0, '9654!': 1.0},
+    # 动力学方程的重要参数
+    'Temp': 1.0,
+    'Gamma': 100,
+    #'Trun': (1, 20),
+    'Trun': (6, 20),
+    'Dimend': 3,
+    #'Dimend': [2,3],
+    'Frames': 2000,
+    'num_chains': 1,
+}
 #---------------------------------------------------------------------------------------
 class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           # 'Gamma': [0.1, 1, 10, 100],
                           },
@@ -103,10 +104,9 @@ class _config:
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
-                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0], 'Temp': [0.2],
-                              #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
+                              #'N_monos': [100], 'Fa': [1.0], 'Temp': [0.2],
+                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
                               #'Gamma': [10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -948,8 +948,14 @@ class _path:
         self.fig = self.simus.replace(self.mydirs[1], self.mydirs[2])
         self.fig0 = self.simus0.replace(self.mydirs[1], self.mydirs[2])
         self.fig1 = self.simus2.replace(self.mydirs[1], self.mydirs[2])
-        self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
-        return os.path.exists(self.lmp_trj)
+
+        for i, path in enumerate([self.simus, self.simus1, self.simus2, self.simus0]):
+            self.lmp_trj = os.path.join(self.simus, f"{self.Run.Trun[1]:03}.lammpstrj")
+            if os.path.exists(self.lmp_trj):
+                return True
+            elif i == 3:
+                #echo(f"File doesn't exist in data: {self.lmp_trj}")
+                return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
               f"Path.dir1: {self.dir1}\nPath.dir2: {self.dir2}\nPath.dir3: {self.dir3}\n"
@@ -1621,7 +1627,7 @@ class Plotter3D(BasePlot):
                 # ----------------------------> set up<----------------------------#
                 self.set_style()
                 # ----------------------------> figures and axies<----------------------------#
-                bot, top = (0.1, 0.85) if len(unique_z) <= 4 else (0.05, 0.95)
+                bot, top = bot, top = (0.3/len(unique_w), 1 - 0.3/len(unique_w))
                 fig = plt.figure(figsize=(5 * 2, 5.5 * len(unique_z)))
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.5)
                 gs = GridSpec(len(unique_z), 2, figure=fig)
@@ -1734,7 +1740,8 @@ class Plotter3D(BasePlot):
                 flabel = fr"$^{{{self.variable.name}}}_{{{labels[1]}}}{self.variable.scale}$"
                 # ----------------------------> start <----------------------------#
                 self.set_style()
-                rows, cols, bot, top = 2, 2, 0.1, 0.85
+                rows, cols = 2, 2
+                bot, top = (0.3/cols, 1-0.3/cols)
                 fig = plt.figure(figsize=(6*rows, 5.5*cols))
                 #plt.subplots_adjust(left=0.1, right=0.85, bottom=bot, top=top, wspace=0.2, hspace=0.5)
                 gs = GridSpec(rows, cols, figure=fig)
@@ -1790,7 +1797,7 @@ class Plotter4D(BasePlot):
         ax.set_ylim(ylim[0] * ymin, ylim[1] * ymax)
         # ----------------------------> legends <----------------------------#
         if legends:
-            ax.legend(handles=legends, title=zlabel, frameon=False, title_fontsize=15, fontsize=15)
+            ax.legend(handles=legends, title=zlabel, frameon=False, title_fontsize=15, fontsize=15, ncol=int(len(legends)/5)+1)
         else:
             ax.legend(title=ylabel, frameon=False, title_fontsize=15, fontsize=15)
         # ----------------------------> adding <----------------------------#
@@ -1839,13 +1846,13 @@ class Plotter4D(BasePlot):
                 # ---------------------------------> setup: figure and axes<------------------------------------#
                 self.set_style()
                 fig, axes = plt.subplots(len(unique_w), 2, figsize=(6.4 * 2, 5.4 * len(unique_w)))
-                bot, top = (0.15, 0.85) if len(unique_w) <= 4 else (0.05, 0.93)
+                bot, top = (0.3/len(unique_w), 1 - 0.3/len(unique_w))
                 plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.4)
                 fig.suptitle(suplabel, fontsize=25)
                 # ----------------------------> plotting <----------------------------#
                 for i, w in enumerate(unique_w):
-                    self.scatter_exp(w, axes[2*i], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
-                    self.scatter_exp(w, axes[2*i+1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
+                    self.scatter_exp(w, axes[i, 0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
+                    self.scatter_exp(w, axes[i, 1], (x, unique_z, unique_y, unique_w), (flabel, xlabel, zlabel, ylabel, wlabel), self.notes[1])
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -2309,10 +2316,10 @@ class JobProcessor:
                     if "Codes" in CURRENT_DIR:
                         print(">>> Plotting ......")
                         logging.info(">>> Plotting ......")
-                        Rg_save = os.path.join(Path.fig, f"{Rg.path}.npy")
-                        if os.path.exists(Rg_save) and jump:
-                            print(f"JUMP==>{Rg_save} is already!")
-                            logging.info(f"JUMP==>{Rg_save} is already!")
+                        file_check = os.path.join(Path.fig, f"{MSD.path}.npy")
+                        if os.path.exists(file_check) and jump:
+                            print(f"JUMP==>{file_check} is already!")
+                            logging.info(f"JUMP==>{file_check} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
@@ -2331,9 +2338,7 @@ class JobProcessor:
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
                         print(f"==> Done!")
         else:
-            message = f"File doesn't exist in data: {Path.lmp_trj}"
-            print(message)
-            logging.info(message)
+            echo(f"File doesn't exist in data: {Path.lmp_trj}")
     # -----------------------------------Plot-------------------------------------------#
     def plot_job(self, Config, Run, iRin, variable=Rg):
         '''expand Rg(t) -> Rg(t, Pe, W, N)'''
@@ -2453,8 +2458,8 @@ class JobProcessor:
                                 Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])
                                 Config.set_dump(Run)
                                 if plot_job:
-                                    queue = Run.set_queue()
-                                    for ijob in [MSD]: #[Rg, MSD]:
+                                    #queue = Run.set_queue()
+                                    for ijob in JOBS:
                                         getattr(self, plot_job)(Config, Run, iRin, ijob)
                                 elif data_job:
                                     for iWid in convert2array(params['Wid']):

@@ -35,9 +35,18 @@ HOST = platform.system()
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 input_file = sys.argv[1] if len(sys.argv) > 1 else None
 usage = "Run.py infile or bsub < infile.lsf"
+#-----------------------------------Variable-------------------------------------------
+class Property:
+    def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
+        self.name = name
+        self.path = path
+        self.dtime = dtime
+        self.scale = scale
+        self.paras = paras
+Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, OPEN = ["Simus", "Anas", "Plots"][0], True
-check, jump = (task != "Plots"), True
+task, OPEN = ["Simus", "Anas", "Plots"][2], True
+check, jump, JOBS = (task != "Plots"), True, [Rg] #, MSD]
 if task == "Simus":
     jump = True
 elif task == "Plots":
@@ -54,21 +63,13 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': (1, 20), #(5, 20)
+    #'Trun': (1, 20),
+    'Trun': (1, 20),
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
     'num_chains': 1,
 }
-#-----------------------------------Variable-------------------------------------------
-class Property:
-    def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
-        self.name = name
-        self.path = path
-        self.dtime = dtime
-        self.scale = scale
-        self.paras = paras
-Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #---------------------------------------------------------------------------------------
 class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
@@ -96,17 +97,16 @@ class _config:
                             3: {'Rin': [0.0314, 0.0628, 0.1256], 'Wid': [1.0, 1.5, 2.0, 2.5]},
                             },
                 "Slit":{2: {"Rin":[0.0],"Wid":[5.0, 10.0, 15.0, 20.0]},
-                        3: {"Rin":[0.0],"Wid":[1.0]}, #3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                        3: {"Rin":[0.0],"Wid":[3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
                         },
                 },
 
             "Darwin": {
                 _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'Xi': 0.0,
-                              'N_monos': [100], #20, 40, 80, 100, 150, 200, 250, 300],
-                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0], 'Temp': [0.2],
-                              #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
+                              #'N_monos': [100], 'Fa': [1.0], 'Temp': [0.2],
+                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
+                              'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
                               #'Gamma': [10.0],
                           },
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -954,7 +954,7 @@ class _path:
             if os.path.exists(self.lmp_trj):
                 return True
             elif i == 3:
-                echo(f"File doesn't exist in data: {Path.lmp_trj}")
+                #echo(f"File doesn't exist in data: {self.lmp_trj}")
                 return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
@@ -1045,7 +1045,7 @@ class BasePlot:
             print(f"{fig_file}.pdf")
             logging.info(f"{fig_file}.pdf")
         return fig_file
-    def set_style(self):
+    def set_style(self, mag, size=(6.4, 5.4), inter=(0.2, 0.5), title=""):
         '''plotting'''
         plt.clf()
         plt.rc('text', usetex=True)
@@ -1056,6 +1056,14 @@ class BasePlot:
         plt.rcParams['ytick.labelsize'] = 15
         self.notes = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)", "(g)", "(h)", "(i)", "(j)", "(k)"]
         self.markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
+        # ----------------------------> setup: canvas<----------------------------#
+        (cols, rows), (width, heigh), (wspace, hspace) = mag, size, inter
+        left, right, bot, top = 0.5 / width * cols, 1 - 0.5 / width * cols, 1.5 / heigh * rows, 1 - 1.5 / heigh * rows
+        plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
+        fig = plt.figure(figsize=(width * cols, heigh * rows))
+        gs = GridSpec(rows, cols, figure=fig)
+        fig.suptitle(title, fontsize=25)
+        return fig, gs
     def colorbar(self, fig, ax, sc, label, is_3D=False, loc="right"):
         '''colorbar'''
         axpos = ax.get_position()
@@ -1200,16 +1208,12 @@ class _plot(BasePlot):
         with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figure<----------------------------#
             self.set_style()
-            # Prepare figure and subplots
-            fig = plt.figure(figsize=(20, 9))
-            plt.subplots_adjust(left=0.1, right=0.95, bottom=0.13, top=0.9, wspace=0.6, hspace=0.5)
-            gs = GridSpec(2, 5, figure=fig)
+            fig, gs = self.set_gs((5, 2), (4, 4.5), (0.6, 0.5))
             ax_a = fig.add_subplot(gs[0:2, 0:2], projection='3d')
             ax_b, ax_c, ax_d = [fig.add_subplot(gs[0, i]) for i in [2, 3, 4]]
             ax_e = fig.add_subplot(gs[1, 2], sharex=ax_b, sharey=ax_b)
             ax_f = fig.add_subplot(gs[1, 3], sharex=ax_c, sharey=ax_c)
             ax_g = fig.add_subplot(gs[1, 4], sharex=ax_d, sharey=ax_d)
-
             # ----------------------------> ax_a <----------------------------#
             sc_a = ax_a.scatter(simp_x, simp_y, simp_z, c=simp_z, cmap='rainbow') #, vmin=df_grp['mean'].min(), vmax=df_grp['mean'].max())
             #ax_a.axhline(y=mid_y, linestyle='--', lw=1.5, color='black')  # Selected Particle ID
@@ -1285,18 +1289,12 @@ class _plot(BasePlot):
                 print(f"{fig_file}.pdf")
                 logging.info(f"{fig_file}.pdf")
             with PdfPages(f"{fig_file}.pdf") as pdf:
-                self.set_style()
-                # ----------------------------> plot figure<----------------------------#
-                # Create the layout
-                fig = plt.figure(figsize=(18, 9))
-                fig.subplots_adjust(wspace=0.5, hspace=0.5)
-                gs = GridSpec(2, 4, figure=fig)
+                # ----------------------------> setup: canvas<----------------------------#
+                fig, gs = self.set_style((4, 2), (4.5, 4.5), (0.5, 0.5))
                 ax_a = fig.add_subplot(gs[0:2, 0:2])
-                ax_b = fig.add_subplot(gs[0, 2], sharex=ax_a)
-                ax_c = fig.add_subplot(gs[0, 3], sharex=ax_a)
-                ax_d = fig.add_subplot(gs[1, 2], sharey=ax_a)
-                ax_e = fig.add_subplot(gs[1, 3], sharey=ax_a)
-
+                #ax_b, ax_c = fig.add_subplot(gs[0, 2], sharex=ax_a), fig.add_subplot(gs[0, 3], sharex=ax_a),
+                #ax_d, ax_e = fig.add_subplot(gs[1, 2], sharey=ax_a), fig.add_subplot(gs[1, 3], sharey=ax_a)
+                axes = [[fig.add_subplot(gs[i, j]) for j in range(2,4)] for i in range(2)].flattern()
                 # Plot fz(x,y)
                 heatmap = ax_a.pcolormesh(x_bins, y_bins, hist_2D.T, shading='auto', cmap='rainbow')
                 ax_a.axhline(y=y_bin_centers[bin_id], linestyle='--', lw = 1.5, color='black')  # Selected Particle ID
@@ -1306,36 +1304,36 @@ class _plot(BasePlot):
                 self.set_axes(ax_a, (x_bin_centers, y_bin_centers, None), (x_label, y_label, None), title, rotation=0, loc="center")
 
                 # Plot Fz(x;y0)
-                ax_b.bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-                ax_b.set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-                ax_b.tick_params(axis='x', rotation=45)
-                ax_b.set_xlabel(f"{x_label}", fontsize=20)
-                ax_b.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
-                ax_b.set_ylim(0, max(hist_x_at_y) * 1.1)
+                axes[0].bar(x_bin_centers, hist_x_at_y, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                axes[0].set_title(fr"{y_label}$_0$ = {y_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                axes[0].tick_params(axis='x', rotation=45)
+                axes[0].set_xlabel(f"{x_label}", fontsize=20)
+                axes[0].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}$({x_label}; {y_label}$_0$)", fontsize=20)
+                axes[0].set_ylim(0, max(hist_x_at_y) * 1.1)
 
                 # Plot Fzy(x)
-                ax_c.bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
-                ax_c.plot(x_range, pdf_x, 'r', label='PDF')
-                ax_c.set_title("Distribution", loc='right', fontsize=20)
-                ax_c.tick_params(axis='x', rotation=45)
-                ax_c.set_xlabel(f"{x_label}", fontsize=20)
-                ax_c.set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
-                ax_c.set_ylim(0, max(hist_x) *1.1)
+                axes[1].bar(x_bin_centers, hist_x, width=(x_bins[1] - x_bins[0]), alpha = 0.7, label="histogram")
+                axes[1].plot(x_range, pdf_x, 'r', label='PDF')
+                axes[1].set_title("Distribution", loc='right', fontsize=20)
+                axes[1].tick_params(axis='x', rotation=45)
+                axes[1].set_xlabel(f"{x_label}", fontsize=20)
+                axes[1].set_ylabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{y_label.replace('$', '')}}}$({x_label})", fontsize=20)
+                axes[1].set_ylim(0, max(hist_x) *1.1)
 
                 # Plot Fz(y;x0)
-                ax_d.barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-                ax_d.set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
-                ax_d.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
-                ax_d.set_ylabel(f"{y_label}", fontsize=20)
-                ax_d.set_xlim(0, max(hist_y_at_x)*1.1)
+                axes[2].barh(y_bin_centers, hist_y_at_x, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                axes[2].set_title(fr"{x_label}$_0$ = {x_bin_centers[bin_id]:.2f}", loc='right', fontsize=20)
+                axes[2].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}$({y_label}; {x_label}$_0$)", fontsize=20)
+                axes[2].set_ylabel(f"{y_label}", fontsize=20)
+                axes[2].set_xlim(0, max(hist_y_at_x)*1.1)
 
                 # Plot Fzx(y)
-                ax_e.barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
-                ax_e.plot(pdf_y, y_range, 'r', label='PDF')
-                ax_e.set_title('Distribution', loc='right', fontsize=20)
-                ax_e.set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
-                ax_e.set_ylabel(f"{y_label}", fontsize=20)
-                ax_e.set_xlim(0, max(hist_y)*1.1)
+                axes[3].barh(y_bin_centers, hist_y, height=(y_bins[1] - y_bins[0]), alpha = 0.7, label="histogram")
+                axes[3].plot(pdf_y, y_range, 'r', label='PDF')
+                axes[3].set_title('Distribution', loc='right', fontsize=20)
+                axes[3].set_xlabel(fr"$f^{{{z_label.replace('$', '')}}}_{{{x_label.replace('$', '')}}}$({y_label})", fontsize=20)
+                axes[3].set_ylabel(f"{y_label}", fontsize=20)
+                axes[3].set_xlim(0, max(hist_y)*1.1)
 
                 # ----------------------------> linewidth <----------------------------#
                 for ax, note in zip([ax_a, ax_b, ax_c, ax_d, ax_e], ['(a)', '(b)', '(c)', '(d)', '(e)',]):
@@ -1384,12 +1382,8 @@ class Plotter3D(BasePlot):
         notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
         fig_file = self.fig_path()
         with PdfPages(f"{fig_file}.pdf") as pdf:
-            # ----------------------------> plot figures<----------------------------#
-            self.set_style()
-            #Prepare figure and subplots
-            fig = plt.figure(figsize=(18, 25))
-            plt.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, wspace=0.35, hspace=0.5)
-            gs = GridSpec(6, 4, figure=fig)
+            # ----------------------------> setup: canvas<----------------------------#
+            fig, gs = self.set_style((4, 6), (4.5, 4.5), (0.35, 0.5))
             axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
             axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
 
@@ -1434,13 +1428,10 @@ class Plotter3D(BasePlot):
             fig_file = self.fig_path("Exp", fig_save)
             with PdfPages(f"{fig_file}.pdf") as pdf:
                 for iz in z:
-                    # ----------------------------> set up<----------------------------#
-                    self.set_style()
-                    # ----------------------------> figures and axies<----------------------------#
-                    fig = plt.figure(figsize=(6.4 * 2, 4.8))
-                    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
-                    gs = GridSpec(1, 2, figure=fig)
-                    axes_2D = [fig.add_subplot(gs[0, j]) for j in range(0, 2)]
+                    # ----------------------------> setup: canvas<----------------------------#
+                    cols, rows = 2, 1
+                    fig, gs = self.set_style((cols, rows))
+                    axes_2D = [fig.add_subplot(gs[0, j]) for j in range(0, cols)]
                     # ----------------------------> plotting <----------------------------#
                     self.scatter(fig, axes_2D[0], (x, f, y, iz), (xlabel, flabel, ylabel, zlabel), self.notes[0], log=True)
                     self.scatter(fig, axes_2D[1], (y, f, x, iz), (ylabel, flabel, xlabel, zlabel), self.notes[1], log=True)
@@ -1547,14 +1538,11 @@ class Plotter3D(BasePlot):
                 # ----------------------------> data and labels <----------------------------#
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
-                # ----------------------------> set up<----------------------------#
-                self.set_style()
-                # ----------------------------> figures and axies<----------------------------#
-                fig = plt.figure(figsize=(6.4*3, 4.8))
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=0.15, top=0.85, wspace=0.15, hspace=0.5)
-                gs = GridSpec(1, 3, figure=fig)
+                # ----------------------------> setup: canvas<----------------------------#
+                cols, rows = 3, 1
+                fig, gs = self.set_style((cols, rows))
                 axes_3D = [fig.add_subplot(gs[0, 0], projection='3d')]
-                axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,3)]
+                axes_2D = [fig.add_subplot(gs[0, j]) for j in range(1,cols)]
                 # ----------------------------> plotting: a <----------------------------#
                 sc = axes_3D[0].scatter(x, y, z, c=f, cmap="rainbow", s=100)
                 self.colorbar(axes_3D[0], f, flabel, True)
@@ -1624,15 +1612,11 @@ class Plotter3D(BasePlot):
                 f, x, y, z = data
                 flabel, xlabel, ylabel, zlabel = labels
                 unique_x, unique_y, unique_z = np.unique(x), np.unique(y), np.unique(z)
-                # ----------------------------> set up<----------------------------#
-                self.set_style()
-                # ----------------------------> figures and axies<----------------------------#
-                bot, top = (0.1, 0.85) if len(unique_z) <= 4 else (0.05, 0.95)
-                fig = plt.figure(figsize=(5 * 2, 5.5 * len(unique_z)))
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.5)
-                gs = GridSpec(len(unique_z), 2, figure=fig)
-                axes_2D = [fig.add_subplot(gs[i, j]) for i in range(len(unique_z)) for j in range(2)]
-                fig.suptitle(f"{flabel} with {zlabel} fixed", fontsize=25)
+                suplabel = f"{flabel} with {zlabel} fixed"
+                # ----------------------------> setup: canvas<----------------------------#
+                cols, rows  = 2, len(unique_z)
+                fig, gs = self.set_style((cols, rows), (5, 5.5), (0.5, 0.5), title=suplabel)
+                axes_2D = [fig.add_subplot(gs[i, j]) for i in range(rows) for j in range(cols)]
                 for i, iz in enumerate(unique_z):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
@@ -1738,15 +1722,12 @@ class Plotter3D(BasePlot):
                 #print(f"nu: {f}\n N:{x}\n W:{y}")
                 xlabel, ylabel = labels[2:4]
                 flabel = fr"$^{{{self.variable.name}}}_{{{labels[1]}}}{self.variable.scale}$"
-                # ----------------------------> start <----------------------------#
-                self.set_style()
-                rows, cols, bot, top = 2, 2, 0.1, 0.85
-                fig = plt.figure(figsize=(6*rows, 5.5*cols))
-                #plt.subplots_adjust(left=0.1, right=0.85, bottom=bot, top=top, wspace=0.2, hspace=0.5)
-                gs = GridSpec(rows, cols, figure=fig)
+                suplabel = f"{flabel}({xlabel}, {ylabel})"
+                # ----------------------------> setup: canvas<----------------------------#
+                cols, rows  = 2, 2
+                fig, gs = self.set_style((cols, rows), (6, 5.5), title=suplabel)
                 axe3D = [fig.add_subplot(gs[0, 0], projection='3d')]
                 axe2D = [fig.add_subplot(gs[i, j]) for i in range(rows) for j in range(cols) if not (i == 0 and j == 0)]
-                fig.suptitle(f"{flabel}({xlabel}, {ylabel})", fontsize=25)
                 # ----------------------------> plotting <----------------------------#
                 axe3D[0].scatter(x, y, f, c=f, cmap="rainbow", s=100)
                 self.colorbar(axe3D[0], f, flabel, True)
@@ -1796,7 +1777,7 @@ class Plotter4D(BasePlot):
         ax.set_ylim(ylim[0] * ymin, ylim[1] * ymax)
         # ----------------------------> legends <----------------------------#
         if legends:
-            ax.legend(handles=legends, title=zlabel, frameon=False, title_fontsize=15, fontsize=15)
+            ax.legend(handles=legends, title=zlabel, frameon=False, title_fontsize=15, fontsize=15, ncol=int(len(legends)/5)+1)
         else:
             ax.legend(title=ylabel, frameon=False, title_fontsize=15, fontsize=15)
         # ----------------------------> adding <----------------------------#
@@ -1842,12 +1823,9 @@ class Plotter4D(BasePlot):
                 suplabel = f"{flabel}({xlabel}, {ylabel}, {zlabel}) with {wlabel} fixed"
                 x = self.df["dt"][0] * np.arange(len(self.df[self.variable.name][0]))
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
-                # ---------------------------------> setup: figure and axes<------------------------------------#
-                self.set_style()
-                fig, axes = plt.subplots(len(unique_w), 2, figsize=(6.4 * 2, 5.4 * len(unique_w)))
-                bot, top = (0.15, 0.85) if len(unique_w) <= 4 else (0.05, 0.93)
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.4)
-                fig.suptitle(suplabel, fontsize=25)
+                # ----------------------------> setup: canvas<----------------------------#
+                fig, gs = self.set_style((2, len(unique_w)), title=suplabel)
+                axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)]
                 # ----------------------------> plotting <----------------------------#
                 for i, w in enumerate(unique_w):
                     self.scatter_exp(w, axes[i, 0], (x, unique_y, unique_z, unique_w), (flabel, xlabel, ylabel, zlabel, wlabel), self.notes[0])
@@ -1875,18 +1853,12 @@ class Plotter4D(BasePlot):
                 x, f_flat = self.df["dt"][0] * np.arange(len(self.df[self.variable.name][0])), [item for sublist in self.df[self.variable.name] for item in sublist]
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
                 xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
-                # ---------------------------------> set up<------------------------------------#
-                self.set_style()
-                colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))
-                color_map = list(zip(self.markers, colors))
-                # ----------------------------> figure and axes<----------------------------#
+                # ----------------------------> setup: canvas<----------------------------#
                 num_axis = len(unique_z) * len(unique_w)
-                rows = num_axis // 2 + num_axis % 2
-                fig, axes = plt.subplots(rows, 2, figsize=(6.4 * 2, 5.3 * rows))
-                bot, top = (0.1, 0.85) if num_axis <= 4 else (0.05, 0.93)
-                plt.subplots_adjust(left=0.1, right=0.9, bottom=bot, top=top, wspace=0.2, hspace=0.3)
-                fig.suptitle(suplabel, fontsize=25)
-                axes = axes.flatten()
+                cols, rows = 2, num_axis // 2 + num_axis % 2
+                fig, gs = self.set_style((cols, rows), title=suplabel)
+                color_map = list(zip(self.markers, plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))))
+                axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)].flatten()
                 if num_axis % 2:
                     axes[-1].axis('off')
                 # ----------------------------> plotting <----------------------------#
@@ -2457,8 +2429,8 @@ class JobProcessor:
                                 Run = _run(Config.Dimend, iGamma, iTemp, params['Trun'])
                                 Config.set_dump(Run)
                                 if plot_job:
-                                    queue = Run.set_queue()
-                                    for ijob in [MSD]: #[Rg, MSD]:
+                                    #queue = Run.set_queue()
+                                    for ijob in JOBS:
                                         getattr(self, plot_job)(Config, Run, iRin, ijob)
                                 elif data_job:
                                     for iWid in convert2array(params['Wid']):
