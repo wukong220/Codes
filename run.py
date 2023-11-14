@@ -45,7 +45,7 @@ class Property:
         self.paras = paras
 Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][0], [Rg, MSD]
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -2219,20 +2219,19 @@ class JobProcessor:
         self.Model.in_file(Path)  # return
         self.Run.sub_file(Path, infiles)
         # excute jobs
-        if input_file:
-            # running files
-            if HOST == "Darwin":  # macOS
-                self.exe_simus("Run", Path.simus, input_file)
-            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+        if "Codes" in CURRENT_DIR and (HOST == "Linux" and self.run_on_cluster == "false"):  # 登陆节点
+            if input_file:
                 self.exe_simus("Submit", Path.simus, input_file)
-        else:
-            for infile in infiles:
-                # running files
-                if HOST == "Darwin":  # macOS
-                    self.exe_simus("Run", Path.simus, infile)
-                # submitting files
-                elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+            else:
+                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
                     self.exe_simus("Submit", Path.simus, infile)
+        else: # macOS
+            if input_file:
+                self.exe_simus("Run", Path.simus, input_file)
+            else:
+                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
+                    self.exe_simus("Run", Path.simus, infile)
+
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
@@ -2481,19 +2480,7 @@ if __name__ == "__main__":
     if os.path.abspath(__file__) != back_file:
         shutil.copy(os.path.abspath(__file__), back_file)
     if task == "Simus":
-        if "Codes" in CURRENT_DIR:
-            run.process(data_job="simus_job")
-        elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-            try:
-                if input_file:
-                    run.exe_simus("Run", CURRENT_DIR, input_file)
-                else:
-                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
-                        run.exe_simus("Run", CURRENT_DIR, infile)
-            except Exception as e:
-                print(usage)
-                logging.error(f"An error occurred: {e}")
-                raise ValueError(f"An error occurred: {e}")
+        run.process(data_job="simus_job")
     # Analysis: single
     elif task == "Anas":
         run.process(data_job="anas_job")
