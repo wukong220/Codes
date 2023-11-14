@@ -29,11 +29,8 @@ from matplotlib.colors import Normalize
 import warnings
 warnings.filterwarnings('ignore')
 # -----------------------------------Const-------------------------------------------
-_BACT = "Bacteria"
-HOST = platform.system()
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-input_file = sys.argv[1] if len(sys.argv) > 1 else None
-usage = "Run.py infile or bsub < infile.lsf"
+HOST, CURRENT_DIR = platform.system(), os.path.dirname(os.path.abspath(__file__))
+input_file, usage = sys.argv[1] if len(sys.argv) > 1 else None, "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Variable-------------------------------------------
 class Property:
     def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
@@ -56,7 +53,7 @@ class Echo:
         print(message)
 echo, Rcom, Rg, MSD, Cee = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][0], [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -66,7 +63,7 @@ elif task == "Anas" and HOST == "Darwin":
     jump = False
 #-----------------------------------Dictionary-------------------------------------------
 params = {
-    'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
+    'labels': {'Types': ["Chain", "Bacteria", "Ring"][0:1],
                 'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
@@ -85,7 +82,7 @@ class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
-                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
+                "Bacteria": {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                           #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                           'Gamma':10, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
@@ -116,13 +113,16 @@ class _config:
                 },
 
             "Darwin": {
-                _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'Xi': 0.0,
-                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
-                              'N_monos': [40, 100], 'Fa': [1.0, 5.0],# 'Temp': [0.2],
-                              #'Gamma': [10.0],
+                "Bacteria": {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
+                              #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
+                             # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
+                              'N_monos': [40, 100], 'Fa': [1.0, 5.0],
                           },
+                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                         },
+
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
                 "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
@@ -132,9 +132,6 @@ class _config:
                 "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
-                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]}, #1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
-                         },
             },
         }
         self.Params = Params
@@ -169,7 +166,7 @@ class _config:
         Run.Tref = Run.Frames * Run.Tdump_ref
         Run.Params["Total Run Steps"] = Run.TSteps
 
-        if self.Type == _BACT:
+        if self.Type == "Bacteria":
             Run.Tdump //= 10
             Run.Tequ //= 100
 #############################################################################################################
@@ -331,7 +328,7 @@ class _init:
                     self.Lbox = self.N_monos/2 + 5
             elif self.Config.Type == "Ring":
                 self.Lbox = self.N_monos / 4 + 5
-            elif self.Config.Type == _BACT:
+            elif self.Config.Type == "Bacteria":
                 self.Lbox = self.N_monos * 10
             else:
                 echo.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
@@ -942,7 +939,7 @@ class _path:
 
         #1.0T_0.0Xi_8T5
         self.dir3 = f"{self.Run.Temp}T_{self.Model.Xi}Xi"
-        if self.Config.Type == _BACT:
+        if self.Config.Type == "Bacteria":
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
@@ -978,7 +975,7 @@ class _anas:
         self.chunk = 9
         self.jump = jump
     def set_dump(self):
-        is_bacteria = (self.Config.Type == _BACT)
+        is_bacteria = (self.Config.Type == "Bacteria")
         dump = {
             2: "xu yu" + (" vx vy" if is_bacteria else ""),
             3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
@@ -2045,7 +2042,6 @@ def label2mark(f, flabel):
     else:
         mark = f
     return mark
-
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
