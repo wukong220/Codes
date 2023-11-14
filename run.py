@@ -518,7 +518,7 @@ class _init:
         # 初始构型的原子信息: theta, x, y, z
         logging.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
-        for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 1)]:
+        for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 2)]:
             data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
@@ -787,7 +787,7 @@ class _model:
 #        Run.Trun = 1000
         logging.info(f"==> Writing infile ==> {Path.simus}")
 
-        for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 1)]:
+        for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 2)]:
             print(f"==> Writing infile: {infile}......")
             dir_file = os.path.join(f"{Path.simus}", infile)
             if Init.Env == "Free":
@@ -2098,7 +2098,7 @@ class JobProcessor:
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable, ['Pe', 'N', 'W'])
-                print(f"==> Done!")
+                print(f"==> Rg_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
@@ -2124,7 +2124,7 @@ class JobProcessor:
                 self.dft['dt']=Run.Tdump * 0.001
                 # saving, subfile, plotting
                 self.exe_plot("save", variable, paras, fig_save)
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
+                print(f"==> Rg_job: Done! \n==>Please check the results and submit the plots!")
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
@@ -2214,7 +2214,7 @@ class JobProcessor:
             shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.filename))
 
         # prepare files
-        infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+1)]
+        infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+2)]
         self.Init.data_file(Path)
         self.Model.in_file(Path)  # return
         self.Run.sub_file(Path, infiles)
@@ -2241,7 +2241,7 @@ class JobProcessor:
 
             print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
             subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-            print(f"{dir_file}.in ==> Done! \n")
+            print(f"{dir_file}.in ==> Simus: Done!")
 
         elif task == "Submit":
             print(f">>> Running jobs : {infile}......")
@@ -2298,7 +2298,7 @@ class JobProcessor:
                             # Plot.org(data_Rcom ** 2, "Rcom2")
                         if OPEN and HOST == "Darwin":
                             subprocess.run(["open", Path.fig])
-                        print(f"==> Done! \n==>Please check the results and submit the plots!")
+                        print(f"==> Anas_job: Done! \n==>Please check the results and submit the plots!")
                     elif "Figs" in CURRENT_DIR:
                         print(f">>> Plotting: {CURRENT_DIR} ......")
                         logging.info(f">>> Plotting {CURRENT_DIR} ......")
@@ -2307,7 +2307,7 @@ class JobProcessor:
                         data_Rcom = self.exe_analysis(path, data)
                         #data_Rcom = np.load(os.path.join(CURRENT_DIR, "Rcom.npy"))
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
-                        print(f"==> Done!")
+                        print(f"==> Anas_job: Done!")
         else:
             echo(f"File doesn't exist in anas_job: {Path.lmp_trj}")
     def exe_analysis(self, Path, data):
@@ -2363,7 +2363,7 @@ class JobProcessor:
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable)
-                print(f"==> Done!")
+                print(f"==> Plot_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
@@ -2403,7 +2403,7 @@ class JobProcessor:
                 # saving, subfile, plotting
                 variable.df['dt'] = Run.Tdump * 0.001
                 self.exe_plot("save", variable, fig_save)
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
+                print(f"==> Plot_job: Done! \n==>Please check the results and submit the plots!")
     def exe_plot(self, task, variable, path=CURRENT_DIR):
         '''plotting execute'''
         abbre, file_name = var2str(variable.name)[1], ','.join(variable.paras)
@@ -2431,7 +2431,7 @@ class JobProcessor:
             plotter3.project()
             plotter3.expand()
             plotter3.scale()
-        print("-----------------------------------Done!--------------------------------------------")
+        print(">>> Plotting -------------------------------Done!----------------------------------------")
         if OPEN and HOST == "Darwin":
             subprocess.run(["open", path])
     # -----------------------------------Process-------------------------------------------#
@@ -2488,7 +2488,7 @@ if __name__ == "__main__":
                 if input_file:
                     run.exe_simus("Run", CURRENT_DIR, input_file)
                 else:
-                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]:
+                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
                         run.exe_simus("Run", CURRENT_DIR, infile)
             except Exception as e:
                 print(usage)
