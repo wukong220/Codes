@@ -75,14 +75,15 @@ class _config:
         self.config = {
             "Linux": {
                 _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
-                          #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
-                           # 'Fa':[0.0, 0.1], 'Gamma':[10],
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
+                          #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                          'Gamma':10, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
+                           #'Gamma':[10], 'Fa':[0.0, 0.1],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                          3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                          #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [10.0, 15.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
 
 
@@ -231,7 +232,8 @@ class _run:
                 queue_info[iqueue]["Usage"] = np.around( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
                 if queue_info[iqueue]["PEND"] == 0:
-                    self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
+                    #print(queue_info[iqueue]['Usage'])
+                    self.Queue = iqueue
                 elif queue_info[iqueue]["PEND"] > 0:
                     self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
@@ -1085,7 +1087,7 @@ class BasePlot:
         fig = plt.figure(figsize=(width * cols, heigh * rows))
         plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
         gs = GridSpec(rows, cols, figure=fig)
-        fig.suptitle(title, fontsize=25)
+        fig.suptitle(title, fontsize=25, y=1.05)
         return fig, gs
     def colorbar(self, ax, data, label, is_3D=False):
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
@@ -1535,8 +1537,8 @@ class Plotter3D(BasePlot):
             colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
             for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
                 ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black',
-                                             facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+            #legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+            legend_handles.append(ax.scatter([], [], s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
         ax.legend(handles=legend_handles, title=wlabel, frameon=False)
         # colorbar
         self.colorbar(ax, z, zlabel, is_3D)
@@ -1608,7 +1610,8 @@ class Plotter3D(BasePlot):
                     label = f'{label2mark(zi, zlabel)}'
                 for xi, yi in zip(x[mask], y[mask]):
                     ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+                #legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+                legend_handles.append(ax.scatter([], [], s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
             ax.legend(title=title, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
             # colorbar
             #self.colorbar(ax, z, zlabel, is_3D)
@@ -1708,8 +1711,8 @@ class Plotter3D(BasePlot):
             ax.plot(x[mask], y[mask], color=color, linestyle="--")
             for xi, yi in zip(x[mask], y[mask]):
                 ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color,
-                                             facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+            #legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+            legend_handles.append(ax.scatter([], [], s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
         ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
         self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}", log=log)
         self.adding(ax, note, -0.12, False)
@@ -2231,7 +2234,6 @@ class JobProcessor:
             else:
                 for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
                     self.exe_simus("Run", Path.simus, infile)
-
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
@@ -2485,7 +2487,7 @@ if __name__ == "__main__":
     elif task == "Anas":
         run.process(data_job="anas_job")
         if HOST == "Linux":
-            print(f"{usage}\n=====>task: {Plots}......\n###################################################################")
+            print(f"{usage}\n=====>task: Plots......\n###################################################################")
             run.process(plot_job="plot_job")
     # plot: Pe, N, W
     elif task == "Plots":
