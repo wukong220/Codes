@@ -28,7 +28,6 @@ import matplotlib.transforms as mtransforms
 from matplotlib.colors import Normalize
 import warnings
 warnings.filterwarnings('ignore')
-logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # -----------------------------------Const-------------------------------------------
 _BACT = "Bacteria"
 HOST = platform.system()
@@ -43,7 +42,19 @@ class Property:
         self.dtime = dtime
         self.scale = scale
         self.paras = paras
-Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
+class Echo:
+    def __init__(self):
+        logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    def info(self, message):
+        logging.info(message)
+        print(message)
+    def error(self, message):
+        logging.error(message)
+        raise ValueError(message)
+    def warn(self, message):
+        logging.warning(message)
+        print(message)
+echo, Rcom, Rg, MSD, Cee = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
 #-----------------------------------Parameters-------------------------------------------
 task, JOBS = ["Simus", "Anas", "Plots"][0], [Rg, MSD]
 check, OPEN, jump = (task != "Plots"), True, True
@@ -145,8 +156,7 @@ class _config:
         try:
             Run.Dump = dim_to_dump[self.Dimend]
         except KeyError:
-            logging.error(f"Error: Wrong Dimend to run => dimension != {self.Dimend}")
-            raise ValueError(f"Invalid dimension: {self.Dimend}")
+            echo.error(f"Error: Invalid Dimension to run => Config.Dimend != {self.Dimend}")
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
@@ -196,8 +206,7 @@ class _run:
                 bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
                 bhosts = subprocess.check_output(['bhosts']).decode('utf-8')
             except subprocess.CalledProcessError as e:
-                logging.error(f"Error: {e}")
-                raise ValueError(f"Error: {e}")
+                echo.error(f"Error: {e}")
 
             myques = list(queues.keys())
             queue_info = {key: {"NJOBS": 0, "PEND": 0,"RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for key in myques}
@@ -220,8 +229,7 @@ class _run:
                 try:
                     bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q',  f'{iqueue}']).decode('utf-8')
                 except subprocess.CalledProcessError as e:
-                    logging.error(f"Error: {e}")
-                    raise ValueError(f"Error: {e}")
+                    echo.error(f"Error: {e}")
                 for line in bjobs.strip().split('\n')[1:]:
                     columns = line.split()
                     start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
@@ -231,14 +239,14 @@ class _run:
                 queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"] + 1
                 queue_info[iqueue]["Usage"] = np.around( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
-                if queue_info[iqueue]["PEND"] == 0:
+                #if queue_info[iqueue]["PEND"] == 0:
                     #print(queue_info[iqueue]['Usage'])
-                    self.Queue = iqueue
-                elif queue_info[iqueue]["PEND"] > 0:
-                    self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
+                    #self.Queue = iqueue
+                #elif queue_info[iqueue]["PEND"] > 0:
+                self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
     def sub_file(self, Path, infiles):
-        logging.info(f">>> Preparing sub file: {Path.simus}")
+        echo.info(f">>> Preparing sub file: {Path.simus}")
         for infile in infiles:
             print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.simus}", infile)
@@ -264,8 +272,7 @@ class _run:
             with open(f"{dir_file}.lsf", "w") as file:
                 for command in bsub:
                     file.write(command + "\n")
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        echo.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _init:
     def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
         self.sigma_equ, self.mass, self.sigma = 0.94, 1.0, 1.0
@@ -282,8 +289,7 @@ class _init:
         self.set_box()   #set box
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
-            print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
-            logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
+            echo.warning(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
 
         if self.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
@@ -295,8 +301,7 @@ class _init:
             self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(self.Nobs_Rin + self.Nobs_Rout)
             theta = [np.linspace(0, 2 * np.pi, int(2 * np.pi * R / self.sigma_equ + 1))[:-1] for R in self.Rring]
             if self.Config.Dimend == 2 and (self.num_monos > sum(itheta.size for itheta in theta)):
-                print("N_monos is too Long!")
-                logging.warning("N_monos is too Long!")
+                echo.warning("N_monos is too Long!")
                 self.jump = True
 
         elif self.Env == "Rand":
@@ -314,8 +319,7 @@ class _init:
             self.bonds = self.num_monos - self.num_chains*1
             self.angles = self.num_monos - self.num_chains*2
         if (self.num_chains != 1):
-            logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
-            raise ValueError(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
+            echo.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
     def set_box(self):
         """计算盒子大小"""
         if self.Env == "Anlus":
@@ -330,8 +334,7 @@ class _init:
             elif self.Config.Type == _BACT:
                 self.Lbox = self.N_monos * 10
             else:
-                print(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
-                logging.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
+                echo.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
         self.v_box = (2 * self.Lbox) ** self.Config.Dimend
 
         if self.Config.Dimend == 2:
@@ -343,8 +346,7 @@ class _init:
             self.zhi = self.Lbox
             self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
         else:
-            logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
-            raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
+            echo.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
     def N_ring(self, density, Radius, sigma):
         return np.ceil(density * 2 * np.pi * Radius / sigma)
     def N_circles(self):
@@ -518,7 +520,7 @@ class _init:
 
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
-        logging.info("==> Preparing initial data file......")
+        echo.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 2)]:
             data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
@@ -531,7 +533,7 @@ class _init:
                 elif self.Env == "Rand":
                     self.write_rand(file)
                 self.write_potential(file)
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        echo.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
 class _model:
     def __init__(self, Init, Run, Fa, Xi):
@@ -787,7 +789,7 @@ class _model:
         #from LJ + harmonic ==> LJ4422 + FENE4422
         Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
-        logging.info(f"==> Writing infile ==> {Path.simus}")
+        echo.info(f"==> Writing infile ==> {Path.simus}")
 
         for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 2)]:
             print(f"==> Writing infile: {infile}......")
@@ -911,8 +913,7 @@ write_restart   ${{dir_file}}.restart
                         self.write_section(file, refine_read)
                         self.write_section(file, refine_run)
                 except Exception as e:
-                    logging.error(f"An error occurred: {e}")
-                    raise ValueError(f"An error occurred: {e}")
+                    echo.error(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _path:
     def __init__(self, Model):
@@ -963,7 +964,7 @@ class _path:
                 return True
             else:
                 if i == 3:
-                    echo(f"File doesn't exist in Path: {lmp_trj}")
+                    echo.info(f"File doesn't exist in Path: {lmp_trj}")
                     return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
@@ -985,8 +986,7 @@ class _anas:
         try:
             return dump[self.Config.Dimend].split(" ")
         except KeyError:
-            logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
-            raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
+            echo.error(f"Error: Invalid dimension to run => Config.Dimend != {self.Config.Dimend}")
     def read_data(self):
         timer = Timer("Read")
         timer.start()
@@ -1001,27 +1001,22 @@ class _anas:
                 if os.path.exists(dir_file):
                     break
                 elif i == 3:
-                    logging.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
-                    raise ValueError(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
-            logging.info(f"==> Reading {dir_file} file: ......")
-            print(f"==> Reading {dir_file} file: ......")
+                    echo.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
+            echo.info(f"==> Reading {dir_file} file: ......")
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
             natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             if natoms != self.Init.num_monos:
-                logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
-                raise ValueError(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
+                echo.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
-                logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
-                raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
+                echo.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
             skiprows = np.concatenate([np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x for x in range(self.Run.Frames + 1)])
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             except Exception as e:
-                logging.error(f"ERROR: Could not read the file due to {e}")
-                raise ValueError(f"ERROR: Could not read the file due to {e}")
+                echo.error(f"ERROR: Could not read the file due to {e}")
 
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
@@ -1062,12 +1057,10 @@ class BasePlot:
     def fig_path(self, mark=None, fig_save=None):
         fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
         if os.path.exists(f"{fig_file}.pdf") and self.jump:
-            print(f"==>{fig_file}.pdf is already!")
-            logging.info(f"==>{fig_file}.pdf is already!")
+            echo.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{fig_file}.pdf")
-            logging.info(f"{fig_file}.pdf")
+            echo.info(f"{fig_file}.pdf")
         return fig_file
     def set_style(self, mag, size=(6.4, 5.4), inter=(0.2, 0.5), edge=(1.0, 1.5), title=""):
         '''plotting:  axes = [ax for row in axes for ax in row]'''
@@ -1156,9 +1149,8 @@ class _plot(BasePlot):
         data = np.mean(self.data, axis=0)
 
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
-            message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
-            print(message)
-            logging.info(message)
+            echo.info(f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; "
+                         f"frames != Frames => {frames} != {self.Run.Frames+1}")
         times, ids = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1)
 
         if flag:
@@ -1218,12 +1210,10 @@ class _plot(BasePlot):
         #----------------------------> figure path <----------------------------#
         fig_file = os.path.join(f"{self.Path.fig}", fr"{self.variable.name}.Org.({z_abbre},{x_abbre},{y_abbre})")
         if os.path.exists(f"{fig_file}.pdf") and self.jump:
-            print(f"==>{fig_file}.pdf is already!")
-            logging.info(f"==>{fig_file}.pdf is already!")
+            echo.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{fig_file}.pdf")
-            logging.info(f"{fig_file}.pdf")
+            echo.info(f"{fig_file}.pdf")
         with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figure<----------------------------#
             fig, gs = self.set_style((5, 2), (4, 4.5), (0.3, 0.5))
@@ -1300,12 +1290,10 @@ class _plot(BasePlot):
             #----------------------------> figure settings <----------------------------#
             fig_file = os.path.join(f"{self.Path.fig}", f"{self.variable.name}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
             if os.path.exists(f"{fig_file}.pdf") and self.jump:
-                print(f"==>{fig_file}.pdf is already!")
-                logging.info(f"==>{fig_file}.pdf is already!")
+                echo.info(f"==>{fig_file}.pdf is already!")
                 return True
             else:
-                print(f"{fig_file}.pdf")
-                logging.info(f"{fig_file}.pdf")
+                echo.info(f"{fig_file}.pdf")
             with PdfPages(f"{fig_file}.pdf") as pdf:
                 # ----------------------------> setup: canvas<----------------------------#
                 fig, gs = self.set_style((4, 2), (4.5, 4.5), (0.5, 0.5))
@@ -1930,8 +1918,7 @@ class Timer:
             raise RuntimeError('Not started')
         end = self._func()
         self.elapsed += end - self._start
-        print(f"-------------------------------{self.tip}: Done!----------------------------------------")
-        # logging.info(str, ":", self.elapsed)
+        echo.info(f"-------------------------------{self.tip}: Done!----------------------------------------")
         self._start = None
     def count(self, str="Time"):
         end = self._func()
@@ -2058,9 +2045,7 @@ def label2mark(f, flabel):
     else:
         mark = f
     return mark
-def echo(message):
-    print(message)
-    logging.info(message)
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -2080,24 +2065,20 @@ class JobProcessor:
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
                       f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
         # copy Run.py
-        message = f"dir_figs => {fig_save}"
         os.makedirs(fig_save, exist_ok=True)
         py_file = os.path.join(f"{fig_save}", f"{variable}.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_figs => {fig_save}")
         # prepare files
         dir_file = os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
+                echo.info(">>> Submitting plots......")
+                echo.info(f"bsub < {dir_file}.lsf => Submitted: {dir_file}.py")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable, ['Pe', 'N', 'W'])
@@ -2116,9 +2097,7 @@ class JobProcessor:
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        message = f"ERROR: Wrong {variable} path: Anas.job \n==> {data_path},"
-                                        logging.error(message)
-                                        raise ValueError(message)
+                                        echo.error(f"ERROR: Wrong {variable} path: Anas.job \n==> {data_path},")
                                 if variable == "Rg":
                                     Rg2 = np.load(data_path)
                                     Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
@@ -2159,8 +2138,7 @@ class JobProcessor:
         # read data
         for index, ifile in enumerate([f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]):
             filename = os.path.join(CURRENT_DIR, f"{ifile}.lammpstrj")
-            logging.info(f"==> Reading {filename} file: ......")
-            print(f"==> Reading {filename} file: ......")
+            echo.info(f"==> Reading {filename} file: ......")
             if index == 0:  # read and check
                 natoms = pd.read_csv(filename, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
                 skiprows = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(Frames + 1)])
@@ -2169,9 +2147,7 @@ class JobProcessor:
                 zlo, zhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=7, nrows=1).values[0, :2]
                 Lx, Lz = xhi - xlo, zhi - zlo
                 if natoms != atoms and (Lz < 1.0001 and dimend == 3):
-                    message = f"ERROR: Wrong atoms => {natoms} !={atoms}"
-                    logging.error(message)
-                    raise ValueError(message)
+                    echo.error(f"ERROR: Wrong atoms => {natoms} !={atoms}")
             df = pd.read_csv(filename, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
         if pe > 50:
@@ -2179,8 +2155,7 @@ class JobProcessor:
         #analysis and save data
         return  data
     def subfile(self, jobname, descript, dir_file):
-        print(f">>> Preparing subfile for {jobname}......")
-        logging.info(f">>> Preparing subfile for {jobname}......")
+        echo.info(f">>> Preparing subfile for {jobname}......")
         bsub = [
             f'#!/bin/bash',
             f'',
@@ -2209,9 +2184,7 @@ class JobProcessor:
             return
 
         # Create simulation directory and copy Run.py
-        message = f"dir_simus => {Path.simus}"
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_simus => {Path.simus}")
         os.makedirs(Path.simus, exist_ok=True)
         if os.path.abspath(__file__) != os.path.join(Path.simus, Path.filename):
             shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.filename))
@@ -2237,26 +2210,16 @@ class JobProcessor:
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
-            print(f">>> Running jobs: {infile}......")
-            logging.info(f">>> Running jobs: {infile}......")
-
-            print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
+            echo.info(f">>> Running jobs: {infile}......\nmpirun -np 1 lmp_wk -i {dir_file}.in")
             subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-            print(f"{dir_file}.in ==> Simus: Done!")
+            echo.info(f"{dir_file}.in ==> Simus: Done!")
 
         elif task == "Submit":
-            print(f">>> Running jobs : {infile}......")
-            logging.info(f">>> Running jobs : {infile}......")
-
-            print(f"bsub < {dir_file}.lsf")
+            echo.info(f">>> Running jobs : {infile}......\nbsub < {dir_file}.lsf")
             subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            print(f"Submitted: {dir_file}")
-            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+            echo.info(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         else:
-            message = f"ERROR: Wrong task => {task} != Run or Submit"
-            print(message)
-            logging.error(message)
-            raise ValueError(message)
+            echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
     # -----------------------------------Anas-------------------------------------------#
     def anas_job(self, Path, **kwargs):
         self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
@@ -2265,7 +2228,7 @@ class JobProcessor:
         ###################################################################
         # Initialize directories and files
         Anas, Plot = _anas(Path, Pe), _plot(Path)
-        echo(f"dir_figs => {Path.fig}")
+        echo.info(f"dir_figs => {Path.fig}")
         os.makedirs(Path.fig, exist_ok=True)
         py_file = os.path.join(f"{Path.fig}", f"dana.py")
         if os.path.abspath(__file__) != f"{py_file}":
@@ -2277,21 +2240,17 @@ class JobProcessor:
             if not self.submitted:
                 # submitting files
                 if HOST == "Linux" and self.run_on_cluster == "false" and self.bsub:  # if HOST == "Darwin":  # macOS
-                    print(">>> Submitting plots......")
-                    logging.info(">>> Submitting plots......")
-                    print(f"bsub < {dir_file}.lsf")
+                    echo.info(">>> Submitting plots......\nbsub < {dir_file}.lsf")
                     subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                    print(f"Submitted: {dir_file}.py")
+                    echo.info(f"Submitted: {dir_file}.py")
                     self.submitted = True
                 else:
                     #self.exe_anas(task, path)
                     if "Codes" in CURRENT_DIR:
-                        print(">>> Plotting ......")
-                        logging.info(">>> Plotting ......")
+                        echo.info(">>> Plotting ......")
                         file_check = os.path.join(Path.fig, f"{JOBS[-1].path}.npy")
                         if os.path.exists(file_check) and jump:
-                            print(f"JUMP==>{file_check} is already!")
-                            logging.info(f"JUMP==>{file_check} is already!")
+                            echo.info(f"JUMP==>{file_check} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
@@ -2301,8 +2260,7 @@ class JobProcessor:
                             subprocess.run(["open", Path.fig])
                         print(f"==> Anas_job: Done! \n==>Please check the results and submit the plots!")
                     elif "Figs" in CURRENT_DIR:
-                        print(f">>> Plotting: {CURRENT_DIR} ......")
-                        logging.info(f">>> Plotting {CURRENT_DIR} ......")
+                        echo.info(f">>> Plotting {CURRENT_DIR} ......")
                         path = CURRENT_DIR.replace('Figs', 'Simus')
                         data = self.read_simp(path)
                         data_Rcom = self.exe_analysis(path, data)
@@ -2310,17 +2268,17 @@ class JobProcessor:
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
                         print(f"==> Anas_job: Done!")
         else:
-            echo(f"File doesn't exist in anas_job: {Path.lmp_trj}")
+            echo.info(f"File doesn't exist in anas_job: {Path.lmp_trj}")
     def exe_analysis(self, Path, data):
         '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
-        echo(f"analyse and save data => {Path}")
+        echo.info(f"analyse and save data => {Path}")
         Trun, frames = params["Trun"][1], params["Frames"]
         Rcom.data = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位置
         data_com = data - np.expand_dims(np.mean(data, axis=2), axis=2) #质心坐标
         data_Rcom = np.linalg.norm(data_com[..., :], axis=-1) #质心坐标的模
         # ---------------------------------------> Rg <---------------------------------------#
         Rg2_t = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # Rg2_t[iframe]
-        echo(f"Rg2(t) and Rcom(t) ......")
+        echo.info(f"Rg2(t) and Rcom(t) ......")
         Rcom.save, Rg.save = os.path.join(Path, f"{Rcom.path}.npy"), os.path.join(Path, f"{Rg.path}.npy")
         np.save(Rcom.save, Rcom.data)
         np.save(Rg.save, Rg2_t) #average over time
@@ -2331,7 +2289,7 @@ class JobProcessor:
         for dt in range(1, frames//2):
             msd_run[:, dt] = np.mean((Rcom.data[:, dt:] - Rcom.data[:, :-dt]) ** 2, axis=1)
         MSD.data = np.mean(msd_run, axis=0)
-        echo(f"MSD(t) ......")
+        echo.info(f"MSD(t) ......")
         np.save(MSD.save, MSD.data)
         return data_Rcom
     # -----------------------------------Plot-------------------------------------------#
@@ -2343,24 +2301,19 @@ class JobProcessor:
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
                       f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
         # copy Run.py
-        message = f"dir_figs => {fig_save}"
         os.makedirs(fig_save, exist_ok=True)
         py_file = os.path.join(f"{fig_save}", f"{variable.name}.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_figs => {fig_save}")
         # prepare files
         dir_file = os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{variable.name}({','.join(variable.paras)})", f"Analysis: {variable.name}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
+                echo.info(f">>> Submitting plots......\nbsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable)
@@ -2380,9 +2333,7 @@ class JobProcessor:
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        message = f"ERROR: Wrong {variable.name} path = {data_path}"
-                                        logging.error(message)
-                                        raise ValueError(message)
+                                        echo.error(f"ERROR: Wrong {variable.name} path = {data_path}")
                                 if variable.name == "Rg":
                                     data_Rg2 = np.load(data_path)
                                     data_Rg = np.sqrt(np.mean(data_Rg2))
@@ -2392,15 +2343,11 @@ class JobProcessor:
                                         variable.df = variable.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable.name: data_Rg}, ignore_index=True)
                                 elif variable.name == "MSD":
                                     if not variable.dtime:
-                                        meassage = f"ERROR: variable: {variable.name} must be combinded with time"
-                                        logging.error(meassage)
-                                        raise ValueError(message)
+                                        echo.error(f"ERROR: variable: {variable.name} must be combinded with time")
                                     else:
                                         variable.df = variable.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable.name: np.load(data_path)}, ignore_index=True)
                                 else:
-                                    meassage = f"ERROR: wong variable: {variable.name}"
-                                    logging.error(meassage)
-                                    raise ValueError(message)
+                                    echo.error(f"ERROR: wong variable: {variable.name}")
                 # saving, subfile, plotting
                 variable.df['dt'] = Run.Tdump * 0.001
                 self.exe_plot("save", variable, fig_save)
@@ -2408,8 +2355,7 @@ class JobProcessor:
     def exe_plot(self, task, variable, path=CURRENT_DIR):
         '''plotting execute'''
         abbre, file_name = var2str(variable.name)[1], ','.join(variable.paras)
-        print(">>> Plotting ......")
-        logging.info(">>> Plotting ......")
+        echo.info(">>> Plotting ......")
         if variable.dtime:
             dirfile = os.path.join(path, f"(r,s){abbre}(t,{file_name})")
             if task == "load":
