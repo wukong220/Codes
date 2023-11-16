@@ -2,20 +2,19 @@ import re
 import os
 import sys
 import time
-import glob
 import shutil
 import logging
 import platform
 import subprocess
 from datetime import datetime, timedelta
-from itertools import combinations, product, permutations, islice
+from itertools import islice
 
 import pandas as pd
 import numpy as np
-from numba import vectorize, jit
+from numpy.polynomial.polynomial import Polynomial
 from collections import defaultdict
-from scipy.spatial import KDTree
-from scipy.interpolate import splrep, splev, griddata
+from scipy.signal import find_peaks
+from scipy.interpolate import splprep, splev, griddata, UnivariateSpline
 from scipy.stats import norm, linregress, gaussian_kde, multivariate_normal
 
 import seaborn as sns
@@ -28,13 +27,9 @@ import matplotlib.transforms as mtransforms
 from matplotlib.colors import Normalize
 import warnings
 warnings.filterwarnings('ignore')
-logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # -----------------------------------Const-------------------------------------------
-_BACT = "Bacteria"
-HOST = platform.system()
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-input_file = sys.argv[1] if len(sys.argv) > 1 else None
-usage = "Run.py infile or bsub < infile.lsf"
+HOST, CURRENT_DIR = platform.system(), os.path.dirname(os.path.abspath(__file__))
+input_file, usage = sys.argv[1] if len(sys.argv) > 1 else None, "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Variable-------------------------------------------
 class Property:
     def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
@@ -43,9 +38,22 @@ class Property:
         self.dtime = dtime
         self.scale = scale
         self.paras = paras
-Rcom, Rg, MSD, Cee = Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
+class Echo:
+    def __init__(self):
+        logging.basicConfig(filename='Run.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    def info(self, message):
+        logging.info(message)
+        print(message)
+    def error(self, message):
+        logging.error(message)
+        raise ValueError(message)
+    def warn(self, message):
+        logging.warning(message)
+        print(message)
+echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
+MSD, Cee = Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD]
+task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -55,7 +63,7 @@ elif task == "Anas" and HOST == "Darwin":
     jump = False
 #-----------------------------------Dictionary-------------------------------------------
 params = {
-    'labels': {'Types': ["Chain", _BACT, "Ring"][0:1],
+    'labels': {'Types': ["Chain", "Bacteria", "Ring"][0:1],
                 'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
@@ -63,7 +71,7 @@ params = {
     # 动力学方程的重要参数
     'Temp': 1.0,
     'Gamma': 100,
-    'Trun': [6, 20],
+    'Trun': [1, 20],
     'Dimend': 3,
     #'Dimend': [2,3],
     'Frames': 2000,
@@ -74,14 +82,18 @@ class _config:
     def __init__(self, Dimend, Type, Env, Params = params):
         self.config = {
             "Linux": {
-                _BACT: {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
-                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0],
-                           # 'Fa':[0.0, 0.1], 'Gamma':[10],
+                "Bacteria": {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
+                          #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                          'Gamma':10, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
+                           #'Gamma':[10], 'Fa':[0.0, 0.1],
                           #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                          #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [10.0, 15.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
+
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -101,13 +113,17 @@ class _config:
                 },
 
             "Darwin": {
-                _BACT: {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
-                "Chain": {'Xi': 0.0,
-                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300],
-                              'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #0.0, 0.1,
-                              'N_monos': [40, 100], 'Fa': [1.0, 5.0],# 'Temp': [0.2],
-                              #'Gamma': [10.0],
+                "Bacteria": {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
+                "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
+                              #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
+                             # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
+                              #'N_monos': [40, 100], 'Fa': [1.0, 5.0],
+                              'N_monos': [80, 100], 'Fa': [1.0, 10.0],
                           },
+                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
+                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                         },
+
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
 
                 "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
@@ -117,9 +133,6 @@ class _config:
                 "Rand": {2: {'Rin': 0.4,  'Wid': 2.0},
                              3: {'Rin': 0.0314, 'Wid': 2.5},
                             },
-                "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]}, #1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
-                         },
             },
         }
         self.Params = Params
@@ -141,8 +154,7 @@ class _config:
         try:
             Run.Dump = dim_to_dump[self.Dimend]
         except KeyError:
-            logging.error(f"Error: Wrong Dimend to run => dimension != {self.Dimend}")
-            raise ValueError(f"Invalid dimension: {self.Dimend}")
+            echo.error(f"Error: Invalid Dimension to run => Config.Dimend != {self.Dimend}")
 
         Run.Tdump = 2 * 10 ** Run.eSteps // Run.Frames
         Run.Tdump_ref = Run.Tdump // 100
@@ -155,7 +167,7 @@ class _config:
         Run.Tref = Run.Frames * Run.Tdump_ref
         Run.Params["Total Run Steps"] = Run.TSteps
 
-        if self.Type == _BACT:
+        if self.Type == "Bacteria":
             Run.Tdump //= 10
             Run.Tequ //= 100
 #############################################################################################################
@@ -166,11 +178,12 @@ class _run:
         self.set_queue()
         self.Gamma = Gamma
         self.Trun = Trun
-        if task == "Anas":
-            if  HOST == "Linux":
+        if task != "Simus":
+            if  HOST == "Linux" or task == "Plots":
                 self.Trun[0] = 6  # supplement
             elif HOST == "Darwin":
-                self.Trun[1] = 5
+                if task == "Anas":
+                    self.Trun[1] = 5
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
@@ -192,8 +205,7 @@ class _run:
                 bqueues = subprocess.check_output(['bqueues']).decode('utf-8') # Decode the output here
                 bhosts = subprocess.check_output(['bhosts']).decode('utf-8')
             except subprocess.CalledProcessError as e:
-                logging.error(f"Error: {e}")
-                raise ValueError(f"Error: {e}")
+                echo.error(f"Error: {e}")
 
             myques = list(queues.keys())
             queue_info = {key: {"NJOBS": 0, "PEND": 0,"RUN": 0, "runs": 0, "cores": 0, "occupy": 0, "Avail": 0, "Usage": 0} for key in myques}
@@ -216,8 +228,7 @@ class _run:
                 try:
                     bjobs = subprocess.check_output(['bjobs', '-u', 'all', '-q',  f'{iqueue}']).decode('utf-8')
                 except subprocess.CalledProcessError as e:
-                    logging.error(f"Error: {e}")
-                    raise ValueError(f"Error: {e}")
+                    echo.error(f"Error: {e}")
                 for line in bjobs.strip().split('\n')[1:]:
                     columns = line.split()
                     start_time = datetime.strptime(f"{columns[-4]} {columns[-3]} {datetime.now().year} {columns[-2]}", "%b %d %Y %H:%M")
@@ -227,13 +238,14 @@ class _run:
                 queue_info[iqueue]["Avail"] = queue_info[iqueue]["cores"] - queue_info[iqueue]["occupy"] + 1
                 queue_info[iqueue]["Usage"] = np.around( (queue_info[iqueue]["PEND"] + queue_info[iqueue]["RUN"] - queue_info[iqueue]["occupy"] ) / queue_info[iqueue]["Avail"], 3)
                 self.Params["Queues"][iqueue] = queue_info[iqueue]["Usage"]
-                if queue_info[iqueue]["PEND"] == 0:
-                    self.Queue = max(myques, key=lambda x: queue_info[x]['cores'] - queue_info[x]['RUN'])
-                elif queue_info[iqueue]["PEND"] > 0:
-                    self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
+                #if queue_info[iqueue]["PEND"] == 0:
+                    #print(queue_info[iqueue]['Usage'])
+                    #self.Queue = iqueue
+                #elif queue_info[iqueue]["PEND"] > 0:
+                self.Queue = min(myques, key=lambda x: queue_info[x]['Usage']) #print(f"queue = {self.Queue}, queue_info: {queue_info}")
         return self.Queue
     def sub_file(self, Path, infiles):
-        logging.info(f">>> Preparing sub file: {Path.simus}")
+        echo.info(f">>> Preparing sub file: {Path.simus}")
         for infile in infiles:
             print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.simus}", infile)
@@ -259,8 +271,7 @@ class _run:
             with open(f"{dir_file}.lsf", "w") as file:
                 for command in bsub:
                     file.write(command + "\n")
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        logging.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        echo.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _init:
     def __init__(self, Config, Trun, Rin, Wid, N_monos, num_chains = params["num_chains"]):
         self.sigma_equ, self.mass, self.sigma = 0.94, 1.0, 1.0
@@ -277,8 +288,7 @@ class _init:
         self.set_box()   #set box
         if (self.Config.Type == "Ring" and self.Env == "Anlus") and (self.Env == "Slit" and self.Rin > 1e-6):
             self.jump = True
-            print(f"I'm sorry => '{self.Config.Label}' is not ready! when Dimend = {Params['Dimend']}")
-            logging.warning(f"I'm sorry => '{self.Label}' is not ready!")
+            echo.warning(f"I'm sorry => '{self.Label}' is not ready! when Dimend = {Params['Dimend']}")
 
         if self.Env == "Anlus":
             self.Rout = self.Rin + self.Wid  # outer_radius
@@ -290,8 +300,7 @@ class _init:
             self.num_obs = int(self.Nobs_ring) * int(self.Nobs_torus) if self.Config.Dimend == 3 else int(self.Nobs_Rin + self.Nobs_Rout)
             theta = [np.linspace(0, 2 * np.pi, int(2 * np.pi * R / self.sigma_equ + 1))[:-1] for R in self.Rring]
             if self.Config.Dimend == 2 and (self.num_monos > sum(itheta.size for itheta in theta)):
-                print("N_monos is too Long!")
-                logging.warning("N_monos is too Long!")
+                echo.warning("N_monos is too Long!")
                 self.jump = True
 
         elif self.Env == "Rand":
@@ -309,8 +318,7 @@ class _init:
             self.bonds = self.num_monos - self.num_chains*1
             self.angles = self.num_monos - self.num_chains*2
         if (self.num_chains != 1):
-            logging.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
-            raise ValueError(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
+            echo.error(f"ERROR => num_chains = {self.num_chains} is not prepared!\nnum_chains must be 1")
     def set_box(self):
         """计算盒子大小"""
         if self.Env == "Anlus":
@@ -322,11 +330,10 @@ class _init:
                     self.Lbox = self.N_monos/2 + 5
             elif self.Config.Type == "Ring":
                 self.Lbox = self.N_monos / 4 + 5
-            elif self.Config.Type == _BACT:
+            elif self.Config.Type == "Bacteria":
                 self.Lbox = self.N_monos * 10
             else:
-                print(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
-                logging.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
+                echo.warning(f"ERROR: Wrong model type! => Config.Type = {self.Config.Type}")
         self.v_box = (2 * self.Lbox) ** self.Config.Dimend
 
         if self.Config.Dimend == 2:
@@ -338,8 +345,7 @@ class _init:
             self.zhi = self.Lbox
             self.v_obs = 4 / 3 * np.pi * self.Wid ** 3
         else:
-            logging.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
-            raise ValueError(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
+            echo.error(f"Error: Invalid Dimend  => dimension != {Config.Dimend}")
     def N_ring(self, density, Radius, sigma):
         return np.ceil(density * 2 * np.pi * Radius / sigma)
     def N_circles(self):
@@ -513,9 +519,9 @@ class _init:
 
     def data_file(self, Path):
         # 初始构型的原子信息: theta, x, y, z
-        logging.info("==> Preparing initial data file......")
+        echo.info("==> Preparing initial data file......")
         # 打开data文件以进行写入
-        for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 1)]:
+        for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 2)]:
             data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
             print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
@@ -526,7 +532,7 @@ class _init:
                 elif self.Env == "Rand":
                     self.write_rand(file)
                 self.write_potential(file)
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        echo.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 #############################################################################################################
 class _model:
     def __init__(self, Init, Run, Fa, Xi):
@@ -782,9 +788,9 @@ class _model:
         #from LJ + harmonic ==> LJ4422 + FENE4422
         Config, Init, Run = Path.Config, Path.Init, Path.Run
 #        Run.Trun = 1000
-        logging.info(f"==> Writing infile ==> {Path.simus}")
+        echo.info(f"==> Writing infile ==> {Path.simus}")
 
-        for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 1)]:
+        for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 2)]:
             print(f"==> Writing infile: {infile}......")
             dir_file = os.path.join(f"{Path.simus}", infile)
             if Init.Env == "Free":
@@ -906,8 +912,7 @@ write_restart   ${{dir_file}}.restart
                         self.write_section(file, refine_read)
                         self.write_section(file, refine_run)
                 except Exception as e:
-                    logging.error(f"An error occurred: {e}")
-                    raise ValueError(f"An error occurred: {e}")
+                    echo.error(f"An error occurred: {e}")
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 class _path:
     def __init__(self, Model):
@@ -936,7 +941,7 @@ class _path:
 
         #1.0T_0.0Xi_8T5
         self.dir3 = f"{self.Run.Temp}T_{self.Model.Xi}Xi"
-        if self.Config.Type == _BACT:
+        if self.Config.Type == "Bacteria":
             self.Jobname = f"{self.Model.Pe}Pe_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
         else:
             self.Jobname = f"{self.Init.N_monos}N_{self.Config.Dimend}{self.Config.Type[0].upper()}{self.Init.Env[0].upper()}"
@@ -957,8 +962,9 @@ class _path:
             if os.path.exists(lmp_trj):
                 return True
             else:
-                echo(f"File doesn't exist in Path: {lmp_trj}")
                 if i == 3:
+                    if HOST != "Darwin":
+                        echo.info(f"File doesn't exist in Path: {lmp_trj}")
                     return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
@@ -972,7 +978,7 @@ class _anas:
         self.chunk = 9
         self.jump = jump
     def set_dump(self):
-        is_bacteria = (self.Config.Type == _BACT)
+        is_bacteria = (self.Config.Type == "Bacteria")
         dump = {
             2: "xu yu" + (" vx vy" if is_bacteria else ""),
             3: "xu yu zu" + (" vx vy vz" if is_bacteria else "")
@@ -980,8 +986,7 @@ class _anas:
         try:
             return dump[self.Config.Dimend].split(" ")
         except KeyError:
-            logging.error(f"Error: Wrong Dimension to run => dimension != {self.Config.Dimend}")
-            raise ValueError(f"Invalid dimension: {self.Config.Dimend}")
+            echo.error(f"Error: Invalid dimension to run => Config.Dimend != {self.Config.Dimend}")
     def read_data(self):
         timer = Timer("Read")
         timer.start()
@@ -996,27 +1001,22 @@ class _anas:
                 if os.path.exists(dir_file):
                     break
                 elif i == 3:
-                    logging.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
-                    raise ValueError(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
-            logging.info(f"==> Reading {dir_file} file: ......")
-            print(f"==> Reading {dir_file} file: ......")
+                    echo.error(f"ERROR: Wrong Trun => ifile = {dir_file} while Trun = {self.Run.Trun}")
+            echo.info(f"==> Reading {dir_file} file: ......")
             # extract natoms, time steps, and check the last time step
             names = list(pd.read_csv(dir_file, skiprows=7, nrows=0, delim_whitespace=True, header=1).columns[2:])
             natoms = pd.read_csv(dir_file, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             dstep = pd.read_csv(dir_file, skiprows=self.Init.num_monos + self.chunk + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             lastStep = pd.read_csv(dir_file, skiprows=self.Run.Frames * (self.Init.num_monos + self.chunk) + 1, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
             if natoms != self.Init.num_monos:
-                logging.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
-                raise ValueError(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
+                echo.error(f"ERROR: Wrong atoms => {natoms} != {self.Init.num_monos}")
             elif lastStep != self.Run.Frames * self.Run.Tdump:
-                logging.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
-                raise ValueError(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
+                echo.error(f"ERROR: Wrong timesteps => {lastStep} != {self.Run.Frames} * {self.Run.Tdump}")
             skiprows = np.concatenate([np.arange(self.chunk) + (self.Init.num_monos + self.chunk) * x for x in range(self.Run.Frames + 1)])
             try:
                 df = pd.read_csv(dir_file, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             except Exception as e:
-                logging.error(f"ERROR: Could not read the file due to {e}")
-                raise ValueError(f"ERROR: Could not read the file due to {e}")
+                echo.error(f"ERROR: Could not read the file due to {e}")
 
             # data[ifile][iframe][iatom][id, xu, yu]
             self.data[index] = df.to_numpy().reshape((self.Run.Frames+1, self.Init.num_monos, len(dump)))
@@ -1057,12 +1057,10 @@ class BasePlot:
     def fig_path(self, mark=None, fig_save=None):
         fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
         if os.path.exists(f"{fig_file}.pdf") and self.jump:
-            print(f"==>{fig_file}.pdf is already!")
-            logging.info(f"==>{fig_file}.pdf is already!")
+            echo.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{fig_file}.pdf")
-            logging.info(f"{fig_file}.pdf")
+            echo.info(f"{fig_file}.pdf")
         return fig_file
     def set_style(self, mag, size=(6.4, 5.4), inter=(0.2, 0.5), edge=(1.0, 1.5), title=""):
         '''plotting:  axes = [ax for row in axes for ax in row]'''
@@ -1082,13 +1080,16 @@ class BasePlot:
         fig = plt.figure(figsize=(width * cols, heigh * rows))
         plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
         gs = GridSpec(rows, cols, figure=fig)
-        fig.suptitle(title, fontsize=25)
+        fig.suptitle(title, fontsize=25, y=1.0)
         return fig, gs
     def colorbar(self, ax, data, label, is_3D=False):
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=pad)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
         #cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
         cbar.ax.set_title(label, fontsize=20, pad=10)
@@ -1148,9 +1149,8 @@ class _plot(BasePlot):
         data = np.mean(self.data, axis=0)
 
         if atoms != self.Init.num_monos or frames != (self.Run.Frames+1):
-            message = f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; frames != Frames => {frames} != {self.Run.Frames+1}"
-            print(message)
-            logging.info(message)
+            echo.info(f"Wrong Atoms or Frames: atoms != num_monos => {atoms} != {self.Init.num_monos}; "
+                         f"frames != Frames => {frames} != {self.Run.Frames+1}")
         times, ids = np.arange(frames)*self.Run.dt*self.Run.Tdump, np.arange(1,atoms+1,1)
 
         if flag:
@@ -1210,12 +1210,10 @@ class _plot(BasePlot):
         #----------------------------> figure path <----------------------------#
         fig_file = os.path.join(f"{self.Path.fig}", fr"{self.variable.name}.Org.({z_abbre},{x_abbre},{y_abbre})")
         if os.path.exists(f"{fig_file}.pdf") and self.jump:
-            print(f"==>{fig_file}.pdf is already!")
-            logging.info(f"==>{fig_file}.pdf is already!")
+            echo.info(f"==>{fig_file}.pdf is already!")
             return True
         else:
-            print(f"{fig_file}.pdf")
-            logging.info(f"{fig_file}.pdf")
+            echo.info(f"{fig_file}.pdf")
         with PdfPages(f"{fig_file}.pdf") as pdf:
             # ----------------------------> plot figure<----------------------------#
             fig, gs = self.set_style((5, 2), (4, 4.5), (0.3, 0.5))
@@ -1292,12 +1290,10 @@ class _plot(BasePlot):
             #----------------------------> figure settings <----------------------------#
             fig_file = os.path.join(f"{self.Path.fig}", f"{self.variable.name}.Dist.f^{z_abbre}({x_abbre},{y_abbre})")
             if os.path.exists(f"{fig_file}.pdf") and self.jump:
-                print(f"==>{fig_file}.pdf is already!")
-                logging.info(f"==>{fig_file}.pdf is already!")
+                echo.info(f"==>{fig_file}.pdf is already!")
                 return True
             else:
-                print(f"{fig_file}.pdf")
-                logging.info(f"{fig_file}.pdf")
+                echo.info(f"{fig_file}.pdf")
             with PdfPages(f"{fig_file}.pdf") as pdf:
                 # ----------------------------> setup: canvas<----------------------------#
                 fig, gs = self.set_style((4, 2), (4.5, 4.5), (0.5, 0.5))
@@ -1508,7 +1504,10 @@ class Plotter3D(BasePlot):
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=data.min(), vmax=data.max()))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=pad)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=pad)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
     ##################################################################
@@ -1526,8 +1525,8 @@ class Plotter3D(BasePlot):
             colors = [plt.get_cmap("rainbow")(norm(zi)) for zi in z[mask]]
             for xi, yi, zi, ci in zip(x[mask], y[mask], z[mask], colors):
                 ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=ci, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black',
-                                             facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+            #legend_handles.append(ax.scatter([], [], c='white', s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
+            legend_handles.append(ax.scatter([], [], s=100, edgecolors='black', facecolor='None', linewidths=2, marker=marker, label=f'{uw}'))
         ax.legend(handles=legend_handles, title=wlabel, frameon=False)
         # colorbar
         self.colorbar(ax, z, zlabel, is_3D)
@@ -1599,7 +1598,8 @@ class Plotter3D(BasePlot):
                     label = f'{label2mark(zi, zlabel)}'
                 for xi, yi in zip(x[mask], y[mask]):
                     ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-                legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+                #legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
+                legend_handles.append(ax.scatter([], [], s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=label))
             ax.legend(title=title, frameon=False, title_fontsize=15, ncol=int(len(legend_handles)/5)+1)
             # colorbar
             #self.colorbar(ax, z, zlabel, is_3D)
@@ -1699,8 +1699,8 @@ class Plotter3D(BasePlot):
             ax.plot(x[mask], y[mask], color=color, linestyle="--")
             for xi, yi in zip(x[mask], y[mask]):
                 ax.scatter(xi, yi, c='none', s=100, marker=marker, edgecolors=color, linewidths=3)
-            legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color,
-                                             facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+            #legend_handles.append(ax.scatter([], [], c='white', s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
+            legend_handles.append(ax.scatter([], [], s=100, marker=marker, edgecolors=color, facecolor='None', linewidths=2, label=f'{label2mark(zi, zlabel)}'))
         ax.legend(title=fr'{zlabel}', frameon=False, title_fontsize=15, ncol=int(len(legend_handles) / 5) + 1)
         self.set_axes2D(ax, (x, y), (xlabel, ylabel), f"{ylabel}({xlabel}) with {zlabel}", log=log)
         self.adding(ax, note, -0.12, False)
@@ -1765,7 +1765,10 @@ class Plotter4D(BasePlot):
     def colorbar(self, ax, data, label, loc="right"):
         sm = plt.cm.ScalarMappable(cmap="rainbow", norm=Normalize(vmin=min(data), vmax=max(data)))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
+        if HOST == "Linux":
+            cbar = plt.colorbar(sm, ax=ax, pad=0.05)
+        elif HOST == "Darwin":
+            cbar = plt.colorbar(sm, ax=ax, location=loc, pad=0.05)
         cbar.ax.yaxis.set_ticks_position(loc)
         cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
     def set_axes2D(self, ax, title, labels, lims, note=None, legends=None, log=False):
@@ -1776,7 +1779,7 @@ class Plotter4D(BasePlot):
         ax.set_xlabel(xlabel, fontsize=20, labelpad=4)
         ax.set_ylabel(flabel, fontsize=20, labelpad=4)
         if log:
-            ymin, ymax = 0.5, 2.0
+            ymin, ymax = 0.5, 3
             ax.set_xscale('log')
             ax.set_yscale('log')
         else:
@@ -1861,12 +1864,13 @@ class Plotter4D(BasePlot):
                 flabel = var2str(self.variable.name)[0]
                 suplabel = f"{flabel}({xlabel}, {ylabel}) with ({zlabel}, {wlabel}) fixed"
                 x, f_flat = self.df["dt"][0] * np.arange(len(self.df[self.variable.name][0])), [item for sublist in self.df[self.variable.name] for item in sublist]
+                all_data = np.concatenate(self.df[self.variable.name].values)
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
-                xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
+                xlim, ylim = (min(x), max(x)), (min(all_data[all_data != 0]), max(all_data))
                 # ----------------------------> setup: canvas<----------------------------#
                 num_axis = len(unique_z) * len(unique_w)
                 cols, rows = 2, num_axis // 2 + num_axis % 2
-                fig, gs = self.set_style((cols, rows), (5.5, 5.5), title=suplabel)
+                fig, gs = self.set_style((cols, rows), (5.5, 5.8), title=suplabel)
                 color_map = list(zip(self.markers, plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))))
                 axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)]
                 axes = [ax for row in axes for ax in row]
@@ -1875,14 +1879,30 @@ class Plotter4D(BasePlot):
                 # ----------------------------> plotting <----------------------------#
                 for ax, (z, w) in zip(axes, [(z, w) for z in unique_z for w in unique_w]):
                     df_zw = self.df[(self.df[zlabel] == z) & (self.df[wlabel] == w)]  # query: z, w
+                    print(self.df[self.variable.name][3].max())
+                    print(ylim)
+                    plot_line(ax, (x[200], x[-1], ylim[1]), 1)
+                    plot_line(ax, (x[1], x[6], ylim[0] * 1.0), 2)
                     for (marker, color), y in zip(color_map, unique_y):
                         df_y = df_zw[df_zw[ylabel] == y] # query: y
                         for _, ydata in df_y.iterrows():
                             if self.variable.name == "MSD":
-                                ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
-                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=f'{y}')
+                                logt, logf = np.log10(x[1:]), np.log10(ydata[self.variable.name][1:])
+                                pre_turning, post_turning = peak_seg((logt, logf))
+                                slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+                                ax.plot(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, color=color, linestyle="--")
+                                ax.axvline(10 ** pre_turning[0][-1], color=color, linestyle='--')
+                                ax.axvline(10 ** post_turning[0][0], color=color, linestyle='--')
+
+                                #ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
+                                label = f'{y}: {slope/6:.4f}'
+                                labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
+                            else:
+                                label = f'{y}'
+                                labels = (flabel, xlabel, ylabel, zlabel)
+                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=label)
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
-                    self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), log=True)
+                    self.set_axes2D(ax, title, labels, (xlim, ylim), log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1891,10 +1911,27 @@ class Plotter4D(BasePlot):
                 timer.count(f'{self.variable.name}({xlabel}, {ylabel}; {zlabel}, {wlabel})')
         timer.stop()
     ##################################################################
-    def scale(self):
-        timer = Timer(f"{self.variable.name}: scale")
-        timer.start()
+    def scale(self, data):
+        logf, logt = data
 
+        # fit lines
+        fig, ax = plt.subplots(figsize=(10, 6))
+        pre_turning, post_turning  = peak_seg((logt, logf))
+        slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+        ax.loglog(10**logt, 10**logf, label="Original data")
+        ax.loglog(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, label=f'({1:.2f}, {slope:.2f})')
+        plot_line(ax, (t[200], t[-1], f[-1] * 2), 1)
+        plot_line(ax, (t[0], t[5], f[5] / 2), 2)
+        plt.axvline(10 ** pre_turning[0][-1], color='gray', linestyle='--')
+        plt.axvline(10 ** post_turning[0][0], color='gray', linestyle='--')
+
+        plt.xlabel('Time (log scale)')
+        plt.ylabel('MSD (log scale)')
+        plt.legend()
+        plt.title('Logarithmic Fit Comparison')
+        plt.show()
+        sys.exit()
+        echo.error("For test")
         timer.stop()
 #############################################################################################################
 class Timer:
@@ -1915,8 +1952,7 @@ class Timer:
             raise RuntimeError('Not started')
         end = self._func()
         self.elapsed += end - self._start
-        print(f"-------------------------------{self.tip}: Done!----------------------------------------")
-        # logging.info(str, ":", self.elapsed)
+        echo.info(f"-------------------------------{self.tip}: Done!----------------------------------------")
         self._start = None
     def count(self, str="Time"):
         end = self._func()
@@ -1945,6 +1981,14 @@ def convert2array(x):
         return np.array([x])
     else:
         raise ValueError("Unsupported type!")
+def label2mark(f, flabel):
+    if flabel == "Pe" and f < 1e-6:
+        mark = "Passive"
+    elif flabel == "W" and f< 1e-6:
+        mark = "Free"
+    else:
+        mark = f
+    return mark
 def var2str(variable):
     # transform to latex
     if variable.lower() == 'msd':
@@ -2020,6 +2064,7 @@ def unwrap_x(data, Lx):
                     if crossed[file_idx, atom_idx]:
                         data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
     return data
+#scale
 def scale(x, y):
     if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
@@ -2035,17 +2080,81 @@ def scale(x, y):
         return coef, x_range, y_range
     else:
         return False, log_x, log_y
-def label2mark(f, flabel):
-    if flabel == "Pe" and f < 1e-6:
-        mark = "Passive"
-    elif flabel == "W" and f< 1e-6:
-        mark = "Free"
+def peak_seg(data, bins=20, find_min=True):
+    x, y = data
+    # 计算一阶和二阶导数
+    dx, dy = 0.5 * (x[:-1] + x[1:]), np.diff(y) / np.diff(x)  # 计算中点，以保持导数的维度一致
+    d2x, d2y = 0.5 * (dx[:-1] + dx[1:]), np.diff(dy) / np.diff(dx)
+    log_intervals = np.linspace(x.min(), x.max(), num=bins)
+    tps, segs, slopes = [], [], []
+    for i in range(len(log_intervals) - 1):
+        start, end = log_intervals[i], log_intervals[i + 1]
+        mask = (d2x >= start) & (d2x <= end)
+        peaks, _ = find_peaks(d2y[mask])
+        if peaks.size > 0:
+            peak = peaks[np.argmax(d2y[mask][peaks])]  # 选择最大的极值点
+            tps.append(d2x[mask][peak])
+
+    # 创建每个分段的数据
+    for i in range(len(tps) + 1):
+        if i == 0:
+            segment = (x[x <= tps[i]], y[x <= tps[i]])
+        elif i == len(tps):
+            segment = (x[x > tps[i - 1]], y[x > tps[i - 1]])
+        else:
+            segment = (x[(x > tps[i - 1]) & (x <= tps[i])],  y[(x > tps[i - 1]) & (x <= tps[i])])
+        segs.append(segment)
+        slopes.append(linregress(segment[0], segment[1])[0])
+    # 继续求二阶导的极大值点：并进一步确定转折区间
+    dslopes = np.array(np.diff(slopes))
+    if find_min:
+        peaks = np.array(find_peaks(-dslopes)[0])
     else:
-        mark = f
-    return mark
-def echo(message):
-    print(message)
-    logging.info(message)
+        peaks = np.array(find_peaks(dslopes)[0])
+    peak_point = peaks[np.argmax(np.abs(dslopes[peaks]))]
+    if peak_point ==0:
+        turning_interval = segs[0:3]
+    elif peak_point == len(segs) - 1:
+        turning_interval = segs[-3:]
+    else:
+        turning_interval = segs[peak_point-1: peak_point + 2]
+    turning_x = np.concatenate([segment[0] for segment in turning_interval])
+    turning_y = np.concatenate([segment[1] for segment in turning_interval])
+    pre_turning = x[x < turning_x[0]], y[x < turning_x[0]]
+    post_turning = x[x > turning_x[-1]], y[x > turning_x[-1]]
+    return pre_turning, post_turning
+def local_slope(data, bins=10):
+    x, y = data
+    window_size = len(x)//bins
+    x_coords, local_slopes = [], []
+    for start, end in [(i, i + window_size) for i in range(len(x) - window_size)]:
+        local_x, local_y = x[start:end], y[start:end]
+        #diff = (np.diff(y) / np.diff(x)).mean()
+        local_slopes.append(linregress(local_x, local_y)[0])
+        x_coords.append(np.mean(local_x))
+    return np.array(x_coords), np.array(local_slopes)
+def fit_alpha(x, y, alpha):
+    if alpha == 2:
+        y_fit = y / (x**2)
+    elif alpha == 1:
+        y_fit = y / x
+    else:
+        raise ValueError("Alpha must be 1 or 2.")
+    log_y_fit = np.log(y_fit)
+    _, log_beta = linregress(np.log(x), log_y_fit)[:2]
+    beta = np.exp(log_beta)
+    return beta
+def plot_line(ax, data, alpha=1):
+    if alpha == 2:
+        x0, x1, y1 = data
+        logx0, logx1, logy1 = np.log10(x0), np.log10(x1), np.log10(y1)
+        logy0 = alpha * (logx0 - logx1) + logy1
+    elif alpha == 1:
+        x0, x1, y0 = data
+        logx0, logx1, logy0 = np.log10(x0), np.log10(x1), np.log10(y0)
+        logy1 = alpha * (logx1 - logx0) + logy0
+    ax.loglog([10 ** logx0, 10 ** logx1], [10 ** logy0, 10 ** logy1], color="k", linewidth=2)
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -2065,28 +2174,24 @@ class JobProcessor:
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
                       f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
         # copy Run.py
-        message = f"dir_figs => {fig_save}"
         os.makedirs(fig_save, exist_ok=True)
         py_file = os.path.join(f"{fig_save}", f"{variable}.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_figs => {fig_save}")
         # prepare files
         dir_file = os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
+                echo.info(">>> Submitting plots......")
+                echo.info(f"bsub < {dir_file}.lsf => Submitted: {dir_file}.py")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable, ['Pe', 'N', 'W'])
-                print(f"==> Done!")
+                print(f"==> Rg_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
@@ -2101,9 +2206,7 @@ class JobProcessor:
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        message = f"ERROR: Wrong {variable} path = {data_path}"
-                                        logging.error(message)
-                                        raise ValueError(message)
+                                        echo.error(f"ERROR: Wrong {variable} path: Anas.job \n==> {data_path},")
                                 if variable == "Rg":
                                     Rg2 = np.load(data_path)
                                     Rg, Rgt = np.sqrt(np.mean(Rg2)), np.sqrt(Rg2)
@@ -2112,7 +2215,7 @@ class JobProcessor:
                 self.dft['dt']=Run.Tdump * 0.001
                 # saving, subfile, plotting
                 self.exe_plot("save", variable, paras, fig_save)
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
+                print(f"==> Rg_job: Done! \n==>Please check the results and submit the plots!")
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
         self.Path = Path
@@ -2144,8 +2247,7 @@ class JobProcessor:
         # read data
         for index, ifile in enumerate([f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]):
             filename = os.path.join(CURRENT_DIR, f"{ifile}.lammpstrj")
-            logging.info(f"==> Reading {filename} file: ......")
-            print(f"==> Reading {filename} file: ......")
+            echo.info(f"==> Reading {filename} file: ......")
             if index == 0:  # read and check
                 natoms = pd.read_csv(filename, skiprows=3, nrows=1, delim_whitespace=True, header=None).iloc[0][0]
                 skiprows = np.concatenate([np.arange(chunk) + (atoms + chunk) * x for x in range(Frames + 1)])
@@ -2154,9 +2256,7 @@ class JobProcessor:
                 zlo, zhi = pd.read_csv(filename, delim_whitespace=True, header=None, skiprows=7, nrows=1).values[0, :2]
                 Lx, Lz = xhi - xlo, zhi - zlo
                 if natoms != atoms and (Lz < 1.0001 and dimend == 3):
-                    message = f"ERROR: Wrong atoms => {natoms} !={atoms}"
-                    logging.error(message)
-                    raise ValueError(message)
+                    echo.error(f"ERROR: Wrong atoms => {natoms} !={atoms}")
             df = pd.read_csv(filename, skiprows=skiprows, delim_whitespace=True, header=None, names=names, usecols=dump)
             data[index] = df.to_numpy().reshape((Frames + 1, atoms, len(dump)))
         if pe > 50:
@@ -2164,8 +2264,7 @@ class JobProcessor:
         #analysis and save data
         return  data
     def subfile(self, jobname, descript, dir_file):
-        print(f">>> Preparing subfile for {jobname}......")
-        logging.info(f">>> Preparing subfile for {jobname}......")
+        echo.info(f">>> Preparing subfile for {jobname}......")
         bsub = [
             f'#!/bin/bash',
             f'',
@@ -2194,56 +2293,42 @@ class JobProcessor:
             return
 
         # Create simulation directory and copy Run.py
-        message = f"dir_simus => {Path.simus}"
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_simus => {Path.simus}")
         os.makedirs(Path.simus, exist_ok=True)
         if os.path.abspath(__file__) != os.path.join(Path.simus, Path.filename):
             shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.filename))
 
         # prepare files
-        infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+1)]
+        infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+2)]
         self.Init.data_file(Path)
         self.Model.in_file(Path)  # return
         self.Run.sub_file(Path, infiles)
         # excute jobs
-        if input_file:
-            # running files
-            if HOST == "Darwin":  # macOS
-                self.exe_simus("Run", Path.simus, input_file)
-            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+        if "Codes" in CURRENT_DIR and (HOST == "Linux" and self.run_on_cluster == "false"):  # 登陆节点
+            if input_file:
                 self.exe_simus("Submit", Path.simus, input_file)
-        else:
-            for infile in infiles:
-                # running files
-                if HOST == "Darwin":  # macOS
-                    self.exe_simus("Run", Path.simus, infile)
-                # submitting files
-                elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+            else:
+                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
                     self.exe_simus("Submit", Path.simus, infile)
+        else: # macOS
+            if input_file:
+                self.exe_simus("Run", Path.simus, input_file)
+            else:
+                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
+                    self.exe_simus("Run", Path.simus, infile)
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
-            print(f">>> Running jobs: {infile}......")
-            logging.info(f">>> Running jobs: {infile}......")
-
-            print(f"mpirun -np 1 lmp_wk -i {dir_file}.in")
+            echo.info(f">>> Running jobs: {infile}......\nmpirun -np 1 lmp_wk -i {dir_file}.in")
             subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-            print(f"{dir_file}.in ==> Done! \n")
+            echo.info(f"{dir_file}.in ==> Simus: Done!")
 
         elif task == "Submit":
-            print(f">>> Running jobs : {infile}......")
-            logging.info(f">>> Running jobs : {infile}......")
-
-            print(f"bsub < {dir_file}.lsf")
+            echo.info(f">>> Running jobs : {infile}......\nbsub < {dir_file}.lsf")
             subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            print(f"Submitted: {dir_file}")
-            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+            echo.info(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         else:
-            message = f"ERROR: Wrong task => {task} != Run or Submit"
-            print(message)
-            logging.error(message)
-            raise ValueError(message)
+            echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
     # -----------------------------------Anas-------------------------------------------#
     def anas_job(self, Path, **kwargs):
         self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
@@ -2252,7 +2337,7 @@ class JobProcessor:
         ###################################################################
         # Initialize directories and files
         Anas, Plot = _anas(Path, Pe), _plot(Path)
-        echo(f"dir_figs => {Path.fig}")
+        echo.info(f"dir_figs => {Path.fig}")
         os.makedirs(Path.fig, exist_ok=True)
         py_file = os.path.join(f"{Path.fig}", f"dana.py")
         if os.path.abspath(__file__) != f"{py_file}":
@@ -2264,21 +2349,17 @@ class JobProcessor:
             if not self.submitted:
                 # submitting files
                 if HOST == "Linux" and self.run_on_cluster == "false" and self.bsub:  # if HOST == "Darwin":  # macOS
-                    print(">>> Submitting plots......")
-                    logging.info(">>> Submitting plots......")
-                    print(f"bsub < {dir_file}.lsf")
+                    echo.info(">>> Submitting plots......\nbsub < {dir_file}.lsf")
                     subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                    print(f"Submitted: {dir_file}.py")
+                    echo.info(f"Submitted: {dir_file}.py")
                     self.submitted = True
                 else:
                     #self.exe_anas(task, path)
                     if "Codes" in CURRENT_DIR:
-                        print(">>> Plotting ......")
-                        logging.info(">>> Plotting ......")
+                        echo.info(">>> Plotting ......")
                         file_check = os.path.join(Path.fig, f"{JOBS[-1].path}.npy")
                         if os.path.exists(file_check) and jump:
-                            print(f"JUMP==>{file_check} is already!")
-                            logging.info(f"JUMP==>{file_check} is already!")
+                            echo.info(f"JUMP==>{file_check} is already!")
                         else:
                             data = Anas.read_data()
                             data_Rcom = self.exe_analysis(Path.fig, data) # saving data
@@ -2286,28 +2367,27 @@ class JobProcessor:
                             # Plot.org(data_Rcom ** 2, "Rcom2")
                         if OPEN and HOST == "Darwin":
                             subprocess.run(["open", Path.fig])
-                        print(f"==> Done! \n==>Please check the results and submit the plots!")
+                        print(f"==> Anas_job: Done! \n==>Please check the results and submit the plots!")
                     elif "Figs" in CURRENT_DIR:
-                        print(f">>> Plotting: {CURRENT_DIR} ......")
-                        logging.info(f">>> Plotting {CURRENT_DIR} ......")
+                        echo.info(f">>> Plotting {CURRENT_DIR} ......")
                         path = CURRENT_DIR.replace('Figs', 'Simus')
                         data = self.read_simp(path)
                         data_Rcom = self.exe_analysis(path, data)
                         #data_Rcom = np.load(os.path.join(CURRENT_DIR, "Rcom.npy"))
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
-                        print(f"==> Done!")
+                        print(f"==> Anas_job: Done!")
         else:
-            echo(f"File doesn't exist in anas_job: {Path.lmp_trj}")
+            echo.info(f"File doesn't exist in anas_job: {Path.lmp_trj}")
     def exe_analysis(self, Path, data):
         '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
-        echo(f"analyse and save data => {Path}")
+        echo.info(f"analyse and save data => {Path}")
         Trun, frames = params["Trun"][1], params["Frames"]
         Rcom.data = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位置
         data_com = data - np.expand_dims(np.mean(data, axis=2), axis=2) #质心坐标
         data_Rcom = np.linalg.norm(data_com[..., :], axis=-1) #质心坐标的模
         # ---------------------------------------> Rg <---------------------------------------#
         Rg2_t = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # Rg2_t[iframe]
-        echo(f"Rg2(t) and Rcom(t) ......")
+        echo.info(f"Rg2(t) and Rcom(t) ......")
         Rcom.save, Rg.save = os.path.join(Path, f"{Rcom.path}.npy"), os.path.join(Path, f"{Rg.path}.npy")
         np.save(Rcom.save, Rcom.data)
         np.save(Rg.save, Rg2_t) #average over time
@@ -2318,7 +2398,7 @@ class JobProcessor:
         for dt in range(1, frames//2):
             msd_run[:, dt] = np.mean((Rcom.data[:, dt:] - Rcom.data[:, :-dt]) ** 2, axis=1)
         MSD.data = np.mean(msd_run, axis=0)
-        echo(f"MSD(t) ......")
+        echo.info(f"MSD(t) ......")
         np.save(MSD.save, MSD.data)
         return data_Rcom
     # -----------------------------------Plot-------------------------------------------#
@@ -2330,28 +2410,23 @@ class JobProcessor:
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
                       f"{Config.Dimend}D_{Run.Gamma:.1f}G_{iRin}R_{Run.Temp}T_{Config.Type}{Config.Env}")
         # copy Run.py
-        message = f"dir_figs => {fig_save}"
         os.makedirs(fig_save, exist_ok=True)
         py_file = os.path.join(f"{fig_save}", f"{variable.name}.py")
         if os.path.abspath(__file__) != f"{py_file}":
             shutil.copy2(os.path.abspath(__file__), f"{py_file}")
-        print(message)
-        logging.info(message)
+        echo.info(f"dir_figs => {fig_save}")
         # prepare files
         dir_file = os.path.splitext(os.path.abspath(__file__))[0]
         self.subfile(f"{variable.name}({','.join(variable.paras)})", f"Analysis: {variable.name}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
-                print(">>> Submitting plots......")
-                logging.info(">>> Submitting plots......")
-                print(f"bsub < {dir_file}.lsf")
+                echo.info(f">>> Submitting plots......\nbsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-                print(f"Submitted: {dir_file}.py")
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
                 run.exe_plot("load", variable)
-                print(f"==> Done!")
+                print(f"==> Plot_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
                     for iN in convert2array(params['N_monos']):
@@ -2362,13 +2437,15 @@ class JobProcessor:
                             for iXi in convert2array(params['Xi']):
                                 Path = _path(_model(Init, Run, iFa, iXi))
                                 for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
-                                    data_path = os.path.join(path, f"{variable.path}.npy")
+                                    variable.save = os.path.join(path, f"{variable.path}.npy")
+                                    #print("Path.fig,0,1:", Path.fig, Path.fig0, Path.fig1)
+                                    data_path = variable.save if iFa >= 1 else variable.save.replace(f"{Run.Gamma:.1f}G", f"{10:.1f}G")
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        message = f"ERROR: Wrong {variable.name} path = {data_path}"
-                                        logging.error(message)
-                                        raise ValueError(message)
+                                        if OPEN and HOST == "Darwin":
+                                            subprocess.run(["open", path])
+                                        echo.error(f"ERROR: Wrong {variable.name} path = {data_path}")
                                 if variable.name == "Rg":
                                     data_Rg2 = np.load(data_path)
                                     data_Rg = np.sqrt(np.mean(data_Rg2))
@@ -2378,24 +2455,19 @@ class JobProcessor:
                                         variable.df = variable.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable.name: data_Rg}, ignore_index=True)
                                 elif variable.name == "MSD":
                                     if not variable.dtime:
-                                        meassage = f"ERROR: variable: {variable.name} must be combinded with time"
-                                        logging.error(meassage)
-                                        raise ValueError(message)
+                                        echo.error(f"ERROR: variable: {variable.name} must be combinded with time")
                                     else:
                                         variable.df = variable.df.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable.name: np.load(data_path)}, ignore_index=True)
                                 else:
-                                    meassage = f"ERROR: wong variable: {variable.name}"
-                                    logging.error(meassage)
-                                    raise ValueError(message)
+                                    echo.error(f"ERROR: wong variable: {variable.name}")
                 # saving, subfile, plotting
                 variable.df['dt'] = Run.Tdump * 0.001
                 self.exe_plot("save", variable, fig_save)
-                print(f"==> Done! \n==>Please check the results and submit the plots!")
+                print(f"==> Plot_job: Done! \n==>Please check the results and submit the plots!")
     def exe_plot(self, task, variable, path=CURRENT_DIR):
         '''plotting execute'''
         abbre, file_name = var2str(variable.name)[1], ','.join(variable.paras)
-        print(">>> Plotting ......")
-        logging.info(">>> Plotting ......")
+        echo.info(">>> Plotting ......")
         if variable.dtime:
             dirfile = os.path.join(path, f"(r,s){abbre}(t,{file_name})")
             if task == "load":
@@ -2404,8 +2476,9 @@ class JobProcessor:
                 io_data(dirfile, variable.df)
                 # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
             plotter4 = Plotter4D(variable, dirfile)
-            plotter4.expand()
+            #plotter4.expand()
             plotter4.expand2D()
+            #plotter4.scale()
         else:
             dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
             if task == "load":
@@ -2418,7 +2491,7 @@ class JobProcessor:
             plotter3.project()
             plotter3.expand()
             plotter3.scale()
-        print("-----------------------------------Done!--------------------------------------------")
+        print(">>> Plotting -------------------------------Done!----------------------------------------")
         if OPEN and HOST == "Darwin":
             subprocess.run(["open", path])
     # -----------------------------------Process-------------------------------------------#
@@ -2468,23 +2541,12 @@ if __name__ == "__main__":
     if os.path.abspath(__file__) != back_file:
         shutil.copy(os.path.abspath(__file__), back_file)
     if task == "Simus":
-        if "Codes" in CURRENT_DIR:
-            run.process(data_job="simus_job")
-        elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-            try:
-                if input_file:
-                    run.exe_simus("Run", CURRENT_DIR, input_file)
-                else:
-                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 1)]:
-                        run.exe_simus("Run", CURRENT_DIR, infile)
-            except Exception as e:
-                print(usage)
-                logging.error(f"An error occurred: {e}")
-                raise ValueError(f"An error occurred: {e}")
+        run.process(data_job="simus_job")
     # Analysis: single
     elif task == "Anas":
         run.process(data_job="anas_job")
         if HOST == "Linux":
+            print(f"{usage}\n=====>task: Plots......\n###################################################################")
             run.process(plot_job="plot_job")
     # plot: Pe, N, W
     elif task == "Plots":

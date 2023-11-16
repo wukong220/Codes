@@ -2,20 +2,19 @@ import re
 import os
 import sys
 import time
-import glob
 import shutil
 import logging
 import platform
 import subprocess
 from datetime import datetime, timedelta
-from itertools import combinations, product, permutations, islice
+from itertools import islice
 
 import pandas as pd
 import numpy as np
-from numba import vectorize, jit
+from numpy.polynomial.polynomial import Polynomial
 from collections import defaultdict
-from scipy.spatial import KDTree
-from scipy.interpolate import splrep, splev, griddata
+from scipy.signal import find_peaks
+from scipy.interpolate import splprep, splev, griddata, UnivariateSpline
 from scipy.stats import norm, linregress, gaussian_kde, multivariate_normal
 
 import seaborn as sns
@@ -51,12 +50,13 @@ class Echo:
     def warn(self, message):
         logging.warning(message)
         print(message)
-echo, Rcom, Rg, MSD, Cee = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False), Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet")
+echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
+MSD, Cee = Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
+task, JOBS = ["Simus", "Anas", "Plots"][0], [MSD] #Rg,
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
-    jump = True
+    jump = False
 elif task == "Plots":
     jump = False
 elif task == "Anas" and HOST == "Darwin":
@@ -67,6 +67,7 @@ params = {
                 'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
     'restart': [False, "equ"],
+    'jump': [jump],
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
@@ -91,9 +92,8 @@ class _config:
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
                           #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [10.0, 15.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [0.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
-
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
                          'Gamma': [0.1, 1, 10, 100],
@@ -117,10 +117,11 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                               #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
                              # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
-                              'N_monos': [40, 100], 'Fa': [1.0, 5.0],
+                              'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
+                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0, 5.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                         3: {"Rin": [0.0], "Wid": [0.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
                          },
 
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -178,10 +179,11 @@ class _run:
         self.Gamma = Gamma
         self.Trun = Trun
         if task != "Simus":
-            if  HOST == "Linux":
+            if  HOST == "Linux" or task == "Plots":
                 self.Trun[0] = 6  # supplement
-            elif HOST == "Darwin" and task == "Anas":
-                self.Trun[1] = 5
+            elif HOST == "Darwin":
+                if task == "Anas":
+                    self.Trun[1] = 5
         self.Dimend = Dimend
         self.Frames = Frames
         self.Temp = Temp
@@ -245,7 +247,7 @@ class _run:
     def sub_file(self, Path, infiles):
         echo.info(f">>> Preparing sub file: {Path.simus}")
         for infile in infiles:
-            print(">>> Preparing sub file......")
+            #print(">>> Preparing sub file......")
             dir_file = os.path.join(f"{Path.simus}", infile)
             bsub=[
                 f'#!/bin/bash',
@@ -368,7 +370,7 @@ class _init:
         file.write("{} LAMMPS data file for initial configuration:\n\n".format(datetime.now().strftime("%Y/%m/%d %H:%M:%S")))
         
         # 写入原子数目和边界信息
-        atomTypes = 3 if self.Env == "Free" else 5
+        atomTypes = 5
         file.write(f"{int(self.total_particles)} atoms\n\n")
         file.write(f"{self.bonds} bonds\n\n")
         file.write(f"{self.angles} angles\n\n")
@@ -521,7 +523,7 @@ class _init:
         # 打开data文件以进行写入
         for infile in [f"{i:03}" for i in range(self.Trun[0], self.Trun[1] + 2)]:
             data_file = os.path.join(f"{Path.simus}", f'{infile}.{self.Config.Type[0].upper()}{self.Env[0].upper()}.data')
-            print(f"==> Preparing initial data {infile}......")
+            #print(f"==> Preparing initial data {infile}......")
             with open(f"{data_file}", "w") as file:
                 self.write_header(file)
                 self.write_chain(file)
@@ -789,9 +791,9 @@ class _model:
         echo.info(f"==> Writing infile ==> {Path.simus}")
 
         for infile in [f"{i:03}" for i in range(Run.Trun[0], Run.Trun[1] + 2)]:
-            print(f"==> Writing infile: {infile}......")
+            #print(f"==> Writing infile: {infile}......")
             dir_file = os.path.join(f"{Path.simus}", infile)
-            if Init.Env == "Free":
+            if Init.Env == "Test":
                 file_content = f"""
 # Setup
 echo                screen
@@ -961,7 +963,8 @@ class _path:
                 return True
             else:
                 if i == 3:
-                    echo.info(f"File doesn't exist in Path: {lmp_trj}")
+                    if HOST != "Darwin":
+                        echo.info(f"File doesn't exist in Path: {lmp_trj}")
                     return False
     def show(self):
         print(f"host: {self.host}\nmydirs: {self.mydirs}\n"
@@ -1077,7 +1080,7 @@ class BasePlot:
         fig = plt.figure(figsize=(width * cols, heigh * rows))
         plt.subplots_adjust(left=left, right=right, bottom=bot, top=top, wspace=wspace, hspace=hspace)
         gs = GridSpec(rows, cols, figure=fig)
-        fig.suptitle(title, fontsize=25, y=1.05)
+        fig.suptitle(title, fontsize=25, y=1.0)
         return fig, gs
     def colorbar(self, ax, data, label, is_3D=False):
         loc, pad = ("left", 0.05) if is_3D else ("right", 0.05)
@@ -1776,7 +1779,7 @@ class Plotter4D(BasePlot):
         ax.set_xlabel(xlabel, fontsize=20, labelpad=4)
         ax.set_ylabel(flabel, fontsize=20, labelpad=4)
         if log:
-            ymin, ymax = 0.5, 2.0
+            ymin, ymax = 0.5, 3
             ax.set_xscale('log')
             ax.set_yscale('log')
         else:
@@ -1861,12 +1864,13 @@ class Plotter4D(BasePlot):
                 flabel = var2str(self.variable.name)[0]
                 suplabel = f"{flabel}({xlabel}, {ylabel}) with ({zlabel}, {wlabel}) fixed"
                 x, f_flat = self.df["dt"][0] * np.arange(len(self.df[self.variable.name][0])), [item for sublist in self.df[self.variable.name] for item in sublist]
+                all_data = np.concatenate(self.df[self.variable.name].values)
                 unique_y, unique_z, unique_w = self.df[ylabel].unique(), self.df[zlabel].unique(), self.df[wlabel].unique()
-                xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
+                xlim, ylim = (min(x), max(x)), (min(all_data[all_data != 0]), max(all_data))
                 # ----------------------------> setup: canvas<----------------------------#
                 num_axis = len(unique_z) * len(unique_w)
                 cols, rows = 2, num_axis // 2 + num_axis % 2
-                fig, gs = self.set_style((cols, rows), (5.5, 5.5), title=suplabel)
+                fig, gs = self.set_style((cols, rows), (5.5, 5.8), title=suplabel)
                 color_map = list(zip(self.markers, plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))))
                 axes = [[fig.add_subplot(gs[i, j]) for j in range(cols)] for i in range(rows)]
                 axes = [ax for row in axes for ax in row]
@@ -1875,14 +1879,30 @@ class Plotter4D(BasePlot):
                 # ----------------------------> plotting <----------------------------#
                 for ax, (z, w) in zip(axes, [(z, w) for z in unique_z for w in unique_w]):
                     df_zw = self.df[(self.df[zlabel] == z) & (self.df[wlabel] == w)]  # query: z, w
+                    print(self.df[self.variable.name][3].max())
+                    print(ylim)
+                    plot_line(ax, (x[200], x[-1], ylim[1]), 1)
+                    plot_line(ax, (x[1], x[6], ylim[0] * 1.0), 2)
                     for (marker, color), y in zip(color_map, unique_y):
                         df_y = df_zw[df_zw[ylabel] == y] # query: y
                         for _, ydata in df_y.iterrows():
                             if self.variable.name == "MSD":
-                                ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
-                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=f'{y}')
+                                logt, logf = np.log10(x[1:]), np.log10(ydata[self.variable.name][1:])
+                                pre_turning, post_turning = peak_seg((logt, logf))
+                                slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+                                ax.plot(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, color=color, linestyle="--")
+                                ax.axvline(10 ** pre_turning[0][-1], color=color, linestyle='--')
+                                ax.axvline(10 ** post_turning[0][0], color=color, linestyle='--')
+
+                                #ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
+                                label = f'{y}: {slope/6:.4f}'
+                                labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
+                            else:
+                                label = f'{y}'
+                                labels = (flabel, xlabel, ylabel, zlabel)
+                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=label)
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
-                    self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), log=True)
+                    self.set_axes2D(ax, title, labels, (xlim, ylim), log=True)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1891,13 +1911,31 @@ class Plotter4D(BasePlot):
                 timer.count(f'{self.variable.name}({xlabel}, {ylabel}; {zlabel}, {wlabel})')
         timer.stop()
     ##################################################################
-    def scale(self):
-        timer = Timer(f"{self.variable.name}: scale")
-        timer.start()
+    def scale(self, data):
+        logf, logt = data
 
+        # fit lines
+        fig, ax = plt.subplots(figsize=(10, 6))
+        pre_turning, post_turning  = peak_seg((logt, logf))
+        slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+        ax.loglog(10**logt, 10**logf, label="Original data")
+        ax.loglog(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, label=f'({1:.2f}, {slope:.2f})')
+        plot_line(ax, (t[200], t[-1], f[-1] * 2), 1)
+        plot_line(ax, (t[0], t[5], f[5] / 2), 2)
+        plt.axvline(10 ** pre_turning[0][-1], color='gray', linestyle='--')
+        plt.axvline(10 ** post_turning[0][0], color='gray', linestyle='--')
+
+        plt.xlabel('Time (log scale)')
+        plt.ylabel('MSD (log scale)')
+        plt.legend()
+        plt.title('Logarithmic Fit Comparison')
+        plt.show()
+        sys.exit()
+        echo.error("For test")
         timer.stop()
 #############################################################################################################
 class Timer:
+    '''timer = Timer("Distribution"); timer.start();timer.count("saving figure");timer.stop();'''
     def __init__(self, tip="start", func=time.perf_counter):
         self.tip = tip
         self.elapsed = 0.0
@@ -1944,6 +1982,14 @@ def convert2array(x):
         return np.array([x])
     else:
         raise ValueError("Unsupported type!")
+def label2mark(f, flabel):
+    if flabel == "Pe" and f < 1e-6:
+        mark = "Passive"
+    elif flabel == "W" and f< 1e-6:
+        mark = "Free"
+    else:
+        mark = f
+    return mark
 def var2str(variable):
     # transform to latex
     if variable.lower() == 'msd':
@@ -2019,6 +2065,7 @@ def unwrap_x(data, Lx):
                     if crossed[file_idx, atom_idx]:
                         data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
     return data
+#scale
 def scale(x, y):
     if x[0] < 1e-6:
         log_x, log_y = np.log10(x[1:]), np.log10(y[1:])
@@ -2034,18 +2081,85 @@ def scale(x, y):
         return coef, x_range, y_range
     else:
         return False, log_x, log_y
-def label2mark(f, flabel):
-    if flabel == "Pe" and f < 1e-6:
-        mark = "Passive"
-    elif flabel == "W" and f< 1e-6:
-        mark = "Free"
+def peak_seg(data, bins=20, find_min=True):
+    x, y = data
+    # 计算一阶和二阶导数
+    dx, dy = 0.5 * (x[:-1] + x[1:]), np.diff(y) / np.diff(x)  # 计算中点，以保持导数的维度一致
+    d2x, d2y = 0.5 * (dx[:-1] + dx[1:]), np.diff(dy) / np.diff(dx)
+    log_intervals = np.linspace(x.min(), x.max(), num=bins)
+    tps, segs, slopes = [], [], []
+    for i in range(len(log_intervals) - 1):
+        start, end = log_intervals[i], log_intervals[i + 1]
+        mask = (d2x >= start) & (d2x <= end)
+        peaks, _ = find_peaks(d2y[mask])
+        if peaks.size > 0:
+            peak = peaks[np.argmax(d2y[mask][peaks])]  # 选择最大的极值点
+            tps.append(d2x[mask][peak])
+
+    # 创建每个分段的数据
+    for i in range(len(tps) + 1):
+        if i == 0:
+            segment = (x[x <= tps[i]], y[x <= tps[i]])
+        elif i == len(tps):
+            segment = (x[x > tps[i - 1]], y[x > tps[i - 1]])
+        else:
+            segment = (x[(x > tps[i - 1]) & (x <= tps[i])],  y[(x > tps[i - 1]) & (x <= tps[i])])
+        segs.append(segment)
+        slopes.append(linregress(segment[0], segment[1])[0])
+    # 继续求二阶导的极大值点：并进一步确定转折区间
+    dslopes = np.array(np.diff(slopes))
+    if find_min:
+        peaks = np.array(find_peaks(-dslopes)[0])
     else:
-        mark = f
-    return mark
+        peaks = np.array(find_peaks(dslopes)[0])
+    peak_point = peaks[np.argmax(np.abs(dslopes[peaks]))]
+    if peak_point ==0:
+        turning_interval = segs[0:3]
+    elif peak_point == len(segs) - 1:
+        turning_interval = segs[-3:]
+    else:
+        turning_interval = segs[peak_point-1: peak_point + 2]
+    turning_x = np.concatenate([segment[0] for segment in turning_interval])
+    turning_y = np.concatenate([segment[1] for segment in turning_interval])
+    pre_turning = x[x < turning_x[0]], y[x < turning_x[0]]
+    post_turning = x[x > turning_x[-1]], y[x > turning_x[-1]]
+    return pre_turning, post_turning
+def local_slope(data, bins=10):
+    x, y = data
+    window_size = len(x)//bins
+    x_coords, local_slopes = [], []
+    for start, end in [(i, i + window_size) for i in range(len(x) - window_size)]:
+        local_x, local_y = x[start:end], y[start:end]
+        #diff = (np.diff(y) / np.diff(x)).mean()
+        local_slopes.append(linregress(local_x, local_y)[0])
+        x_coords.append(np.mean(local_x))
+    return np.array(x_coords), np.array(local_slopes)
+def fit_alpha(x, y, alpha):
+    if alpha == 2:
+        y_fit = y / (x**2)
+    elif alpha == 1:
+        y_fit = y / x
+    else:
+        raise ValueError("Alpha must be 1 or 2.")
+    log_y_fit = np.log(y_fit)
+    _, log_beta = linregress(np.log(x), log_y_fit)[:2]
+    beta = np.exp(log_beta)
+    return beta
+def plot_line(ax, data, alpha=1):
+    if alpha == 2:
+        x0, x1, y1 = data
+        logx0, logx1, logy1 = np.log10(x0), np.log10(x1), np.log10(y1)
+        logy0 = alpha * (logx0 - logx1) + logy1
+    elif alpha == 1:
+        x0, x1, y0 = data
+        logx0, logx1, logy0 = np.log10(x0), np.log10(x1), np.log10(y0)
+        logy1 = alpha * (logx1 - logx0) + logy0
+    ax.loglog([10 ** logx0, 10 ** logx1], [10 ** logy0, 10 ** logy1], color="k", linewidth=2)
+
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
-        self.params, self.check = params, check
+        self.params, self.check, self.jump = params, check, jump
         self.queue, self.submitted = "7k83!", False
         #self.queue, self.submitted = "9654!", False
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
@@ -2177,7 +2291,8 @@ class JobProcessor:
         self._initialize(Path)
         if Path.jump:  # jump for repeat: check lammpstrj
             print(f"==>Continue: {Path.lmp_trj} is already!")
-            return
+            if self.jump:
+                return
 
         # Create simulation directory and copy Run.py
         echo.info(f"dir_simus => {Path.simus}")
@@ -2191,18 +2306,20 @@ class JobProcessor:
         self.Model.in_file(Path)  # return
         self.Run.sub_file(Path, infiles)
         # excute jobs
-        if "Codes" in CURRENT_DIR and (HOST == "Linux" and self.run_on_cluster == "false"):  # 登陆节点
-            if input_file:
-                self.exe_simus("Submit", Path.simus, input_file)
-            else:
-                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
-                    self.exe_simus("Submit", Path.simus, infile)
-        else: # macOS
-            if input_file:
+        if input_file:
+            # running files
+            if HOST == "Darwin":  # macOS
                 self.exe_simus("Run", Path.simus, input_file)
-            else:
-                for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
+            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                self.exe_simus("Submit", Path.simus, input_file)
+        else:
+            for infile in infiles:
+                # running files
+                if HOST == "Darwin":  # macOS
                     self.exe_simus("Run", Path.simus, infile)
+                # submitting files
+                elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
+                    self.exe_simus("Submit", Path.simus, infile)
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
@@ -2325,10 +2442,13 @@ class JobProcessor:
                                 Path = _path(_model(Init, Run, iFa, iXi))
                                 for i, path in enumerate([Path.fig, Path.fig0, Path.fig1]):
                                     variable.save = os.path.join(path, f"{variable.path}.npy")
-                                    data_path = variable.save #if iFa >= 1 else variable.save.replace(f"{Run.Gamma:.1f}G", f"{10:.1f}G")
+                                    #print("Path.fig,0,1:", Path.fig, Path.fig0, Path.fig1)
+                                    data_path = variable.save if iFa >= 1 else variable.save.replace(f"{Run.Gamma:.1f}G", f"{10:.1f}G")
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
+                                        if OPEN and HOST == "Darwin":
+                                            subprocess.run(["open", path])
                                         echo.error(f"ERROR: Wrong {variable.name} path = {data_path}")
                                 if variable.name == "Rg":
                                     data_Rg2 = np.load(data_path)
@@ -2360,8 +2480,9 @@ class JobProcessor:
                 io_data(dirfile, variable.df)
                 # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
             plotter4 = Plotter4D(variable, dirfile)
-            plotter4.expand()
+            #plotter4.expand()
             plotter4.expand2D()
+            #plotter4.scale()
         else:
             dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
             if task == "load":
@@ -2424,7 +2545,19 @@ if __name__ == "__main__":
     if os.path.abspath(__file__) != back_file:
         shutil.copy(os.path.abspath(__file__), back_file)
     if task == "Simus":
-        run.process(data_job="simus_job")
+        if "Codes" in CURRENT_DIR:
+            run.process(data_job="simus_job")
+        elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
+            try:
+                if input_file:
+                    run.exe_simus("Run", CURRENT_DIR, input_file)
+                else:
+                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
+                        run.exe_simus("Run", CURRENT_DIR, infile)
+            except Exception as e:
+                print(usage)
+                logging.error(f"An error occurred: {e}")
+                raise ValueError(f"An error occurred: {e}")
     # Analysis: single
     elif task == "Anas":
         run.process(data_job="anas_job")

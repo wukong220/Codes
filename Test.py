@@ -941,6 +941,69 @@ axs[1, 1].set_title('Hexbin plot of nu')
 # 调整子图间距
 plt.tight_layout()
 plt.show()
+#plan A
+for i, peak in enumerate(peaks):
+    if i == 0:
+        x_segment = logt[:peak]
+        y_segment = logf[:peak]
+    else:
+        x_segment = logt[peaks[i - 1]:peak]
+        y_segment = logf[peaks[i - 1]:peak]
 
+    slope, intercept, _, _, _ = linregress(x_segment, y_segment)
+    alpha, beta = slope, 10 ** intercept
+    print(f"Segment {i + 1}: alpha = {alpha:.2f}, beta = {beta:.2f}")
+    plt.plot(10 ** x_segment, 10 ** (slope * x_segment + intercept))
+    # 标记转折点
+    if i != 0:  # 第一个点不是转折点
+        plt.axvline(10 ** logt[peak], color='gray', linestyle='--')
+plt.xlabel('Time')
+plt.ylabel('MSD')
+plt.title('MSD vs Time with Segment-wise Scaling')
+plt.legend()
+plt.show()
 # 如果您有其他的可视化需求，例如3D曲面图、散点图矩阵等，请补充您的需求，我可以继续为您提供相应的代码和解释。
+#planB
+plt.figure(figsize=(10, 6))
+plt.loglog(t, f, 'o', label='Original Data')
+
+dx, dy, d2x, d2y = derivate(logt, logf)
+log_intervals = np.linspace(log_time.min(), log_time.max(), num=30)
+
+turning_points = []
+for i in range(len(log_intervals) - 1):
+    start, end = log_intervals[i], log_intervals[i + 1]
+    mask = (d2x >= start) & (d2x <= end)
+    peaks, _ = find_peaks(d2y[mask])
+    if peaks.size > 0:
+        peak = peaks[np.argmax(d2y[mask][peaks])]  # 选择最大的极值点
+        turning_points.append(d2x[mask][peak])
+
+# 对每个区间进行线性拟合
+for i in range(len(turning_points) + 1):
+    if i == 0:
+        x_segment = log_time[log_time <= turning_points[i]]
+        y_segment = log_msd[log_time <= turning_points[i]]
+    elif i == len(turning_points):
+        x_segment = log_time[log_time > turning_points[i - 1]]
+        y_segment = log_msd[log_time > turning_points[i - 1]]
+    else:
+        x_segment = log_time[(log_time > turning_points[i - 1]) & (log_time <= turning_points[i])]
+        y_segment = log_msd[(log_time > turning_points[i - 1]) & (log_time <= turning_points[i])]
+
+    slope, intercept, _, _, _ = linregress(x_segment, y_segment)
+    alpha, beta = slope, 10 ** intercept
+    print(f"Segment {i + 1}: alpha = {alpha:.2f}, beta = {beta:.2f}")
+    plt.plot(10 ** x_segment, 10 ** (slope * x_segment + intercept))
+
+# 标记转折点
+for i, tp in enumerate(turning_points):
+    print(f'Turning Point {i + 1} at {10 ** tp:.2f}')
+    plt.axvline(10 ** tp, color='gray', linestyle='--')
+
+plt.xlabel('Time (log scale)')
+plt.ylabel('MSD (log scale)')
+plt.title('MSD vs Time with Segment-wise Scaling')
+plt.legend()
+plt.show()
 
