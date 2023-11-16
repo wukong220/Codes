@@ -94,7 +94,7 @@ class _config:
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
                           #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [0.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [10.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -119,8 +119,8 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                               #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
                              # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
-                              #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
-                              'N_monos': [80, 100], 'Fa': [1.0, 10.0],
+                              'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
+                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
@@ -264,10 +264,10 @@ class _run:
                 f'source ~/.bashrc',
                 f'export RUN_ON_CLUSTER=true',
                 f'cd {Path.simus}',
-                f'echo "python3 Run.py {infile}"',
-                f'python3 Run.py {infile}',
-                #f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
-                #f'mpirun -np 1 lmp_wk -i {infile}.in',
+                #f'echo "$(date): python3 Run.py {infile}" ',
+                #f'python3 Run.py {infile}',
+                f'echo "$(date): mpirun -np 1 lmp_wk -i {infile}.in"',
+                f'mpirun -np 1 lmp_wk -i {infile}.in',
             ]
 
             with open(f"{dir_file}.lsf", "w") as file:
@@ -927,7 +927,7 @@ class _path:
         self.Config = Model.Init.Config
         self.Run = Model.Run
         self.jump = self.build_paths()
-        self.filename = os.path.basename(os.path.abspath(__file__))
+        self.run_py = "Run.py"
     def build_paths(self):
         self.base = os.path.join(self.host, self.mydirs[1])
         for dir in self.mydirs:
@@ -1915,18 +1915,17 @@ class Plotter4D(BasePlot):
     def cal_D(self):
         flabel, tlabel, xlabel, ylabel, zlabel = [self.variable.name, "t"] + self.variable.paras
         x, y, z = self.df[xlabel].unique(), self.df[ylabel].unique(), self.df[zlabel].unique()
+        df_beta = pd.DataFrame(columns=['beta', xlabel, ylabel, zlabel])
         for (ix, iy, iz) in [(ux, uy, uz) for ux in x for uy in y for uz in z]:
             df_xyz = self.df[(self.df[xlabel] == ix) & (self.df[ylabel] == iy) & (self.df[zlabel] == iz)]
             f, t = df_xyz[self.variable.name][0], df_xyz["dt"][0] * range((len(self.df[flabel][0])))
-            print(df_xyz, "\nf: ", f, "\nt: ", t)
-            sys.exit()
             if self.variable.name == "MSD":
-                logt, logf = np.log10(t[1:]), np.log10(df_xyz[self.variable.name][1:])
+                logt, logf = np.log10(t[1:]), np.log10(f[1:])
                 pre_turning, turning, post_turning = peak_seg((logt, logf))
                 slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
                 if slope:
-                    df_beta = df_beta.append({'beta': slop/6, ylabel: uy, zlabel: uz, wlabel: uw}, ignore_index=True)
-        df_D = pd.DataFrame(columns=['D', ylabel, zlabel, wlabel])
+                    df_beta = df_beta.append({'beta': slop/6, xlabel: ix, ylabel: iy, zlabel: iz}, ignore_index=True)
+        return df_data
     def scaleA(self, data):
         # fit lines
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -2309,8 +2308,8 @@ class JobProcessor:
         # Create simulation directory and copy Run.py
         echo.info(f"dir_simus => {Path.simus}")
         os.makedirs(Path.simus, exist_ok=True)
-        if os.path.abspath(__file__) != os.path.join(Path.simus, Path.filename):
-            shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.filename))
+        if os.path.abspath(__file__) != os.path.join(Path.simus, Path.run_py):
+            shutil.copy2(os.path.abspath(__file__), os.path.join(Path.simus, Path.run_py))
 
         # prepare files
         infiles = [f"{i:03}" for i in range(self.Run.Trun[0], self.Run.Trun[1]+2)]

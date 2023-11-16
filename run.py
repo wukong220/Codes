@@ -55,7 +55,7 @@ class Echo:
 echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
 MSD, Cee = Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
+task, JOBS = ["Simus", "Anas", "Plots"][0], [MSD] #Rg,
 check, OPEN, jump = (task != "Plots"), True, True
 if task == "Simus":
     jump = True
@@ -119,8 +119,8 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                               #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
                              # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
-                              #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
-                              'N_monos': [80, 100], 'Fa': [1.0, 10.0],
+                              'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
+                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
@@ -262,12 +262,11 @@ class _run:
                 f'#BSUB -oo {dir_file}.out',
                 f'#BSUB -eo {dir_file}.err',
                 f'source ~/.bashrc',
-                f'export RUN_ON_CLUSTER=true',
                 f'cd {Path.simus}',
-                f'echo "$(data): python3 Run.py {infile}" ',
-                f'python3 Run.py {infile}',
-                #f'echo "mpirun -np 1 lmp_wk -i {infile}.in"',
-                #f'mpirun -np 1 lmp_wk -i {infile}.in',
+                #f'echo "python3 Run.py {infile}\n$(date)" ',
+                #f'python3 Run.py {infile}',
+                f'echo -e "mpirun -np 1 lmp_wk -i {infile}.in\n$(date)"',
+                f'mpirun -np 1 lmp_wk -i {infile}.in',
             ]
 
             with open(f"{dir_file}.lsf", "w") as file:
