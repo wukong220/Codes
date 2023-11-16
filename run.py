@@ -53,17 +53,15 @@ class Echo:
         logging.warning(message)
         print(message)
 echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
-MSD, Cee = Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet", "\\tau_R")
+MSD = Property("MSD", "MSDt", "D")
+Cee = Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
 task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
-BSUB, OPEN = (task == "Simus"), True
-check, jump = (task != "Plots"), True
+check  = (task != "Plots")
 if task == "Simus":
-    jump = True
-elif task == "Plots":
-    jump = False
-elif task == "Anas" and HOST == "Darwin":
-    jump = False
+    BSUB, jump = True, True
+else:
+    BSUB, jump = False, False
 #-----------------------------------Dictionary-------------------------------------------
 params = {
     'labels': {'Types': ["Chain", "Bacteria", "Ring"][0:1],
@@ -95,7 +93,7 @@ class _config:
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
                           #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [10.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                         3: {"Rin": [0.0], "Wid": [15.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
                          },
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -1077,7 +1075,8 @@ class BasePlot:
         self.notes = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)", "(g)", "(h)", "(i)", "(j)", "(k)"]
         self.markers = ['o', '^', 's', '<', 'p', '*', 'D', 'v', 'H', '>']
         # ----------------------------> setup: canvas<----------------------------#
-        (cols, rows), (width, heigh), (wspace, hspace), (ledge, redge) = mag, size, inter, edge
+        (cols, rows), (width, heigh), (wspace, hspace), ledge = mag, size, inter, edge[0]
+        redge = edge[1] if rows > 2 else 1.0
         left, bot = ledge / (width * cols), redge / (heigh * rows)
         right, top = 1-left, 1-bot
         fig = plt.figure(figsize=(width * cols, heigh * rows))
@@ -1489,8 +1488,11 @@ class Plotter3D(BasePlot):
             if is_3D:
                 ax.set_zscale('log')
         else:
-            lo, hi = 0.1, 1.2
             ax.grid(True)
+            if self.variable.name == "Rg":
+                lo, hi = 0.2, 1.2
+            else:
+                lo, hi = 0, 1.2
 
         # Set axis limits and rotation
         for i, (axis_data, axis_name) in enumerate(zip(data[:2 + is_3D], "xyz"[:2 + is_3D])):
@@ -1544,6 +1546,7 @@ class Plotter3D(BasePlot):
         labels_set = [list(map(lambda x: var2str(self.variable.name)[0] if x == self.variable.name else x, label_set)) for label_set in labels_set]
         # ----------------------------> figure.pdf <----------------------------#
         fig_file = self.fig_path("Proj")
+        log = True if self.variable.name == "Rg" else False
         with PdfPages(f"{fig_file}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 # ----------------------------> data and labels <----------------------------#
@@ -1561,7 +1564,7 @@ class Plotter3D(BasePlot):
                 self.adding(axes_3D[0], self.notes[0], -0.2, True)
                 # ----------------------------> plotting: bc <----------------------------#
                 self.scatter(axes_2D[0], (x, y, f, z), (xlabel, ylabel, flabel, zlabel), self.notes[1])
-                self.scatter(axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), self.notes[2], log=True)
+                self.scatter(axes_2D[1], (x, f, y, z), (xlabel, flabel, ylabel, zlabel), self.notes[2], log=log)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1592,8 +1595,8 @@ class Plotter3D(BasePlot):
             for zi, (marker, color) in zip(uz, color_map):
                 mask = (z==zi)
                 coef, x_range, y_range = scale(x[mask], y[mask])
-                if coef:
-                    ax.plot(x_range, y_range, color=color, linestyle='dashed')
+                if coef and log:
+                    ax.plot(x_range, y_range, color=color, linestyle='--')
                     title = fr'{zlabel}, ${self.variable.scale}$'
                     label = f'{label2mark(zi, zlabel)}, {coef}'
                 else:
@@ -1619,6 +1622,7 @@ class Plotter3D(BasePlot):
         labels_set = [list(map(lambda x: var2str(self.variable.name)[0] if x == self.variable.name else x, label_set)) for label_set in columns_set]
         # ----------------------------> figure.pdf <----------------------------#
         fig_file = self.fig_path("Exp")
+        log = True if self.variable.name == "Rg" else False
         with PdfPages(f"{fig_file}.pdf") as pdf:
             for i, (data, labels) in enumerate(zip(data_set, labels_set)):
                 f, x, y, z = data
@@ -1632,8 +1636,8 @@ class Plotter3D(BasePlot):
                 for i, iz in enumerate(unique_z):
                     mask = (z == iz)
                     # ----------------------------> plotting <----------------------------#
-                    self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), self.notes[0], log=True)
-                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), self.notes[1], log=True)
+                    self.scatter_exp(iz, axes_2D[2*i], (x[mask], f[mask], y[mask], z[mask]), (xlabel, flabel, ylabel, zlabel), self.notes[0], log=log)
+                    self.scatter_exp(iz, axes_2D[2*i+1], (y[mask], f[mask], x[mask], z[mask]), (ylabel, flabel, xlabel, zlabel), self.notes[1], log=log)
                 # ----------------------------> save fig <----------------------------#
                 fig = plt.gcf()
                 pdf.savefig(fig, dpi=500, transparent=True)
@@ -1806,24 +1810,40 @@ class Plotter4D(BasePlot):
         '''set_axes2D'''
         x, unique_y, unique_z, unique_w = data
         flabel, xlabel, ylabel, zlabel, wlabel = labels
-        df_w = self.df[self.df[wlabel] == w]  # query: w
-
         f_flat = np.concatenate(self.df[self.variable.name].values)
         xlim, ylim = (min(x), max(x)), (min(f_flat), max(f_flat))
+
+        df_w = self.df[self.df[wlabel] == w]  # query: w
+        data_w = np.concatenate(df_w[self.variable.name].values)
+        label_list = []
+        plot_line(ax, (x[200], x[-1], max(data_w) * 2.5), 1)
+        plot_line(ax, (x[1], x[6], min(data_w[data_w != 0]) * 0.3), 2)
+
         colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))
         color_map = dict(zip(unique_y, colors))
         marker_map = dict(zip(unique_z, self.markers[:len(unique_z)]))
-        for _, data in df_w.iterrows():
+        for _, wdata in df_w.iterrows():
             if self.variable.name == "MSD":
-                ax.plot(x[1:], data[self.variable.name][1:], color=color_map[data[ylabel]], linestyle="--")
-            ax.scatter(x, data[self.variable.name], c='none', s=50, edgecolors=color_map[data[ylabel]],
-                                linewidths=2, facecolors='none', marker=marker_map[data[zlabel]])
+                # ax.plot(x[1:], wdata[self.variable.name][1:], color=color, linestyle="--")
+                logt, logf = np.log10(x[1:]), np.log10(wdata[self.variable.name][1:])
+                turning, (slope, intercept) = peak_seg((logt, logf))
+                ax.plot(10 ** turning[0], slope * 10 ** turning[0] + intercept, color=color_map[wdata[ylabel]], linestyle="--")
+                #ax.axvline(10 ** turning[0][0], color=color_map[wdata[ylabel]], linestyle='--')
+                #ax.axvline(10 ** turning[0][-1], color=color_map[wdata[ylabel]], linestyle='--')
+                labels = (flabel, xlabel, ylabel, f"{zlabel}, D")
+                label_list.append(f", {slope/6:.4f}")
+            else:
+                labels = (flabel, xlabel, ylabel, zlabel)
+            x_samp = np.concatenate([x[:100], x[100::10]])
+            y_samp = np.concatenate([wdata[self.variable.name][:100], wdata[self.variable.name][100::10]])
+            ax.scatter(x_samp, y_samp, c='none', s=50, edgecolors=color_map[wdata[ylabel]],
+                                linewidths=2, facecolors='none', marker=marker_map[wdata[zlabel]])
         # colorbar
         self.colorbar(ax, unique_y, ylabel)
-        legends = [plt.Line2D([0], [0], marker=marker_map[z], color='w', label=f'{z}',
-                              markerfacecolor='none', markeredgecolor='k') for z in unique_z]
+        legends = [plt.Line2D([0], [0], marker=marker_map[z], color='w', label=f"{z}{label}",
+                              markerfacecolor='none', markeredgecolor='k') for z in unique_z for label in label_list]
         title = f'{flabel}({xlabel}, {ylabel}, {zlabel}; {wlabel}={w})'
-        self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), note, legends=legends, log=True)
+        self.set_axes2D(ax, title, labels, (xlim, ylim), note, legends=legends, log=True)
     def expand(self):
         '''scatter_exp'''
         timer = Timer(f"{self.variable.name}: Expand4D1")
@@ -1889,19 +1909,21 @@ class Plotter4D(BasePlot):
                         df_y = df_zw[df_zw[ylabel] == y] # query: y
                         for _, ydata in df_y.iterrows():
                             if self.variable.name == "MSD":
+                                #ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
                                 logt, logf = np.log10(x[1:]), np.log10(ydata[self.variable.name][1:])
-                                pre_turning, turning, post_turning = peak_seg((logt, logf))
+                                pre_turning, turning, post_turning = turn_beta(ax, (logt, logf), color)
                                 slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
                                 ax.plot(10 ** turning[0], slope * 10 ** turning[0] + intercept, color=color, linestyle="--")
-                                ax.axvline(10 ** pre_turning[0][-1], color=color, linestyle='--')
-                                ax.axvline(10 ** post_turning[0][0], color=color, linestyle='--')
-                                #ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
+                                #ax.axvline(10 ** pre_turning[0][-1], color=color, linestyle='--')
+                                #ax.axvline(10 ** post_turning[0][0], color=color, linestyle='--')
                                 label = f'{y}: {slope/6:.4f}'
                                 labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
                             else:
-                                label = f'{y}'
+                                label = y
                                 labels = (flabel, xlabel, ylabel, zlabel)
-                            ax.scatter(x, ydata[self.variable.name], c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=label)
+                            x_samp = np.concatenate([x[:100], x[100::10]])
+                            y_samp = np.concatenate([ydata[self.variable.name][:100], wdata[self.variable.name][100::10]])
+                            ax.scatter(x_samp, y_samp, c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=label)
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
                     self.set_axes2D(ax, title, labels, (xlim, ylim), log=True)
                 # ----------------------------> save fig <----------------------------#
@@ -1913,39 +1935,25 @@ class Plotter4D(BasePlot):
         timer.stop()
         return
     ##################################################################
-    def cal_D(self):
+    def scale(self):
+        timer = Timer("Diff")
+        timer.start()
+        beta = Property(MSD.scale, "n"+MSD.name)
+        dirfile = os.path.join(os.path.dirname(self.fig_save), f"(r,s,t){beta.path}({','.join(beta.paras)})")
         flabel, tlabel, xlabel, ylabel, zlabel = [self.variable.name, "t"] + self.variable.paras
         x, y, z = self.df[xlabel].unique(), self.df[ylabel].unique(), self.df[zlabel].unique()
-        df_beta = pd.DataFrame(columns=['beta', xlabel, ylabel, zlabel])
+        beta.df = pd.DataFrame(columns=[MSD.scale, xlabel, ylabel, zlabel])
         for (ix, iy, iz) in [(ux, uy, uz) for ux in x for uy in y for uz in z]:
             df_xyz = self.df[(self.df[xlabel] == ix) & (self.df[ylabel] == iy) & (self.df[zlabel] == iz)]
-            f, t = df_xyz[self.variable.name][0], df_xyz["dt"][0] * range((len(self.df[flabel][0])))
+            f,t = df_xyz[flabel].iloc[0], df_xyz["dt"].iloc[0] * range((len(df_xyz[flabel].iloc[0])))
             if self.variable.name == "MSD":
                 logt, logf = np.log10(t[1:]), np.log10(f[1:])
-                pre_turning, turning, post_turning = peak_seg((logt, logf))
-                slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+                turning, (slope, intercept) = peak_seg((logt, logf))
                 if slope:
-                    df_beta = df_beta.append({'beta': slop/6, xlabel: ix, ylabel: iy, zlabel: iz}, ignore_index=True)
-        return df_data
-    def scaleA(self, data):
-        # fit lines
-        fig, ax = plt.subplots(figsize=(10, 6))
-        pre_turning, post_turning  = peak_seg((logt, logf))
-        slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
-        ax.loglog(10**logt, 10**logf, label="Original data")
-        ax.loglog(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, label=f'({1:.2f}, {slope:.2f})')
-        plot_line(ax, (t[200], t[-1], f[-1] * 2), 1)
-        plot_line(ax, (t[0], t[5], f[5] / 2), 2)
-        plt.axvline(10 ** pre_turning[0][-1], color='gray', linestyle='--')
-        plt.axvline(10 ** post_turning[0][0], color='gray', linestyle='--')
-
-        plt.xlabel('Time (log scale)')
-        plt.ylabel('MSD (log scale)')
-        plt.legend()
-        plt.title('Logarithmic Fit Comparison')
-        plt.show()
-        sys.exit()
-        echo.error("For test")
+                    beta.df = beta.df.append({MSD.scale: slope/6, xlabel: ix, ylabel: iy, zlabel: iz}, ignore_index=True)
+        plotter3 = Plotter3D(beta, dirfile)
+        plotter3.project()
+        plotter3.expand()
         timer.stop()
 #############################################################################################################
 class Timer:
@@ -2079,6 +2087,7 @@ def unwrap_x(data, Lx):
                     if crossed[file_idx, atom_idx]:
                         data[file_idx, i:, atom_idx, 0] -= (np.sign(dx) * Lx * crossed)[file_idx, atom_idx]
     return data
+
 #scale
 def scale(x, y):
     if x[0] < 1e-6:
@@ -2136,7 +2145,8 @@ def peak_seg(data, bins=20, find_min=True):
     turning = np.concatenate([segment[0] for segment in turning_interval]), np.concatenate([segment[1] for segment in turning_interval])
     pre_turning = x[x < turning[0][0]], y[x < turning[0][0]]
     post_turning = x[x > turning[0][-1]], y[x > turning[0][-1]]
-    return pre_turning, turning, post_turning
+    slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
+    return turning, (slope, intercept)
 def local_slope(data, bins=10):
     x, y = data
     window_size = len(x)//bins
@@ -2168,6 +2178,73 @@ def plot_line(ax, data, alpha=1):
         logx0, logx1, logy0 = np.log10(x0), np.log10(x1), np.log10(y0)
         logy1 = alpha * (logx1 - logx0) + logy0
     ax.loglog([10 ** logx0, 10 ** logx1], [10 ** logy0, 10 ** logy1], color="k", linewidth=2)
+#Cores
+def exe_simus(task, path, infile):
+    dir_file = os.path.join(path, infile)
+    if task == "Run":
+        echo.info(f">>> Running jobs: {infile}......\nmpirun -np 1 lmp_wk -i {dir_file}.in")
+        subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
+        echo.info(f"{dir_file}.in ==> Simus: Done!")
+
+    elif task == "Submit":
+        echo.info(f">>> Running jobs : {infile}......\nbsub < {dir_file}.lsf")
+        subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
+        echo.info(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+    else:
+        echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
+def exe_analysis(Path, data):
+    '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
+    echo.info(f"analyse and save data => {Path}")
+    Trun, frames = params["Trun"][1], params["Frames"]
+    Rcom.data = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位置
+    data_com = data - np.expand_dims(np.mean(data, axis=2), axis=2) #质心坐标
+    data_Rcom = np.linalg.norm(data_com[..., :], axis=-1) #质心坐标的模
+    # ---------------------------------------> Rg <---------------------------------------#
+    Rg2_t = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # Rg2_t[iframe]
+    echo.info(f"Rg2(t) and Rcom(t) ......")
+    Rcom.save, Rg.save = os.path.join(Path, f"{Rcom.path}.npy"), os.path.join(Path, f"{Rg.path}.npy")
+    np.save(Rcom.save, Rcom.data)
+    np.save(Rg.save, Rg2_t) #average over time
+    # ---------------------------------------> MSD <---------------------------------------#
+    # MSD[iframe]
+    MSD.save = os.path.join(Path, f"{MSD.path}.npy")
+    msd_run = np.zeros((Trun, frames//2))
+    for dt in range(1, frames//2):
+        msd_run[:, dt] = np.mean((Rcom.data[:, dt:] - Rcom.data[:, :-dt]) ** 2, axis=1)
+    MSD.data = np.mean(msd_run, axis=0)
+    echo.info(f"MSD(t) ......")
+    np.save(MSD.save, MSD.data)
+    return data_Rcom
+def exe_plot(task, variable, path=CURRENT_DIR):
+    '''plotting execute'''
+    abbre, file_name = var2str(variable.name)[1], ','.join(variable.paras)
+    echo.info(">>> Plotting ......")
+    if variable.dtime:
+        dirfile = os.path.join(path, f"(r,s){abbre}(t,{file_name})")
+        if task == "load":
+            variable.df = io_data(dirfile)
+        elif task == "save":
+            io_data(dirfile, variable.df)
+            # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
+        plotter4 = Plotter4D(variable, dirfile)
+        plotter4.expand()
+        #plotter4.expand2D()
+        #plotter4.scale()
+    else:
+        dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
+        if task == "load":
+            variable.df = io_data(dirfile)
+        elif task == "save":
+            io_data(dirfile, variable.df)
+            # self.subfile(f"{abbre}(t,{file_name})_Plot", "Plot: t, {file_name}", dirfile)
+        plotter3 = Plotter3D(variable, dirfile)
+        # plotter3.Rg()
+        plotter3.project()
+        plotter3.expand()
+        plotter3.scale()
+    print(">>> Plotting -------------------------------Done!----------------------------------------")
+    if HOST == "Darwin":
+        subprocess.run(["open", path])
 # -----------------------------------Jobs-------------------------------------------#
 class JobProcessor:
     def __init__(self, params):
@@ -2202,7 +2279,7 @@ class JobProcessor:
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-                run.exe_plot("load", variable, ['Pe', 'N', 'W'])
+                exe_plot("load", variable, ['Pe', 'N', 'W'])
                 print(f"==> Rg_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
@@ -2226,7 +2303,7 @@ class JobProcessor:
                                     self.dft = self.dft.append({'Pe': iFa / Run.Temp, 'N': iN, 'W': iWid, variable: Rgt}, ignore_index=True)
                 self.dft['dt']=Run.Tdump * 0.001
                 # saving, subfile, plotting
-                self.exe_plot("save", variable, paras, fig_save)
+                exe_plot("save", variable, paras, fig_save)
                 print(f"==> Rg_job: Done! \n==>Please check the results and submit the plots!")
     # -----------------------------------Prepare-------------------------------------------#
     def _initialize(self, Path):
@@ -2319,23 +2396,9 @@ class JobProcessor:
         # excute jobs
         for infile in infiles:
             if HOST == "Linux" and self.run_on_cluster == "false" and BSUB:              # submitting files
-                self.exe_simus("Submit", Path.simus, infile)
+                exe_simus("Submit", Path.simus, infile)
             else:
-                self.exe_simus("Run", Path.simus, infile) # running files
-
-    def exe_simus(self, task, path, infile):
-        dir_file = os.path.join(path, infile)
-        if task == "Run":
-            echo.info(f">>> Running jobs: {infile}......\nmpirun -np 1 lmp_wk -i {dir_file}.in")
-            subprocess.run(f"mpirun -np 1 lmp_wk -i {dir_file}.in", shell=True)
-            echo.info(f"{dir_file}.in ==> Simus: Done!")
-
-        elif task == "Submit":
-            echo.info(f">>> Running jobs : {infile}......\nbsub < {dir_file}.lsf")
-            subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
-            echo.info(f">>>>>>>>>>>>>>>>>>>>>>>>>>>Done!<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-        else:
-            echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
+                exe_simus("Run", Path.simus, infile) # running files
     # -----------------------------------Anas-------------------------------------------#
     def anas_job(self, Path, **kwargs):
         self._initialize(Path)
@@ -2368,45 +2431,22 @@ class JobProcessor:
                             echo.info(f"JUMP==>{file_check} is already!")
                         else:
                             data = Anas.read_data()
-                            data_Rcom = self.exe_analysis(Path.fig, data) # saving data
+                            data_Rcom = exe_analysis(Path.fig, data) # saving data
                             Plot.org(data_Rcom, Rcom) #plotting: org(data, variable)
                             # Plot.org(data_Rcom ** 2, "Rcom2")
-                        if OPEN and HOST == "Darwin":
+                        if HOST == "Darwin":
                             subprocess.run(["open", Path.fig])
                         print(f"==> Anas_job: Done! \n==>Please check the results and submit the plots!")
                     elif "Figs" in CURRENT_DIR:
                         echo.info(f">>> Plotting {CURRENT_DIR} ......")
                         path = CURRENT_DIR.replace('Figs', 'Simus')
                         data = self.read_simp(path)
-                        data_Rcom = self.exe_analysis(path, data)
+                        data_Rcom = exe_analysis(path, data)
                         #data_Rcom = np.load(os.path.join(CURRENT_DIR, "Rcom.npy"))
                         Plot.org(data_Rcom, "Rcom")  # org(data, variable)
                         print(f"==> Anas_job: Done!")
         else:
             echo.info(f"File doesn't exist in anas_job: {Path.lmp_trj}")
-    def exe_analysis(self, Path, data):
-        '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
-        echo.info(f"analyse and save data => {Path}")
-        Trun, frames = params["Trun"][1], params["Frames"]
-        Rcom.data = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位置
-        data_com = data - np.expand_dims(np.mean(data, axis=2), axis=2) #质心坐标
-        data_Rcom = np.linalg.norm(data_com[..., :], axis=-1) #质心坐标的模
-        # ---------------------------------------> Rg <---------------------------------------#
-        Rg2_t = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # Rg2_t[iframe]
-        echo.info(f"Rg2(t) and Rcom(t) ......")
-        Rcom.save, Rg.save = os.path.join(Path, f"{Rcom.path}.npy"), os.path.join(Path, f"{Rg.path}.npy")
-        np.save(Rcom.save, Rcom.data)
-        np.save(Rg.save, Rg2_t) #average over time
-        # ---------------------------------------> MSD <---------------------------------------#
-        # MSD[iframe]
-        MSD.save = os.path.join(Path, f"{MSD.path}.npy")
-        msd_run = np.zeros((Trun, frames//2))
-        for dt in range(1, frames//2):
-            msd_run[:, dt] = np.mean((Rcom.data[:, dt:] - Rcom.data[:, :-dt]) ** 2, axis=1)
-        MSD.data = np.mean(msd_run, axis=0)
-        echo.info(f"MSD(t) ......")
-        np.save(MSD.save, MSD.data)
-        return data_Rcom
     # -----------------------------------Plot-------------------------------------------#
     def plot_job(self, Config, Run, iRin, variable=Rg):
         '''expand Rg(t) -> Rg(t, Pe, W, N)'''
@@ -2430,7 +2470,7 @@ class JobProcessor:
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 self.submitted = True
             elif "Figs" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-                run.exe_plot("load", variable)
+                exe_plot("load", variable)
                 print(f"==> Plot_job: Done!")
             elif "Codes" in CURRENT_DIR: # HOST == "Darwin":  # macOS
                 for iWid in convert2array(params['Wid']):
@@ -2448,7 +2488,7 @@ class JobProcessor:
                                     if os.path.exists(data_path):
                                         break
                                     elif i == 2:
-                                        if OPEN and HOST == "Darwin":
+                                        if HOST == "Darwin":
                                             subprocess.run(["open", path])
                                         echo.error(f"ERROR: Wrong {variable.name} path = {data_path}")
                                 if variable.name == "Rg":
@@ -2467,38 +2507,8 @@ class JobProcessor:
                                     echo.error(f"ERROR: wong variable: {variable.name}")
                 # saving, subfile, plotting
                 variable.df['dt'] = Run.Tdump * 0.001
-                self.exe_plot("save", variable, fig_save)
+                exe_plot("save", variable, fig_save)
                 print(f"==> Plot_job: Done! \n==>Please check the results and submit the plots!")
-    def exe_plot(self, task, variable, path=CURRENT_DIR):
-        '''plotting execute'''
-        abbre, file_name = var2str(variable.name)[1], ','.join(variable.paras)
-        echo.info(">>> Plotting ......")
-        if variable.dtime:
-            dirfile = os.path.join(path, f"(r,s){abbre}(t,{file_name})")
-            if task == "load":
-                variable.df = io_data(dirfile)
-            elif task == "save":
-                io_data(dirfile, variable.df)
-                # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
-            plotter4 = Plotter4D(variable, dirfile)
-            #plotter4.expand()
-            #plotter4.expand2D()
-            plotter4.cal_D()
-        else:
-            dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
-            if task == "load":
-                variable.df = io_data(dirfile)
-            elif task == "save":
-                io_data(dirfile, variable.df)
-                # self.subfile(f"{abbre}(t,{file_name})_Plot", "Plot: t, {file_name}", dirfile)
-            plotter3 = Plotter3D(variable, dirfile)
-            # plotter3.Rg()
-            plotter3.project()
-            plotter3.expand()
-            plotter3.scale()
-        print(">>> Plotting -------------------------------Done!----------------------------------------")
-        if OPEN and HOST == "Darwin":
-            subprocess.run(["open", path])
     # -----------------------------------Process-------------------------------------------#
     def process(self, data_job = None, plot_job = None):
         params = self.params
@@ -2549,16 +2559,8 @@ if __name__ == "__main__":
         if "Codes" in CURRENT_DIR:
             run.process(data_job="simus_job")
         elif "Simus" in CURRENT_DIR: # 计算节点: "Run.py infile" == "bsub < infile.lsf"
-            try:
-                if input_file:
-                    run.exe_simus("Run", CURRENT_DIR, input_file)
-                else:
-                    for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
-                        run.exe_simus("Run", CURRENT_DIR, infile)
-            except Exception as e:
-                print(usage)
-                logging.error(f"An error occurred: {e}")
-                raise ValueError(f"An error occurred: {e}")
+            for infile in [f"{i:03}" for i in range(Trun[0], Trun[1] + 2)]:
+                exe_simus("Run", CURRENT_DIR, infile)
     # Analysis: single
     elif task == "Anas":
         run.process(data_job="anas_job")
