@@ -29,7 +29,7 @@ import warnings
 warnings.filterwarnings('ignore')
 # -----------------------------------Const-------------------------------------------
 HOST, CURRENT_DIR = platform.system(), os.path.dirname(os.path.abspath(__file__))
-input_file, usage = sys.argv[1] if len(sys.argv) > 1 else None, "Run.py infile or bsub < infile.lsf"
+usage = "Run.py infile or bsub < infile.lsf"
 #-----------------------------------Variable-------------------------------------------
 class Property:
     def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
@@ -55,8 +55,9 @@ class Echo:
 echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
 MSD, Cee = Property("MSD", "MSDt", "\\alpha"), Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][0], [MSD] #Rg,
-check, OPEN, jump = (task != "Plots"), True, True
+task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
+BSUB, OPEN = (task == "Simus"), True
+check, jump = (task != "Plots"), True
 if task == "Simus":
     jump = True
 elif task == "Plots":
@@ -68,8 +69,8 @@ params = {
     'labels': {'Types': ["Chain", "Bacteria", "Ring"][0:1],
                 'Envs': ["Anlus", "Rand", "Slit"][2:3]},
     'marks': {'labels': [], 'config': []},
-    'restart': [False, "equ"],
-    'jump': [jump],
+    'restart': (False, "equ"),
+    'BSUB, jump': (BSUB, jump),
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
@@ -119,8 +120,8 @@ class _config:
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                               #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
                              # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
-                              'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
-                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0],
+                              #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
+                              'N_monos': [80, 100], 'Fa': [1.0, 10.0],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
                          3: {"Rin": [0.0], "Wid": [3.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
@@ -262,6 +263,7 @@ class _run:
                 f'#BSUB -oo {dir_file}.out',
                 f'#BSUB -eo {dir_file}.err',
                 f'source ~/.bashrc',
+                f'export RUN_ON_CLUSTER=true',
                 f'cd {Path.simus}',
                 #f'echo "python3 Run.py {infile}\n$(date)" ',
                 #f'python3 Run.py {infile}',
@@ -2175,7 +2177,6 @@ class JobProcessor:
         self.run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
     # -----------------------------------backup:history-------------------------------------------#
     def Rg_job(self, Config, Run, iRin, variable="Rg", var_file="Rg2_time"):
-        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         paras = ['Pe', 'N', 'W']
         if variable == "Rg":
             self.dtime = False
@@ -2195,7 +2196,7 @@ class JobProcessor:
         self.subfile(f"{variable}({','.join(paras)})", f"Analysis: {variable}", dir_file)
         # submitting files
         if not self.submitted:
-            if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
+            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
                 echo.info(">>> Submitting plots......")
                 echo.info(f"bsub < {dir_file}.lsf => Submitted: {dir_file}.py")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
@@ -2316,20 +2317,12 @@ class JobProcessor:
         self.Model.in_file(Path)  # return
         self.Run.sub_file(Path, infiles)
         # excute jobs
-        if input_file:
-            # running files
-            if HOST == "Darwin":  # macOS
-                self.exe_simus("Run", Path.simus, input_file)
-            elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
-                self.exe_simus("Submit", Path.simus, input_file)
-        else:
-            for infile in infiles:
-                # running files
-                if HOST == "Darwin":  # macOS
-                    self.exe_simus("Run", Path.simus, infile)
-                # submitting files
-                elif HOST == "Linux" and self.run_on_cluster == "false":  # 登陆节点
-                    self.exe_simus("Submit", Path.simus, infile)
+        for infile in infiles:
+            if HOST == "Linux" and self.run_on_cluster == "false" and BSUB:              # submitting files
+                self.exe_simus("Submit", Path.simus, infile)
+            else:
+                self.exe_simus("Run", Path.simus, infile) # running files
+
     def exe_simus(self, task, path, infile):
         dir_file = os.path.join(path, infile)
         if task == "Run":
@@ -2345,7 +2338,6 @@ class JobProcessor:
             echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
     # -----------------------------------Anas-------------------------------------------#
     def anas_job(self, Path, **kwargs):
-        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         self._initialize(Path)
         Pe = kwargs.get("Pe", None)
         ###################################################################
@@ -2362,7 +2354,7 @@ class JobProcessor:
         if Path.jump:  # jump for repeat: check lammpstrj
             if not self.submitted:
                 # submitting files
-                if HOST == "Linux" and self.run_on_cluster == "false" and self.bsub:  # if HOST == "Darwin":  # macOS
+                if HOST == "Linux" and self.run_on_cluster == "false" and BSUB:  # if HOST == "Darwin":  # macOS
                     echo.info(">>> Submitting plots......\nbsub < {dir_file}.lsf")
                     subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                     echo.info(f"Submitted: {dir_file}.py")
@@ -2418,7 +2410,6 @@ class JobProcessor:
     # -----------------------------------Plot-------------------------------------------#
     def plot_job(self, Config, Run, iRin, variable=Rg):
         '''expand Rg(t) -> Rg(t, Pe, W, N)'''
-        self.bsub = sys.argv[1] if len(sys.argv) > 1 else False
         variable.df = pd.DataFrame(columns=variable.paras)
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
@@ -2434,7 +2425,7 @@ class JobProcessor:
         self.subfile(f"{variable.name}({','.join(variable.paras)})", f"Analysis: {variable.name}", dir_file)
         # submitting files
         if not self.submitted:
-            if HOST == "Linux" and run_on_cluster == "false" and self.bsub:  # 登陆节点
+            if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
                 echo.info(f">>> Submitting plots......\nbsub < {dir_file}.lsf")
                 subprocess.run(f"bsub < {dir_file}.lsf", shell=True)
                 self.submitted = True
