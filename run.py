@@ -114,16 +114,15 @@ class _config:
                 "Bacteria": {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
                               'Gamma': 100.0, 'Fa': [1.0, 5.0, 10.0], #, 20.0, 100.0
-                             # 'Fa': [0.0, 0.1],
+                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], 'Gamma': 100,
                               #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200, 'Gamma': 100,
-                              'N_monos': [80, 100], 'Fa': [1.0, 10.0], 'Gamma': 100
+                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0], 'Gamma': 100
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
                          3: {"Rin": [0.0], "Wid": [1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #0.0, 2.0
                          },
 
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
-
                 "Anlus":{2: {'Rin': [0.0], 'Wid': [0.0]},
                             3: {'Rin': [0.0], 'Wid': [0.0]},
                             #3: {'Rin': [5.0], 'Wid': [5.0]},
@@ -1908,15 +1907,16 @@ class Plotter4D(BasePlot):
                                 logt, logf = np.log10(x[1:]), np.log10(ydata[self.variable.name][1:])
                                 post_turning, (slope, intercept) = turn_seg((logt, logf))
                                 pre_point =  int(np.where(logt == post_turning[0][0])[0])
+                                #pre_point = 100 if pre_point < 100 else pre_point
                                 ax.plot(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, color=color, linestyle="--")
                                 #ax.axvline(10 ** turning[0][0], color=color, linestyle='--')
                                 #ax.axvline(10 ** turning[0][-1], color=color, linestyle='--')
                                 if (zlabel == "W" and z == 1.0) or (wlabel == "W" and w == 1.0):
                                     label = f'{y}: {slope/4:.4f}'
-                                    labels = (flabel, xlabel, f"{ylabel}, 4D", zlabel)
+                                    labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
                                 else:
                                     label = f'{y}: {slope/6:.4f}'
-                                    labels = (flabel, xlabel, f"{ylabel}, 6D", zlabel)
+                                    labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
                             else:
                                 label = y
                                 labels = (flabel, xlabel, ylabel, zlabel)
@@ -2230,9 +2230,9 @@ def exe_plot(task, variable, path=CURRENT_DIR):
             io_data(dirfile, variable.df)
             # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
         plotter4 = Plotter4D(variable, dirfile)
-        #plotter4.expand()
+        plotter4.expand()
         plotter4.expand2D()
-        #plotter4.scale()
+        plotter4.scale()
     else:
         dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
         if task == "load":
