@@ -72,7 +72,7 @@ params = {
     'Queues': {'7k83!': 1.0, '9654!': 1.0},
     # 动力学方程的重要参数
     'Temp': 1.0,
-    'Gamma': 100,
+    'Gamma': 10,
     'Trun': [1, 20],
     'Dimend': 3,
     #'Dimend': [2,3],
@@ -86,14 +86,11 @@ class _config:
             "Linux": {
                 "Bacteria": {'N_monos': [3], 'Xi': 1000, 'Fa': [1.0],}, # 'Fa': [0.0, 0.1, 0.5, 1.0, 2.0, 4.0, 8.0, 10.0],},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
-                          #'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
-                          'Gamma':10, 'Fa': [1.0, 5.0, 10.0, 20.0], # 100.0],
-                           #'Gamma':[10], 'Fa':[0.0, 0.1],
-                          #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01], #'Gamma': [0.1, 1, 10, 100],
+                          'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
+                          # 'Gamma': [0.1, 1, 10, 100], #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                          #3: {"Rin": [0.0], "Wid": [0.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
-                         3: {"Rin": [0.0], "Wid": [15.0]}, #0.0, 1.0, 3.0, 5.0]}, #10.0, 15.0, 20.0]},
+                          3: {"Rin": [0.0], "Wid": [0.0, 2.0, 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
                          },
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -116,13 +113,13 @@ class _config:
             "Darwin": {
                 "Bacteria": {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
-                              #'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], #
-                             # 'Fa': [0.0, 0.1], 'Gamma': [10.0],
-                              #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200
-                              'N_monos': [80, 100], 'Fa': [1.0, 10.0],
+                              'Gamma': 100.0, 'Fa': [1.0, 5.0, 10.0], #, 20.0, 100.0
+                             # 'Fa': [0.0, 0.1],
+                              #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200, 'Gamma': 100,
+                              'N_monos': [80, 100], 'Fa': [1.0, 10.0], 'Gamma': 100
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [3.0]},  # 1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #1.0,
+                         3: {"Rin": [0.0], "Wid": [1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #0.0, 2.0
                          },
 
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -961,6 +958,7 @@ class _path:
         for i, path in enumerate([self.simus, self.simus1, self.simus2, self.simus0]):
             lmp_trj = os.path.join(path, f"{self.Run.Trun[1]:03}.lammpstrj")
             if os.path.exists(lmp_trj):
+                self.lmp_trj = lmp_trj
                 return True
             else:
                 if i == 3:
@@ -1600,6 +1598,7 @@ class Plotter3D(BasePlot):
                     title = fr'{zlabel}, ${self.variable.scale}$'
                     label = f'{label2mark(zi, zlabel)}, {coef}'
                 else:
+                    ax.plot(x[mask], y[mask], color=color, linestyle='--')
                     title = fr'{zlabel}'
                     label = f'{label2mark(zi, zlabel)}'
                 for xi, yi in zip(x[mask], y[mask]):
@@ -1826,24 +1825,20 @@ class Plotter4D(BasePlot):
             if self.variable.name == "MSD":
                 # ax.plot(x[1:], wdata[self.variable.name][1:], color=color, linestyle="--")
                 logt, logf = np.log10(x[1:]), np.log10(wdata[self.variable.name][1:])
-                turning, (slope, intercept) = peak_seg((logt, logf))
-                ax.plot(10 ** turning[0], slope * 10 ** turning[0] + intercept, color=color_map[wdata[ylabel]], linestyle="--")
+                post_turning, (slope, intercept) = turn_seg((logt, logf))
+                ax.plot(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, color=color_map[wdata[ylabel]], linestyle="--")
                 #ax.axvline(10 ** turning[0][0], color=color_map[wdata[ylabel]], linestyle='--')
                 #ax.axvline(10 ** turning[0][-1], color=color_map[wdata[ylabel]], linestyle='--')
-                labels = (flabel, xlabel, ylabel, f"{zlabel}, D")
-                label_list.append(f", {slope/6:.4f}")
-            else:
-                labels = (flabel, xlabel, ylabel, zlabel)
             x_samp = np.concatenate([x[:100], x[100::10]])
             y_samp = np.concatenate([wdata[self.variable.name][:100], wdata[self.variable.name][100::10]])
             ax.scatter(x_samp, y_samp, c='none', s=50, edgecolors=color_map[wdata[ylabel]],
                                 linewidths=2, facecolors='none', marker=marker_map[wdata[zlabel]])
         # colorbar
         self.colorbar(ax, unique_y, ylabel)
-        legends = [plt.Line2D([0], [0], marker=marker_map[z], color='w', label=f"{z}{label}",
-                              markerfacecolor='none', markeredgecolor='k') for z in unique_z for label in label_list]
+        legends = [plt.Line2D([0], [0], marker=marker_map[z], color='w', label=f"{z}",
+                              markerfacecolor='none', markeredgecolor='k') for z in unique_z]
         title = f'{flabel}({xlabel}, {ylabel}, {zlabel}; {wlabel}={w})'
-        self.set_axes2D(ax, title, labels, (xlim, ylim), note, legends=legends, log=True)
+        self.set_axes2D(ax, title, (flabel, xlabel, ylabel, zlabel), (xlim, ylim), note, legends=legends, log=True)
     def expand(self):
         '''scatter_exp'''
         timer = Timer(f"{self.variable.name}: Expand4D1")
@@ -1911,18 +1906,22 @@ class Plotter4D(BasePlot):
                             if self.variable.name == "MSD":
                                 #ax.plot(x[1:], ydata[self.variable.name][1:], color=color, linestyle="--")
                                 logt, logf = np.log10(x[1:]), np.log10(ydata[self.variable.name][1:])
-                                pre_turning, turning, post_turning = turn_beta(ax, (logt, logf), color)
-                                slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
-                                ax.plot(10 ** turning[0], slope * 10 ** turning[0] + intercept, color=color, linestyle="--")
-                                #ax.axvline(10 ** pre_turning[0][-1], color=color, linestyle='--')
-                                #ax.axvline(10 ** post_turning[0][0], color=color, linestyle='--')
-                                label = f'{y}: {slope/6:.4f}'
-                                labels = (flabel, xlabel, f"{ylabel}, D", zlabel)
+                                post_turning, (slope, intercept) = turn_seg((logt, logf))
+                                pre_point =  int(np.where(logt == post_turning[0][0])[0])
+                                ax.plot(10 ** post_turning[0], slope * 10 ** post_turning[0] + intercept, color=color, linestyle="--")
+                                #ax.axvline(10 ** turning[0][0], color=color, linestyle='--')
+                                #ax.axvline(10 ** turning[0][-1], color=color, linestyle='--')
+                                if (zlabel == "W" and z == 1.0) or (wlabel == "W" and w == 1.0):
+                                    label = f'{y}: {slope/4:.4f}'
+                                    labels = (flabel, xlabel, f"{ylabel}, 4D", zlabel)
+                                else:
+                                    label = f'{y}: {slope/6:.4f}'
+                                    labels = (flabel, xlabel, f"{ylabel}, 6D", zlabel)
                             else:
                                 label = y
                                 labels = (flabel, xlabel, ylabel, zlabel)
-                            x_samp = np.concatenate([x[:100], x[100::10]])
-                            y_samp = np.concatenate([ydata[self.variable.name][:100], wdata[self.variable.name][100::10]])
+                            x_samp = np.concatenate([x[:pre_point], x[pre_point::10]])
+                            y_samp = np.concatenate([ydata[self.variable.name][:pre_point], ydata[self.variable.name][pre_point::10]])
                             ax.scatter(x_samp, y_samp, c='none', s=50, edgecolors=color, facecolors='none', marker=marker, linewidths=2, label=label)
                     title = f'{flabel}({xlabel}, {ylabel}; {zlabel}={z}, {wlabel}={w})'
                     self.set_axes2D(ax, title, labels, (xlim, ylim), log=True)
@@ -1948,9 +1947,13 @@ class Plotter4D(BasePlot):
             f,t = df_xyz[flabel].iloc[0], df_xyz["dt"].iloc[0] * range((len(df_xyz[flabel].iloc[0])))
             if self.variable.name == "MSD":
                 logt, logf = np.log10(t[1:]), np.log10(f[1:])
-                turning, (slope, intercept) = peak_seg((logt, logf))
+                _, (slope, intercept) = turn_seg((logt, logf))
                 if slope:
-                    beta.df = beta.df.append({MSD.scale: slope/6, xlabel: ix, ylabel: iy, zlabel: iz}, ignore_index=True)
+                    if (xlabel == "W" and ix == 1.0) or (ylabel == "W" and y == 1.0) or (zlabel == "W" and z == 1.0):
+                        diff = slope / 4
+                    else:
+                        diff = slope / 6
+                    beta.df = beta.df.append({MSD.scale: diff, xlabel: ix, ylabel: iy, zlabel: iz}, ignore_index=True)
         plotter3 = Plotter3D(beta, dirfile)
         plotter3.project()
         plotter3.expand()
@@ -2104,7 +2107,7 @@ def scale(x, y):
         return coef, x_range, y_range
     else:
         return False, log_x, log_y
-def peak_seg(data, bins=20, find_min=True):
+def turn_seg(data, bins=20, find_min=True):
     x, y = data
     # 计算一阶和二阶导数
     dx, dy = 0.5 * (x[:-1] + x[1:]), np.diff(y) / np.diff(x)  # 计算中点，以保持导数的维度一致
@@ -2146,7 +2149,7 @@ def peak_seg(data, bins=20, find_min=True):
     pre_turning = x[x < turning[0][0]], y[x < turning[0][0]]
     post_turning = x[x > turning[0][-1]], y[x > turning[0][-1]]
     slope, intercept = np.polyfit(10 ** post_turning[0], 10 ** post_turning[1], 1)
-    return turning, (slope, intercept)
+    return post_turning, (slope, intercept)
 def local_slope(data, bins=10):
     x, y = data
     window_size = len(x)//bins
@@ -2227,8 +2230,8 @@ def exe_plot(task, variable, path=CURRENT_DIR):
             io_data(dirfile, variable.df)
             # self.subfile(f"{abbre}({file_name})_Plot", "Plot: {file_name}", dirfile)
         plotter4 = Plotter4D(variable, dirfile)
-        plotter4.expand()
-        #plotter4.expand2D()
+        #plotter4.expand()
+        plotter4.expand2D()
         #plotter4.scale()
     else:
         dirfile = os.path.join(path, f"(r,s,t){abbre}({file_name})")
