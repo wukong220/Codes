@@ -29,7 +29,8 @@ import warnings
 warnings.filterwarnings('ignore')
 # -----------------------------------Const-------------------------------------------
 HOST, CURRENT_DIR = platform.system(), os.path.dirname(os.path.abspath(__file__))
-usage = "Run.py infile or bsub < infile.lsf"
+usage = "bsub < infile.lsf"
+usage = "var: exe_analysis  => var(Pe, N, W): plot_job => Exp(var): exe_plot"
 #-----------------------------------Variable-------------------------------------------
 class Property:
     def __init__(self, name, path, scale="\\nu", dtime=True, paras=['Pe', 'N', 'W']):
@@ -52,8 +53,10 @@ class Echo:
     def warn(self, message):
         logging.warning(message)
         print(message)
-echo, Rcom, Rg = Echo(), Property("Rcom", "Rcom"), Property("Rg", "Rg2_time", "\\nu", False)
-MSD = Property("MSD", "MSDt", "D")
+echo, Rcom  = Echo(), Property("Rcom", "Rcom")
+Rg, Rgp = Property("Rg", "Rg2_time", dtime=False), Property("Rgp", "Rg2p", dtime=False),
+Re, Rep = Property("Re", "Re2_time", dtime=False), Property("Rep", "Re2p", dtime=False),
+MSD, MSDp = Property("MSD", "MSDt", "D"), Property("MSDp", "MSDpt", "Dp")
 Cee = Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
 task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
@@ -113,13 +116,13 @@ class _config:
             "Darwin": {
                 "Bacteria": {'N_monos': 3, 'Xi': 1000, 'Fa': 1.0},
                 "Chain": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0,
-                              'Gamma': 100.0, 'Fa': [1.0, 5.0, 10.0], #, 20.0, 100.0
-                              'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], 'Gamma': 100,
+                              #'Gamma': 100.0, 'Fa': [1.0, 5.0, 10.0], #, 20.0, 100.0
+                              #'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [1.0, 5.0, 10.0, 20.0, 100.0], 'Gamma': 100,
                               #'N_monos': [10], 'Fa': [1.0, 10.0], "Xi": 0.0, "Trun": [1, 2], "Frames": 200, 'Gamma': 100,
-                              #'N_monos': [80, 100], 'Fa': [1.0, 10.0], 'Gamma': 100
+                              'N_monos': [80, 100], 'Fa': [1.0], 'Gamma': 100
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0]},
-                         3: {"Rin": [0.0], "Wid": [1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #0.0, 2.0
+                         3: {"Rin": [0.0], "Wid": [3.0]}, #1.0, 3.0, 5.0, 10.0, 15.0, 20.0]}, #0.0, 2.0
                          },
 
                 "Ring": {'N_monos': [100], 'Xi': 0.0, 'Fa': [1.0], 'Gamma': [1.0]},
@@ -176,9 +179,9 @@ class _run:
         self.Gamma = Gamma
         self.Trun = Trun
         if task != "Simus":
-            if  HOST == "Linux" or task == "Plots":
-                self.Trun[0] = 6  # supplement
-            elif HOST == "Darwin":
+            #if  HOST == "Linux" or task == "Plots":
+              #  self.Trun[0] = 6  # supplement
+            if HOST == "Darwin":
                 if task == "Anas":
                     self.Trun[1] = 5
         self.Dimend = Dimend
@@ -1037,20 +1040,6 @@ class BasePlot:
         self.df = variable.df
         self.fig_save = fig_save
         self.jump = jump
-    def colorbar_old(self, fig, ax, sc, label, is_3D=False, loc="right"):
-        '''colorbar'''
-        axpos = ax.get_position()
-        if is_3D:
-            caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.05, axpos.y0, axpos.x0 - 0.03, axpos.y1)
-        else:
-            if loc == "right":
-                caxpos = mtransforms.Bbox.from_extents(axpos.x1 + 0.005, axpos.y0, axpos.x1 + 0.015, axpos.y1)
-            elif loc == "left":
-                caxpos = mtransforms.Bbox.from_extents(axpos.x0 - 0.07, axpos.y0, axpos.x0 - 0.05, axpos.y1)
-        cax = fig.add_axes(caxpos)
-        cbar = plt.colorbar(sc, ax=ax, cax=cax)
-        cbar.ax.yaxis.set_ticks_position(loc)
-        cbar.ax.set_xlabel(label, fontsize=20, labelpad=10)
 #---------------------------------------------------------------------------#
     def fig_path(self, mark=None, fig_save=None):
         fig_file = f"{fig_save if fig_save else self.fig_save}{('.' + mark) if mark else ''}"
@@ -1375,47 +1364,6 @@ class _plot(BasePlot):
         timer.stop()
 #############################################################################################################
 class Plotter3D(BasePlot):
-    def Rg(self):
-        timer = Timer(self.variable.name)
-        timer.start()
-
-        # ----------------------------> preparing<----------------------------#
-        columns_set = permutate([self.variable.name] + self.variable.paras)
-        data_set = [tuple(self.df[label].values for label in label_set) for label_set in columns_set]
-        labels_set = [list(map(lambda x: var2str(self.variable.name)[0] if x == self.variable.name else x, label_set)) for label_set in columns_set]
-        notes = (["(A)"], ["(B)","(a)", "(b)"], ["(C)", "(c)", "(d)"], ["(D)", "(e)", "(f)"])
-        fig_file = self.fig_path()
-        with PdfPages(f"{fig_file}.pdf") as pdf:
-            # ----------------------------> setup: canvas<----------------------------#
-            fig, gs = self.set_style((4, 6), (4.5, 4.5), (0.35, 0.5))
-            axes_3D = [fig.add_subplot(gs[0:3, 0:2], projection='3d')] + [fig.add_subplot(gs[i:i+2, j:j+2], projection='3d') for i, j in [(0, 2), (3, 0), (3, 2)]]
-            axes_2D = [fig.add_subplot(gs[i, j]) for i, j in [(2, 2), (2, 3), (5, 0), (5, 1), (5, 2), (5, 3)]]
-
-            # ----------------------------> plotting <----------------------------#
-            for i, (data, labels, note) in enumerate(zip(data_set, labels_set, notes)):
-                x, y, z, w = data
-                xlabel, ylabel, zlabel, wlabel = labels
-                # ----------------------------> plot3D<----------------------------#
-                self.scatter(axes_3D[i], data, labels, note[0], True)
-                if i == 0:
-                    continue
-                # ----------------------------> plot2D<----------------------------#
-                self.scatter(axes_2D[2*(i-1)], data, labels, note[1])
-                if i == 2:
-                    self.scatter(axes_2D[2*(i-1) + 1], (w, z, y, x), (wlabel, zlabel, ylabel, xlabel), note[2])
-                else:
-                    self.scatter(axes_2D[2*(i-1) + 1], (w, z, x, y), (wlabel, zlabel, xlabel, ylabel), note[2])
-            # ----------------------------> save fig <----------------------------#
-            pdf.savefig(plt.gcf(), dpi=500, transparent=True)
-
-            # ax.legend(loc='upper left', frameon=False, ncol=int(np.ceil(len(Arg1) / 5.)), columnspacing = 0.1, labelspacing = 0.1, bbox_to_anchor=[0.0, 0.955], fontsize=10)
-            #fig.savefig(f"{fig_file}.png", format="png", dpi=1000, transparent=True)
-            timer.count("saving figure")
-            plt.show()
-            plt.close()
-        timer.stop()
-        # -------------------------------Done!----------------------------------------#
-        return False
     def exp_seprate(self):
         timer = Timer(f"{self.variable.name}: Expand3D")
         timer.start()
@@ -1446,27 +1394,6 @@ class Plotter3D(BasePlot):
                 plt.close()
         timer.stop()
         # -------------------------------Done!----------------------------------------#
-    def set_axes2D_old(self, ax, data, labels, title, rot=0, loc="right", log=False):
-        # label settings
-        axis_labels = {
-            "x": labels[0],
-            "y": labels[1],
-        }
-        ax.set_title(title, loc=loc, fontsize=20)
-        # Set axis limits and rotation
-        for i, (axis_data, axis_name) in enumerate(zip(data, "xy")):
-            min_val, max_val = min(axis_data), max(axis_data)
-            if log:
-                lo, hi = 0.5, 2.0
-                getattr(ax, f'set_{axis_name}scale')('log')
-            else:
-                ax.grid(True)
-                lo = 1.2 if min_val < 0 else 0.1
-                hi = 0.1 if max_val < 0 else 1.2
-            if axis_name == 'x':
-                ax.tick_params(axis='x', rotation=rot)
-            getattr(ax, f'set_{axis_name}label')(axis_labels[axis_name], fontsize=20, labelpad=3)
-            getattr(ax, f'set_{axis_name}lim')(min_val * lo, max_val * hi)
     # -----------------------------------------------------------------------------------------
     def set_axes(self, ax, data, labels, title, is_3D=False, scatter=False, rotation=-60, loc="right", log=False):
         if is_3D:
@@ -2196,7 +2123,8 @@ def exe_simus(task, path, infile):
     else:
         echo.error(f"ERROR: Wrong task => {task} != Run or Submit")
 def exe_analysis(Path, data):
-    '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu, yu] -> Rg, MSD, Cee etc.'''
+    '''describe(data_com, "data_com", flag=False): analyse data[ifile][iframe][iatom][xu,
+    yu] -> Rg, MSD, Cee etc.'''
     echo.info(f"analyse and save data => {Path}")
     Trun, frames = params["Trun"][1], params["Frames"]
     Rcom.data = np.linalg.norm(np.mean(data, axis=2), axis=-1) #Rcom[ifile][iframe] 质心位置
@@ -2204,8 +2132,10 @@ def exe_analysis(Path, data):
     data_Rcom = np.linalg.norm(data_com[..., :], axis=-1) #质心坐标的模
     # ---------------------------------------> Rg <---------------------------------------#
     Rg2_t = np.mean(np.mean(data_Rcom ** 2, axis=-1), axis=0)  # Rg2_t[iframe]
-    echo.info(f"Rg2(t) and Rcom(t) ......")
+    echo.info(f"Rg2(t)......")
     Rcom.save, Rg.save = os.path.join(Path, f"{Rcom.path}.npy"), os.path.join(Path, f"{Rg.path}.npy")
+    Rgp.save = os.path.join(Path, f"{Rgp.path}.npy")
+    np.save(Rgp.save, Rgp2_t)
     np.save(Rcom.save, Rcom.data)
     np.save(Rg.save, Rg2_t) #average over time
     # ---------------------------------------> MSD <---------------------------------------#
