@@ -59,7 +59,7 @@ Re, Rep = Property("Re", "Re2_time", dtime=False), Property("Rep", "Re2p", dtime
 MSD, MSDp = Property("MSD", "MSDt", "D"), Property("MSDp", "MSDpt", "Dp")
 Cee = Property("Cee", "Ceet", "\\tau_R")
 #-----------------------------------Parameters-------------------------------------------
-task, JOBS = ["Simus", "Anas", "Plots"][2], [MSD] #Rg,
+task, JOBS = ["Simus", "Anas", "Plots"][2], [Rg, MSD] #Rg,
 check  = (task != "Plots")
 if task == "Simus":
     BSUB, jump = True, True
@@ -93,7 +93,7 @@ class _config:
                           # 'Gamma': [0.1, 1, 10, 100], #'Temp': [1.0, 0.2, 0.1, 0.05, 0.01],
                           },
                 "Slit": {2: {"Rin": [0.0], "Wid": [5.0, 10.0, 15.0, 20.0]},
-                          3: {"Rin": [0.0], "Wid": [0.0, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
+                          3: {"Rin": [0.0], "Wid": [0.0, 1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0]},
                          },
 
                 "Ring": {'N_monos': [20, 40, 80, 100, 150, 200, 250, 300], 'Xi': 0.0, 'Fa': [0.0, 0.1, 1.0, 5.0, 10.0, 20.0, 100.0],
@@ -2381,8 +2381,9 @@ class JobProcessor:
         else:
             echo.info(f"File doesn't exist in anas_job: {Path.lmp_trj}")
     # -----------------------------------Plot-------------------------------------------#
-    def plot_job(self, Config, Run, iRin, variable=Rg):
+    def plot_job(self, Config, Run, iRin, variable):
         '''expand Rg(t) -> Rg(t, Pe, W, N)'''
+
         variable.df = pd.DataFrame(columns=variable.paras)
         run_on_cluster = os.environ.get("RUN_ON_CLUSTER", "false")
         fig_save = os.path.join(os.path.join(re.match(r"(.*?/Data/)", os.getcwd()).group(1), "Figs"),
@@ -2395,7 +2396,7 @@ class JobProcessor:
         echo.info(f"dir_figs => {fig_save}")
         # prepare files
         dir_file = os.path.splitext(os.path.abspath(__file__))[0]
-        self.subfile(f"{variable.name}({','.join(variable.paras)})", f"Analysis: {variable.name}", dir_file)
+        self.subfile(f"({JOBS})({','.join(variable.paras)})", f"Analysis: {JOBS}", dir_file)
         # submitting files
         if not self.submitted:
             if HOST == "Linux" and run_on_cluster == "false" and BSUB:  # 登陆节点
