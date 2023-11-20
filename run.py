@@ -1876,7 +1876,7 @@ class Plotter4D(BasePlot):
                 logt, logf = np.log10(t[1:]), np.log10(f[1:])
                 _, (slope, intercept) = turn_seg((logt, logf))
                 if slope:
-                    if (xlabel == "W" and ix == 1.0) or (ylabel == "W" and y == 1.0) or (zlabel == "W" and z == 1.0):
+                    if (xlabel == "W" and ix == 1.0) or (ylabel == "W" and iy == 1.0) or (zlabel == "W" and iz == 1.0):
                         diff = slope / 4
                     else:
                         diff = slope / 6
